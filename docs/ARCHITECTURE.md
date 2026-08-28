@@ -184,4 +184,4 @@ TradingProfile ← حجم المخاطرة (متحفّظ · متوازن · نش
 Python 3.12+ · FastAPI · Pydantic v2 · SQLAlchemy 2 · Alembic · PostgreSQL (SQLite محلياً) · Pytest
 Next.js 14 · TypeScript strict · Tailwind · RTL عربي · بلا أرقام أداء وهمية.
 
-الإصدار **0.3.2** · 746 اختباراً · 24 جدولاً · لا اتصال شبكي في أي اختبار.
+الإصدار **0.3.3** · 780 اختباراً · 24 جدولاً · لا اتصال شبكي في أي اختبار.

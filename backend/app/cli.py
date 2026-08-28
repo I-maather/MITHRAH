@@ -30,12 +30,18 @@ from .live_readonly.allowlist import (
 )
 from .live_readonly.discovery import DISCOVERY_EPICS as LIVE_DISCOVERY_EPICS
 from .live_readonly.discovery import run_live_discovery
+from .live_readonly.private_store import (
+    PrivateStoreError,
+    private_directory,
+    require_private_output,
+)
 from .live_readonly.report import (
     PLANNED_CAPITAL_USD,
     compute_feasibility,
-    render_feasibility_markdown,
-    write_discovery_json,
-    write_discovery_markdown,
+    render_public_feasibility_markdown,
+    write_private_actual_feasibility,
+    write_private_discovery_json,
+    write_private_discovery_markdown,
 )
 from .live_readonly.session import LiveAuthError, LiveSession
 from .live_readonly.transport import LiveReadOnlyTransport, LiveTransportError
@@ -259,7 +265,12 @@ LIVE_ACKNOWLEDGEMENT_AR = """
 
 
 def cmd_capital_live_discover(args: argparse.Namespace) -> int:
-    """اكتشاف الحساب الحقيقي — قراءة فقط، بقائمة بيضاء على مستوى HTTP."""
+    """
+    اكتشاف الحساب الحقيقي — قراءة فقط، بقائمة بيضاء على مستوى HTTP.
+
+    ترتيب مقصود: **فحص خصوصية المخرجات يسبق المصادقة**. لا معنى لجلب رصيد
+    حقيقي ثم اكتشاف أن لا مكان آمناً لكتابته.
+    """
     if not args.acknowledge_live_read_only:
         print(
             "⛔ هذا الأمر يمسّ الحساب الحقيقي ولا يعمل بلا إقرار صريح.\n"
@@ -271,6 +282,16 @@ def cmd_capital_live_discover(args: argparse.Namespace) -> int:
 
     print(LIVE_ACKNOWLEDGEMENT_AR)
 
+    # --- 1) فحص خصوصية المخرجات — قبل أي شبكة ---------------------------
+    try:
+        preflight_result = require_private_output(REPO_ROOT)
+    except PrivateStoreError as exc:
+        print(f"⛔ {exc}", file=sys.stderr)
+        print("لم تُجرَ أي مصادقة ولم يُرسَل أي طلب.", file=sys.stderr)
+        return 4
+    print(preflight_result.summary_ar())
+    print()
+
     provider = build_secret_provider(env_file=args.secrets_file, allow_process_env=False)
     missing = provider.missing(REQUIRED_CAPITAL_SECRETS)
     if missing:
@@ -281,39 +302,44 @@ def cmd_capital_live_discover(args: argparse.Namespace) -> int:
         )
         return 1
 
+    # --- 2) المصادقة ----------------------------------------------------
     transport = LiveReadOnlyTransport()
     session = LiveSession(transport=transport, secrets=provider)
-
     try:
         session.authenticate()
     except LiveAuthError as exc:
+        print("المصادقة: ❌ فشلت", file=sys.stderr)
         print(f"⛔ {exc}", file=sys.stderr)
         return 1
     except LiveTransportError as exc:
+        print("المصادقة: ❌ فشلت", file=sys.stderr)
         print(f"⛔ تعذّر الاتصال: {exc}", file=sys.stderr)
         return 1
     except AllowlistViolation as exc:
         print(f"⛔ منعت القائمة البيضاء الطلب: {exc}", file=sys.stderr)
         return 3
 
+    print("المصادقة: ✅ نجحت")
+
+    # --- 3) الاكتشاف ----------------------------------------------------
     try:
         report = run_live_discovery(
             session, epics=tuple(args.epics), fetch_candles=not args.no_candles
         )
     finally:
-        # تُمحى الرموز في كل الأحوال، حتى عند الاستثناء.
         session.discard()
 
-    json_path = write_discovery_json(
-        report, Path(args.json_out or (REPO_ROOT / "data" / "capital_live_discovery.json"))
-    )
-    md_path = write_discovery_markdown(
-        report,
-        Path(args.markdown_out or (REPO_ROOT / "docs" / "CAPITAL_COM_LIVE_DISCOVERY.md")),
-    )
+    # --- 4) الكتابة إلى المخزن الخاص وحده --------------------------------
+    try:
+        json_path = write_private_discovery_json(report, REPO_ROOT)
+        md_path = write_private_discovery_markdown(report, REPO_ROOT)
+    except PrivateStoreError as exc:
+        print(f"⛔ تعذّرت الكتابة الآمنة: {exc}", file=sys.stderr)
+        return 4
 
     eurusd = report.instrument("EURUSD")
-    feasibility_path = None
+    actual_path = None
+    public_path = None
     if eurusd is not None and eurusd.found:
         actual_equity = (
             report.account.balance
@@ -322,29 +348,48 @@ def cmd_capital_live_discover(args: argparse.Namespace) -> int:
         )
         actual = compute_feasibility(eurusd, equity=actual_equity)
         planned = compute_feasibility(eurusd, equity=PLANNED_CAPITAL_USD)
-        text = render_feasibility_markdown(report, actual=actual, planned=planned)
-        feasibility_path = REPO_ROOT / "docs" / "CAPITAL_COM_150_USD_FEASIBILITY.md"
-        feasibility_path.parent.mkdir(parents=True, exist_ok=True)
-        feasibility_path.write_text(text, encoding="utf-8")
 
-    print(f"وقت التوليد (الرياض): {report.generated_at_riyadh}")
-    if report.account:
-        print(f"الحساب: {report.account.masked_id}  ·  العملة: {report.account.currency}")
-    print(f"العمليات المرسَلة: {len(report.operations_sent)}")
-    print(f"رموز جلسة محفوظة: {'نعم ⚠️' if session.tokens_retained else 'لا'}")
-    print(f"تقرير JSON      : {json_path}")
-    print(f"تقرير Markdown  : {md_path}")
-    if feasibility_path:
-        print(f"تقرير الجدوى    : {feasibility_path}")
+        actual_path = write_private_actual_feasibility(report, REPO_ROOT, actual=actual)
+
+        # التقرير العام: سيناريو 150 دولاراً وشروط الأداة فقط — بلا أي قيمة حساب.
+        public_path = REPO_ROOT / "docs" / "CAPITAL_COM_150_USD_FEASIBILITY.md"
+        public_path.parent.mkdir(parents=True, exist_ok=True)
+        public_path.write_text(
+            render_public_feasibility_markdown(planned=planned, instrument_epic="EURUSD"),
+            encoding="utf-8",
+        )
+
+    # --- 5) مخرَج الطرفية: المسموح فقط ------------------------------------
+    # لا رصيد · لا أموال متاحة · لا ربح/خسارة · لا معرّف حساب (ولو مُقنَّعاً).
+    currency = report.account.currency if report.account else None
+    print(f"عملة الحساب: {currency or 'غير معلومة'}")
+
+    found = sum(1 for i in report.instruments if i.found)
+    print(f"اكتشاف الأدوات: {found}/{len(report.instruments)} قُرئت بنجاح")
+    for instrument in report.instruments:
+        print(f"  {'✅' if instrument.found else '❌'} {instrument.epic}")
+
+    print()
+    print("التقارير الخاصة (خارج git):")
+    print(f"  {md_path}")
+    print(f"  {json_path}")
+    if actual_path:
+        print(f"  {actual_path}")
+    if public_path:
+        print(f"\nتقرير عام (بلا أي قيمة حساب): {public_path}")
+
+    go = bool(report.account and found == len(report.instruments) and not report.errors)
+    print()
+    print(f"الحالة: {'GO — الاكتشاف مكتمل' if go else 'NO-GO — الاكتشاف ناقص'}")
     if report.errors:
-        print("\nأخطاء مسجّلة:")
-        for e in report.errors:
-            print(f"  - {e}")
+        print("أسباب:")
+        for error in report.errors:
+            print(f"  - {error}")
     print(
-        "\n⚠️ التقارير تحتوي أرقام حسابك — معلومة محلية حسّاسة. لا تُرفع ولا تُشارَك."
+        "\nهذه نتيجة اكتشاف قراءة فقط. **لا تأذن بالتنفيذ**: "
+        "لا استراتيجية معتمدة، وقفل Live العام ما زال مغلقاً."
     )
-    print("نتيجة الاكتشاف لا تأذن بالتنفيذ. قفل Live العام ما زال مغلقاً.")
-    return 0
+    return 0 if go else 1
 
 
 def build_parser() -> argparse.ArgumentParser:

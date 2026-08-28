@@ -181,6 +181,7 @@ Maather-Autonomous-Trader/
 | `docs/CAPITAL_COM_CREDENTIAL_SETUP.md` | إعداد الاعتمادات بيدك، بلا لصق في المحادثة |
 | `docs/CAPITAL_COM_API_SAFETY.md` | الأقفال الأربعة وتصنيف المسارات و«200 ≠ تنفيذ» |
 | `docs/CAPITAL_COM_COST_MODEL.md` | تعرّض ≠ هامش ≠ خسارة، بالمعادلات والأرقام |
+| `docs/CAPITAL_COM_LIVE_READONLY.md` | اكتشاف الحساب الحقيقي قراءةً فقط، وأين تُحفظ مخرجاته الحسّاسة |
 | `docs/TRADING_PROFILES.md` | الملفات الثلاثة وحدودها وقواعد التبديل |
 | `docs/RISK_CONSTITUTION_V0.3.md` | البُعدان معاً: الوضع × الملف، والأشد يفوز |
 | `docs/MARKET_INTELLIGENCE_PIPELINE.md` | المراحل السبع عشرة واللقطة والبوابات |

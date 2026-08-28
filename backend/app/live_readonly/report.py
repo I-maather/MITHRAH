@@ -6,9 +6,16 @@ SANITIZED OUTPUTS — تقريرا الاكتشاف والجدوى، مُنقّ�
 `CST` · `X-SECURITY-TOKEN` · معرّف الحساب الكامل · ترويسات خام ·
 استجابة مصادقة خام · قيمة 2FA.
 
-الرصيد وعملة الحساب **يظهران في تقرير Markdown** لأنه تقرير مالي محلي
-للمالكة — ويُصنَّف صراحةً **معلومة محلية حسّاسة لا تُرفع**.
-ملف JSON يبقى في `data/` المُدرَج في `.gitignore`.
+## أين يُكتب ماذا
+
+    data/private/capital_live/   ← كل ما يخص الحساب الفعلي (رصيد، متاح،
+                                   ربح/خسارة، معرّف مُقنَّع). متجاهَل وغير
+                                   متتبَّع، وصلاحياته 700/600، ويُثبَت ذلك
+                                   قبل أي كتابة.
+
+    docs/                        ← **لا شيء يخص الحساب**. تقرير جدوى عام
+                                   بسيناريو 150 دولاراً المخطَّط وشروط
+                                   الأداة من الوسيط فقط.
 """
 from __future__ import annotations
 
@@ -23,6 +30,12 @@ from ..profiles import PROFILE_SPECS, ProfileLimits, TradingProfile
 from ..secretstore.redaction import redact
 from .allowlist import describe_allowlist
 from .discovery import LiveDiscoveryReport, LiveInstrumentInfo
+from .private_store import (
+    ACTUAL_FEASIBILITY_MARKDOWN,
+    DISCOVERY_JSON,
+    DISCOVERY_MARKDOWN,
+    write_private_text,
+)
 
 #: مفاتيح لا يجوز أن تظهر في JSON بأي حال — فحص أخير قبل الكتابة.
 FORBIDDEN_JSON_KEYS: tuple[str, ...] = (
@@ -52,13 +65,24 @@ def _assert_sanitised(payload: dict) -> None:
         raise SanitisationError("المخرَج يحتوي قيمة مُسجَّلة كسرّ.")
 
 
-def write_discovery_json(report: LiveDiscoveryReport, path: Path) -> Path:
+def build_discovery_payload(report: LiveDiscoveryReport) -> dict:
     payload = report.as_dict()
     payload["sanitised"] = True
+    payload["sensitivity"] = "PRIVATE_LOCAL_ONLY"
     payload["contains"] = (
-        "قيم حساب وأدوات فقط. لا مفاتيح ولا رموز ولا معرّف حساب كامل."
+        "قيم حساب وأدوات. لا مفاتيح ولا رموز ولا معرّف حساب كامل. "
+        "يحتوي رصيداً حقيقياً ⇒ يُكتب في data/private/ فقط."
     )
     _assert_sanitised(payload)
+    return payload
+
+
+def write_discovery_json(report: LiveDiscoveryReport, path: Path) -> Path:
+    """
+    ⚠️ للاختبارات والمسارات المؤقتة فقط. المسار الإنتاجي هو
+    `write_private_discovery_json()` الذي يمر عبر المخزن الخاص.
+    """
+    payload = build_discovery_payload(report)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     return path
@@ -187,10 +211,38 @@ def render_discovery_markdown(report: LiveDiscoveryReport) -> str:
 
 
 def write_discovery_markdown(report: LiveDiscoveryReport, path: Path) -> Path:
+    """⚠️ للاختبارات فقط — انظري `write_private_discovery_markdown()`."""
     text = render_discovery_markdown(report)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
     return path
+
+
+# ---------------------------------------------------------------------------
+# المسارات الإنتاجية — عبر المخزن الخاص وحده
+# ---------------------------------------------------------------------------
+
+def write_private_discovery_json(report: LiveDiscoveryReport, repo_root: Path) -> Path:
+    payload = build_discovery_payload(report)
+    return write_private_text(
+        repo_root, DISCOVERY_JSON, json.dumps(payload, ensure_ascii=False, indent=2)
+    )
+
+
+def write_private_discovery_markdown(report: LiveDiscoveryReport, repo_root: Path) -> Path:
+    return write_private_text(
+        repo_root, DISCOVERY_MARKDOWN, render_discovery_markdown(report)
+    )
+
+
+def write_private_actual_feasibility(
+    report: LiveDiscoveryReport, repo_root: Path, *, actual: Optional[dict]
+) -> Path:
+    return write_private_text(
+        repo_root,
+        ACTUAL_FEASIBILITY_MARKDOWN,
+        render_actual_feasibility_markdown(report, actual=actual),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -340,82 +392,131 @@ def compute_feasibility(
     }
 
 
-def render_feasibility_markdown(
-    report: LiveDiscoveryReport, *, actual: Optional[dict], planned: Optional[dict]
+def _feasibility_block(data: dict) -> list[str]:
+    lines = [
+        "| البند | القيمة |",
+        "|---|---|",
+        f"| الكمية | {data['quantity']} |",
+        f"| السعر المرجعي | {data['reference_price']} |",
+        f"| حجم العقد | {data['contract_size']} |",
+        f"| قيمة النقطة | {data['pip_value']} |",
+        f"| **قيمة التعرّض** | **{data['notional_exposure']}** |",
+        f"| **الهامش المطلوب** | **{data['required_margin'] or '—'}** |",
+        f"| تكلفة السبريد | {data['spread_cost']} |",
+        f"| احتياطي الانزلاق | {data['slippage_reserve']} |",
+        f"| علاوة الوقف المضمون | {data['guaranteed_stop_premium'] or '—'} |",
+        f"| تبييت ليلة واحدة | {data['overnight_one_night'] or '—'} |",
+        "",
+        "**التعرّض والهامش والخسارة ثلاث قيم مختلفة ولا يجوز الخلط بينها.**",
+        "",
+        "| مسافة الوقف | خسارة السعر | السبريد | الانزلاق | **الخسارة الكلية** | R:R الصافي |",
+        "|---|---|---|---|---|---|",
+    ]
+    for row in data["rows"]:
+        lines.append(
+            f"| {row['stop_pips']} نقطة | {row['price_loss']} | {row['spread_cost']} | "
+            f"{row['slippage_reserve']} | **{row['all_in_risk']}** | {row['net_reward_risk']} |"
+        )
+    lines += ["", "### حسب ملف التداول", ""]
+    lines += ["| الملف | حد المخاطرة | أدنى R:R | 25 نقطة | 50 نقطة | 75 نقطة | صالح؟ |",
+              "|---|---|---|---|---|---|---|"]
+    for _key, profile in data["profiles"].items():
+        marks = ["✅" if stop["tradable"] else "❌" for stop in profile["stops"]]
+        lines.append(
+            f"| {profile['name_ar']} | {profile['max_risk_per_trade']} | "
+            f"{profile['min_net_reward_risk']} | " + " | ".join(marks)
+            + f" | {'نعم' if profile['any_stop_fits'] else 'لا'} |"
+        )
+    return lines
+
+
+_NO_PROFIT_CLAIM = [
+    "## ما لا يعنيه هذا التقرير",
+    "",
+    "- **لا يعني أن التداول مربح.** يعني فقط أن الخسارة المحسوبة تقع ضمن الحد.",
+    "- **لا يأذن بالتنفيذ.** لا استراتيجية معتمدة، وقفل Live العام مغلق.",
+    "- التبييت محسوب للعلم فقط: **ممنوع في كل الملفات**.",
+    "- الوقف العادي **لا يضمن** الخسارة المقدَّرة عند فجوة سعرية.",
+]
+
+
+def render_actual_feasibility_markdown(
+    report: LiveDiscoveryReport, *, actual: Optional[dict]
 ) -> str:
+    """
+    تقرير **خاص**: يستعمل رصيد الحساب الفعلي.
+    يُكتب في `data/private/capital_live/` وحده — لا تحت `docs/` بحال.
+    """
     lines: list[str] = [
-        "# جدوى EUR/USD — من قيم الوسيط المُكتشَفة",
+        "# جدوى EUR/USD — بالرصيد الفعلي",
         "",
-        "> ⚠️ **معلومة محلية حسّاسة** — تحتوي أرقام حسابك. لا تُرفع ولا تُشارَك.",
+        "> 🔒 **ملف خاص.** يحتوي رصيد حسابك الحقيقي.",
+        "> مكانه `data/private/capital_live/` — متجاهَل في git وغير متتبَّع،",
+        "> وصلاحياته 600. **لا يُرفع ولا يُشارَك ولا يُنسخ إلى `docs/`.**",
         "",
-        "> **هذه ليست توقّع ربح.** الجدوى هنا تعني: هل تقع الخسارة الكاملة عند",
+        "> **هذه ليست توقّع ربح.** الجدوى تعني: هل تقع الخسارة الكاملة عند",
         "> الوقف ضمن حد الملف؟ لا أكثر. **الكفاية التقنية ≠ الربحية.**",
         "",
         f"مصدر القيم: اكتشاف حقيقي بتاريخ {report.generated_at_riyadh} (الرياض).",
         "",
-    ]
-
-    for title, data in (("الرصيد الفعلي", actual), ("رأس المال المخطَّط 150 دولاراً", planned)):
-        lines += [f"## {title}", ""]
-        if data is None:
-            lines += ["> تعذّر الحساب: قيم الأداة ناقصة.", ""]
-            continue
-        lines += [
-            "| البند | القيمة |",
-            "|---|---|",
-            f"| حقوق الملكية المستعملة | {data['equity_used']} |",
-            f"| الكمية | {data['quantity']} |",
-            f"| السعر المرجعي | {data['reference_price']} |",
-            f"| حجم العقد | {data['contract_size']} |",
-            f"| قيمة النقطة | {data['pip_value']} |",
-            f"| **قيمة التعرّض** | **{data['notional_exposure']}** |",
-            f"| **الهامش المطلوب** | **{data['required_margin'] or '—'}** |",
-            f"| تكلفة السبريد | {data['spread_cost']} |",
-            f"| احتياطي الانزلاق | {data['slippage_reserve']} |",
-            f"| علاوة الوقف المضمون | {data['guaranteed_stop_premium'] or '—'} |",
-            f"| تبييت ليلة واحدة | {data['overnight_one_night'] or '—'} |",
-            "",
-            "**التعرّض والهامش والخسارة ثلاث قيم مختلفة ولا يجوز الخلط بينها.**",
-            "",
-            "| مسافة الوقف | خسارة السعر | السبريد | الانزلاق | **الخسارة الكلية** | R:R الصافي |",
-            "|---|---|---|---|---|---|",
-        ]
-        for row in data["rows"]:
-            lines.append(
-                f"| {row['stop_pips']} نقطة | {row['price_loss']} | {row['spread_cost']} | "
-                f"{row['slippage_reserve']} | **{row['all_in_risk']}** | {row['net_reward_risk']} |"
-            )
-        lines += ["", "### حسب ملف التداول", ""]
-        lines += ["| الملف | حد المخاطرة | أدنى R:R | 25 نقطة | 50 نقطة | 75 نقطة | صالح؟ |",
-                  "|---|---|---|---|---|---|---|"]
-        for key, p in data["profiles"].items():
-            marks = []
-            for stop in p["stops"]:
-                marks.append("✅" if stop["tradable"] else "❌")
-            lines.append(
-                f"| {p['name_ar']} | {p['max_risk_per_trade']} | {p['min_net_reward_risk']} | "
-                + " | ".join(marks)
-                + f" | {'نعم' if p['any_stop_fits'] else 'لا'} |"
-            )
-        lines.append("")
-
-    lines += [
-        "## ما لا يعنيه هذا التقرير",
+        "## الرصيد الفعلي",
         "",
-        "- **لا يعني أن التداول مربح.** يعني فقط أن الخسارة المحسوبة تقع ضمن الحد.",
-        "- **لا يأذن بالتنفيذ.** لا استراتيجية معتمدة، وقفل Live العام مغلق.",
-        "- التبييت محسوب للعلم فقط: **ممنوع في كل الملفات**.",
-        "- الوقف العادي **لا يضمن** الخسارة المقدَّرة عند فجوة سعرية.",
     ]
+    if actual is None:
+        lines += ["> تعذّر الحساب: قيم الأداة ناقصة.", ""]
+    else:
+        lines += [f"حقوق الملكية المستعملة: **{actual['equity_used']}**", ""]
+        lines += _feasibility_block(actual)
+        lines.append("")
+    lines += _NO_PROFIT_CLAIM
+    return redact("\n".join(lines))
+
+
+def render_public_feasibility_markdown(
+    *, planned: Optional[dict], instrument_epic: str = "EURUSD"
+) -> str:
+    """
+    تقرير **عام** صالح للبقاء تحت `docs/`.
+
+    يستعمل **سيناريو 150 دولاراً المخطَّط وحده** وشروط الأداة من الوسيط.
+    **لا يحتوي**: رصيداً فعلياً ولا أموالاً متاحة ولا ربحاً/خسارة ولا معرّف
+    حساب (كاملاً أو مُقنَّعاً) ولا بريداً ولا أي قيمة خاصة بالحساب.
+    """
+    lines: list[str] = [
+        f"# جدوى {instrument_epic} — سيناريو مخطَّط: 150 دولاراً",
+        "",
+        "> **تقرير عام.** لا يحتوي أي قيمة خاصة بحساب: لا رصيد فعلي، ولا أموالاً",
+        "> متاحة، ولا ربحاً/خسارة، ولا معرّف حساب، ولا بريداً.",
+        "> الأرقام هنا من **شروط الأداة لدى الوسيط** ومن رأس المال المخطَّط فقط.",
+        "",
+        "> التقرير المقابل بالرصيد الفعلي **خاص** ومكانه",
+        "> `data/private/capital_live/` — خارج git تماماً.",
+        "",
+        "> **هذه ليست توقّع ربح.** الكفاية التقنية ≠ الربحية.",
+        "",
+        "## رأس المال المخطَّط: 150.00 دولاراً",
+        "",
+    ]
+    if planned is None:
+        lines += ["> تعذّر الحساب: شروط الأداة غير متوفرة بعد.", ""]
+    else:
+        lines += _feasibility_block(planned)
+        lines.append("")
+    lines += _NO_PROFIT_CLAIM
     return redact("\n".join(lines))
 
 
 __all__ = [
+    "build_discovery_payload",
     "write_discovery_json",
     "write_discovery_markdown",
+    "write_private_discovery_json",
+    "write_private_discovery_markdown",
+    "write_private_actual_feasibility",
     "render_discovery_markdown",
     "compute_feasibility",
-    "render_feasibility_markdown",
+    "render_actual_feasibility_markdown",
+    "render_public_feasibility_markdown",
     "SanitisationError",
     "FORBIDDEN_JSON_KEYS",
     "STOP_DISTANCES_PIPS",

@@ -8,6 +8,10 @@ secrets/
 
 # data
 data/
+# المخرجات الحسّاسة للحساب الحقيقي — تأكيد صريح فوق `data/` أعلاه،
+# كي يبقى التجاهل قائماً حتى لو ضُيِّق `data/` مستقبلاً.
+data/private/
+data/private/**
 backups/
 *.db
 *.sqlite3

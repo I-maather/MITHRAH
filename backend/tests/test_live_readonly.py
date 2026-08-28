@@ -43,7 +43,8 @@ from app.live_readonly.report import (
     SanitisationError,
     compute_feasibility,
     render_discovery_markdown,
-    render_feasibility_markdown,
+    render_actual_feasibility_markdown,
+    render_public_feasibility_markdown,
     write_discovery_json,
 )
 from app.live_readonly.session import (
@@ -673,6 +674,8 @@ def test_markdown_marks_the_report_as_locally_sensitive():
 def test_discovery_json_path_is_git_ignored():
     gitignore = (Path(__file__).resolve().parents[2] / ".gitignore").read_text()
     assert "data/" in gitignore
+    # التأكيد الصريح على الشجرة الخاصة — لا على `data/` وحدها.
+    assert "data/private/" in gitignore
 
 
 # ---------------------------------------------------------------------------
@@ -732,14 +735,21 @@ def test_feasibility_report_refuses_to_claim_profitability():
     session.discard()
     eurusd = report.instrument("EURUSD")
 
-    text = render_feasibility_markdown(
-        report,
-        actual=compute_feasibility(eurusd, equity=D("212.34")),
+    private_text = render_actual_feasibility_markdown(
+        report, actual=compute_feasibility(eurusd, equity=D("212.34")),
+    )
+    public_text = render_public_feasibility_markdown(
         planned=compute_feasibility(eurusd, equity=PLANNED_CAPITAL_USD),
     )
-    assert "ليست توقّع ربح" in text
-    assert "الكفاية التقنية ≠ الربحية" in text
-    assert "لا يأذن بالتنفيذ" in text
+    for text in (private_text, public_text):
+        assert "ليست توقّع ربح" in text
+        assert "الكفاية التقنية ≠ الربحية" in text
+        assert "لا يأذن بالتنفيذ" in text
+
+    # التقرير الخاص وحده يحمل الرصيد الفعلي؛ العام لا يحمله بحال.
+    assert "212.34" in private_text
+    assert "212.34" not in public_text
+    assert "150.00" in public_text
 
 
 # ---------------------------------------------------------------------------
