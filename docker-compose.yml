@@ -1,0 +1,20 @@
+# PostgreSQL فقط.
+# IB Gateway لا يعمل هنا — يعمل على المضيف مباشرة. السبب في docs/adr/001.
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: maather-db
+    environment:
+      POSTGRES_USER: maather
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me_locally}
+      POSTGRES_DB: maather
+    ports: ["5432:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U maather"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:

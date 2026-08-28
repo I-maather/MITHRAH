@@ -1,0 +1,307 @@
+"""
+SQLAlchemy models.
+
+الهدف من PostgreSQL في الإنتاج: القيود والـconstraints والنسخ الاحتياطي.
+SQLite مستعمل في الاختبارات والتشغيل المحلي الأول (انظر ADR-002).
+
+جدول audit_events لا يوجد له في التطبيق أي مسار UPDATE أو DELETE —
+هذا مفروض بالكود (AuditLog) وبـtrigger في migration الإنتاج.
+"""
+from __future__ import annotations
+
+from datetime import datetime
+from decimal import Decimal
+
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+)
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+MONEY = Numeric(20, 8)
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+class TimestampedMixin:
+    created_at_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class Account(Base, TimestampedMixin):
+    __tablename__ = "accounts"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    broker_account_id: Mapped[str] = mapped_column(String(64), unique=True)
+    account_kind: Mapped[str] = mapped_column(String(16))
+    classification: Mapped[str] = mapped_column(String(16))
+    base_currency: Mapped[str] = mapped_column(String(8), default="USD")
+    baseline_equity: Mapped[Decimal] = mapped_column(MONEY)
+    baseline_approved_by: Mapped[str] = mapped_column(String(64), default="")
+    baseline_approved_at_utc: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class BrokerConnection(Base, TimestampedMixin):
+    __tablename__ = "broker_connections"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    adapter_name: Mapped[str] = mapped_column(String(32))
+    is_live: Mapped[bool] = mapped_column(Boolean, default=False)
+    connected: Mapped[bool] = mapped_column(Boolean, default=False)
+    last_success_utc: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_failure_utc: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error: Mapped[str] = mapped_column(Text, default="")
+
+
+class Instrument(Base, TimestampedMixin):
+    __tablename__ = "instruments"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    symbol: Mapped[str] = mapped_column(String(24), unique=True)
+    conid: Mapped[str] = mapped_column(String(32), default="")
+    asset_class: Mapped[str] = mapped_column(String(8))
+    currency: Mapped[str] = mapped_column(String(8))
+    exchange: Mapped[str] = mapped_column(String(24))
+    allowlisted: Mapped[bool] = mapped_column(Boolean, default=False)
+    supports_fractional: Mapped[bool] = mapped_column(Boolean, default=False)
+    supports_stop_orders: Mapped[bool] = mapped_column(Boolean, default=False)
+    supports_stop_on_fractional: Mapped[bool] = mapped_column(Boolean, default=False)
+    verified_at_utc: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class MarketBar(Base):
+    __tablename__ = "market_bars"
+    __table_args__ = (UniqueConstraint("symbol", "start_utc", "timeframe"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    symbol: Mapped[str] = mapped_column(String(24), index=True)
+    timeframe: Mapped[str] = mapped_column(String(8))
+    start_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    open: Mapped[Decimal] = mapped_column(MONEY)
+    high: Mapped[Decimal] = mapped_column(MONEY)
+    low: Mapped[Decimal] = mapped_column(MONEY)
+    close: Mapped[Decimal] = mapped_column(MONEY)
+    volume: Mapped[Decimal] = mapped_column(MONEY)
+    source: Mapped[str] = mapped_column(String(16))
+
+
+class Strategy(Base, TimestampedMixin):
+    __tablename__ = "strategies"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(64), unique=True)
+    description_ar: Mapped[str] = mapped_column(Text, default="")
+
+
+class StrategyVersion(Base, TimestampedMixin):
+    __tablename__ = "strategy_versions"
+    __table_args__ = (UniqueConstraint("strategy_id", "version"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    strategy_id: Mapped[int] = mapped_column(ForeignKey("strategies.id"))
+    version: Mapped[str] = mapped_column(String(24))
+    state: Mapped[str] = mapped_column(String(16), default="DRAFT")
+    hypothesis_ar: Mapped[str] = mapped_column(Text)
+    metadata_json: Mapped[str] = mapped_column(Text)
+    backtest_evidence_ar: Mapped[str] = mapped_column(Text, default="")
+    walkforward_evidence_ar: Mapped[str] = mapped_column(Text, default="")
+    approved_by: Mapped[str] = mapped_column(String(64), default="")
+    approved_at_utc: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class SignalRow(Base):
+    __tablename__ = "signals"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    strategy_name: Mapped[str] = mapped_column(String(64))
+    strategy_version: Mapped[str] = mapped_column(String(24))
+    symbol: Mapped[str] = mapped_column(String(24), index=True)
+    side: Mapped[str] = mapped_column(String(8))
+    entry_price: Mapped[Decimal] = mapped_column(MONEY)
+    stop_price: Mapped[Decimal] = mapped_column(MONEY)
+    take_profit_price: Mapped[Decimal] = mapped_column(MONEY)
+    rationale_ar: Mapped[str] = mapped_column(Text)
+    inputs_digest: Mapped[str] = mapped_column(String(64))
+    generated_at_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class RiskDecisionRow(Base):
+    __tablename__ = "risk_decisions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    signal_id: Mapped[int | None] = mapped_column(ForeignKey("signals.id"))
+    approved: Mapped[bool] = mapped_column(Boolean)
+    reason_code: Mapped[str] = mapped_column(String(64), default="")
+    reason_ar: Mapped[str] = mapped_column(Text)
+    checks_json: Mapped[str] = mapped_column(Text)
+    quantity: Mapped[Decimal] = mapped_column(MONEY, default=0)
+    expected_risk_usd: Mapped[Decimal] = mapped_column(MONEY, default=0)
+    expected_costs_usd: Mapped[Decimal] = mapped_column(MONEY, default=0)
+    risk_budget_usd: Mapped[Decimal] = mapped_column(MONEY, default=0)
+    constitution_fingerprint: Mapped[str] = mapped_column(String(64))
+    decided_at_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class OrderIntentRow(Base):
+    __tablename__ = "order_intents"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    idempotency_key: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    client_order_id: Mapped[str] = mapped_column(String(64), unique=True)
+    risk_decision_id: Mapped[int | None] = mapped_column(ForeignKey("risk_decisions.id"))
+    symbol: Mapped[str] = mapped_column(String(24))
+    side: Mapped[str] = mapped_column(String(8))
+    order_type: Mapped[str] = mapped_column(String(16))
+    quantity: Mapped[Decimal] = mapped_column(MONEY)
+    limit_price: Mapped[Decimal | None] = mapped_column(MONEY)
+    stop_price: Mapped[Decimal | None] = mapped_column(MONEY)
+    expected_fill_price: Mapped[Decimal] = mapped_column(MONEY)
+    max_slippage_abs: Mapped[Decimal] = mapped_column(MONEY)
+    exit_plan_ar: Mapped[str] = mapped_column(Text)
+    instrument_snapshot_json: Mapped[str] = mapped_column(Text)
+    created_at_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class BrokerOrderRow(Base):
+    __tablename__ = "broker_orders"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    broker_order_id: Mapped[str] = mapped_column(String(64), unique=True)
+    client_order_id: Mapped[str] = mapped_column(String(64), index=True)
+    symbol: Mapped[str] = mapped_column(String(24))
+    side: Mapped[str] = mapped_column(String(8))
+    order_type: Mapped[str] = mapped_column(String(16))
+    quantity: Mapped[Decimal] = mapped_column(MONEY)
+    filled_quantity: Mapped[Decimal] = mapped_column(MONEY, default=0)
+    average_fill_price: Mapped[Decimal | None] = mapped_column(MONEY)
+    status: Mapped[str] = mapped_column(String(24))
+    updated_at_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class ExecutionRow(Base):
+    __tablename__ = "executions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    execution_id: Mapped[str] = mapped_column(String(64), unique=True)
+    broker_order_id: Mapped[str] = mapped_column(String(64), index=True)
+    symbol: Mapped[str] = mapped_column(String(24))
+    side: Mapped[str] = mapped_column(String(8))
+    quantity: Mapped[Decimal] = mapped_column(MONEY)
+    price: Mapped[Decimal] = mapped_column(MONEY)
+    commission: Mapped[Decimal] = mapped_column(MONEY)
+    executed_at_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class PositionRow(Base):
+    __tablename__ = "positions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    account_id: Mapped[str] = mapped_column(String(64))
+    symbol: Mapped[str] = mapped_column(String(24))
+    quantity: Mapped[Decimal] = mapped_column(MONEY)
+    average_cost: Mapped[Decimal] = mapped_column(MONEY)
+    opened_at_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    closed_at_utc: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class TradeRow(Base):
+    __tablename__ = "trades"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    symbol: Mapped[str] = mapped_column(String(24))
+    strategy_name: Mapped[str] = mapped_column(String(64))
+    strategy_version: Mapped[str] = mapped_column(String(24))
+    entry_price: Mapped[Decimal] = mapped_column(MONEY)
+    exit_price: Mapped[Decimal | None] = mapped_column(MONEY)
+    quantity: Mapped[Decimal] = mapped_column(MONEY)
+    gross_pnl: Mapped[Decimal] = mapped_column(MONEY, default=0)
+    commissions: Mapped[Decimal] = mapped_column(MONEY, default=0)
+    slippage: Mapped[Decimal] = mapped_column(MONEY, default=0)
+    net_pnl: Mapped[Decimal] = mapped_column(MONEY, default=0)
+    opened_at_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    closed_at_utc: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class DailyEquity(Base):
+    __tablename__ = "daily_equity"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    trading_day: Mapped[str] = mapped_column(String(10), unique=True)
+    opening_equity: Mapped[Decimal] = mapped_column(MONEY)
+    closing_equity: Mapped[Decimal] = mapped_column(MONEY)
+    realized_pnl: Mapped[Decimal] = mapped_column(MONEY, default=0)
+    unrealized_pnl: Mapped[Decimal] = mapped_column(MONEY, default=0)
+    settled_cash: Mapped[Decimal] = mapped_column(MONEY, default=0)
+    unsettled_cash: Mapped[Decimal] = mapped_column(MONEY, default=0)
+
+
+class RiskLimitRow(Base, TimestampedMixin):
+    """لقطة تاريخية من الحدود السارية. للتوثيق فقط — المصدر هو constitution.py."""
+
+    __tablename__ = "risk_limits"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    fingerprint: Mapped[str] = mapped_column(String(64), unique=True)
+    limits_json: Mapped[str] = mapped_column(Text)
+
+
+class KillSwitchEventRow(Base):
+    __tablename__ = "kill_switch_events"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    trigger: Mapped[str] = mapped_column(String(48))
+    reason_ar: Mapped[str] = mapped_column(Text)
+    policy: Mapped[str] = mapped_column(String(32))
+    context_json: Mapped[str] = mapped_column(Text, default="{}")
+    triggered_at_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    reset_approved_by: Mapped[str] = mapped_column(String(64), default="")
+    reset_reason_ar: Mapped[str] = mapped_column(Text, default="")
+    reset_at_utc: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class SystemHealthRow(Base):
+    __tablename__ = "system_health"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    component: Mapped[str] = mapped_column(String(32), index=True)
+    ok: Mapped[bool] = mapped_column(Boolean)
+    detail_ar: Mapped[str] = mapped_column(Text, default="")
+    checked_at_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class NewsBlackoutRow(Base, TimestampedMixin):
+    __tablename__ = "news_blackouts"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    symbol: Mapped[str | None] = mapped_column(String(24))
+    title_ar: Mapped[str] = mapped_column(Text)
+    source: Mapped[str] = mapped_column(String(128))
+    starts_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    ends_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    confirmed_by: Mapped[str] = mapped_column(String(64), default="")
+
+
+class AuditEventRow(Base):
+    """APPEND ONLY. لا UPDATE ولا DELETE من التطبيق."""
+
+    __tablename__ = "audit_events"
+    sequence: Mapped[int] = mapped_column(Integer, primary_key=True)
+    timestamp_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    actor: Mapped[str] = mapped_column(String(32))
+    action: Mapped[str] = mapped_column(String(48), index=True)
+    decision: Mapped[str] = mapped_column(String(64))
+    reason_ar: Mapped[str] = mapped_column(Text)
+    source: Mapped[str] = mapped_column(String(64))
+    before_json: Mapped[str | None] = mapped_column(Text)
+    after_json: Mapped[str | None] = mapped_column(Text)
+    related_id: Mapped[str | None] = mapped_column(String(64), index=True)
+    previous_hash: Mapped[str] = mapped_column(String(64))
+    entry_hash: Mapped[str] = mapped_column(String(64), unique=True)
+
+
+class Approval(Base):
+    __tablename__ = "approvals"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    kind: Mapped[str] = mapped_column(String(48))  # LIVE_ENABLE / FIRST_ORDER / KILL_RESET / STRATEGY
+    approved_by: Mapped[str] = mapped_column(String(64))
+    phrase_verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    reason_ar: Mapped[str] = mapped_column(Text)
+    payload_json: Mapped[str] = mapped_column(Text, default="{}")
+    approved_at_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class ConfigurationVersion(Base, TimestampedMixin):
+    __tablename__ = "configuration_versions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    fingerprint: Mapped[str] = mapped_column(String(64), unique=True)
+    payload_json: Mapped[str] = mapped_column(Text)
+    note_ar: Mapped[str] = mapped_column(Text, default="")

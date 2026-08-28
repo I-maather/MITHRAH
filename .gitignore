@@ -1,0 +1,33 @@
+# secrets — لا يُرفع أي منها أبداً
+.env
+.env.*
+!.env.example
+secrets/
+*.pem
+*.key
+
+# data
+data/
+backups/
+*.db
+*.sqlite3
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+
+# node
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+
+# os / editors
+.DS_Store
+.idea/
+.vscode/

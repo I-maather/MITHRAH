@@ -1,0 +1,33 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-ar: "SF Arabic", "Geeza Pro", "Noto Naskh Arabic", "Segoe UI", system-ui, sans-serif;
+}
+
+html {
+  direction: rtl;
+}
+
+body {
+  background: theme("colors.surface.sunken");
+  color: theme("colors.ink.DEFAULT");
+  font-family: var(--font-ar);
+  -webkit-font-smoothing: antialiased;
+}
+
+@layer components {
+  .card {
+    @apply bg-surface border border-line rounded-2xl p-5;
+  }
+  .label {
+    @apply text-xs text-ink-faint;
+  }
+  .value {
+    @apply text-2xl font-semibold tabular-nums;
+  }
+  .pill {
+    @apply inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium;
+  }
+}
