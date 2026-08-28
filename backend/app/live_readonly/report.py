@@ -30,6 +30,18 @@ from ..profiles import PROFILE_SPECS, ProfileLimits, TradingProfile
 from ..secretstore.redaction import redact
 from .allowlist import describe_allowlist
 from .discovery import LiveDiscoveryReport, LiveInstrumentInfo
+from .overnight import (
+    OVERNIGHT_RATE_UNIT_UNKNOWN,
+    OvernightRateUnit,
+    compute_overnight,
+    implied_annual_percent,
+)
+from ..profiles.thresholds import (
+    EquityThreshold,
+    LossSequence,
+    loss_sequence_limits,
+    minimum_equity_for,
+)
 from .private_store import (
     ACTUAL_FEASIBILITY_MARKDOWN,
     DISCOVERY_JSON,
@@ -124,6 +136,14 @@ def assess_equity(raw: object) -> EquityAssessment:
             ACCOUNT_NOT_FUNDED, "NEGATIVE", "رصيد الحساب سالب.", None,
         )
     return EquityAssessment(ACCOUNT_FUNDED, "FUNDED", "الحساب مموَّل.", value)
+
+
+def parse_unit_enum(value: Optional[str]) -> OvernightRateUnit:
+    """يحوّل الوحدة المحفوظة نصاً إلى العدّاد. كل ما لا يُعرف ⇒ `UNKNOWN`."""
+    try:
+        return OvernightRateUnit(str(value))
+    except ValueError:
+        return OvernightRateUnit.UNKNOWN
 
 
 def _fmt(value: Optional[Decimal], places: int = 2) -> str:
@@ -396,9 +416,19 @@ def compute_feasibility(
     spread_cost = spread_price * size * contract
     slippage = SLIPPAGE_RESERVE_PIPS * pip_value
 
-    overnight: Optional[Decimal] = None
-    if instrument.overnight_fee_long is not None:
-        overnight = abs(instrument.overnight_fee_long) * notional
+    # التبييت: **لا يُضرب المعدّل الخام في التعرّض** قبل إثبات وحدته.
+    # كان ذلك مصدر خطأ المئة ضعف. انظر `overnight.py`.
+    overnight_rate = compute_overnight(
+        instrument.overnight_fee_long,
+        notional=notional,
+        unit=parse_unit_enum(instrument.overnight_rate_unit),
+        unit_source_ar=instrument.overnight_rate_unit_source_ar or "",
+        raw_text=(
+            str(instrument.overnight_fee_long)
+            if instrument.overnight_fee_long is not None else None
+        ),
+    )
+    overnight = overnight_rate.cash_fee
 
     rows: list[FeasibilityRow] = []
     for stop in STOP_DISTANCES_PIPS:
@@ -434,6 +464,17 @@ def compute_feasibility(
                 "meets_min_rr": meets_rr,
                 "tradable": bool(within_risk and meets_rr),
             })
+        # العتبات لكل سيناريو وقف: **ثلاثة أرقام مختلفة لا رقم واحد**.
+        thresholds = {
+            str(row.stop_pips): minimum_equity_for(profile, row.all_in_risk).as_dict()
+            for row in rows
+        }
+        sequences = {
+            str(row.stop_pips): loss_sequence_limits(
+                profile, row.all_in_risk, equity=equity
+            ).as_dict()
+            for row in rows
+        }
         profiles[profile.value] = {
             "name_ar": PROFILE_SPECS[profile].name_ar,
             "max_risk_per_trade": f"{limits.max_risk_per_trade:.2f}",
@@ -441,6 +482,8 @@ def compute_feasibility(
             "min_quality_score": limits.min_quality_score,
             "stops": fits,
             "any_stop_fits": any(f["tradable"] for f in fits),
+            "equity_thresholds": thresholds,
+            "loss_sequences": sequences,
         }
 
     return {
@@ -465,6 +508,7 @@ def compute_feasibility(
             f"{rows[0].overnight_one_night:.6f}"
             if rows[0].overnight_one_night is not None else None
         ),
+        "overnight": overnight_rate.as_dict(),
         "rows": [
             {
                 "stop_pips": r.stop_pips,
@@ -586,8 +630,228 @@ def render_actual_feasibility_markdown(
     return redact("\n".join(lines))
 
 
+#: حقول شروط الأداة التي تظهر في التقرير العام.
+#:
+#: كلها **شروط أداة لدى الوسيط**، لا بيانات حساب: تُنشر كما هي لأي حامل للأداة
+#: نفسها، ولا تكشف عن الحساب شيئاً. غيابها من التقرير هو ما عطّل التدقيق سابقاً.
+PUBLIC_INSTRUMENT_FIELDS: tuple[tuple[str, str, Optional[str]], ...] = (
+    # (مفتاح القيمة، الاسم العربي، مفتاح الوحدة إن وُجد)
+    ("market_status", "حالة السوق", None),
+    ("snapshot_time", "طابع اللقطة", None),
+    ("data_age_seconds", "عمر البيانات (ثانية)", None),
+    ("bid", "العرض (Bid)", None),
+    ("ask", "الطلب (Ask)", None),
+    ("spread", "السبريد (لقطة واحدة)", None),
+    ("min_deal_size", "أدنى حجم صفقة", "min_deal_size_unit"),
+    ("size_increment", "أصغر زيادة حجم", "size_increment_unit"),
+    ("margin_factor", "معامل الهامش", "margin_factor_unit"),
+    ("min_step_distance", "أدنى مسافة خطوة", "min_step_distance_unit"),
+    ("min_stop_distance", "أدنى مسافة وقف/هدف", "min_stop_distance_unit"),
+    ("min_guaranteed_stop_distance", "أدنى مسافة وقف مضمون",
+     "min_guaranteed_stop_distance_unit"),
+    ("guaranteed_stop_available", "الوقف المضمون متاح؟", None),
+    ("guaranteed_stop_premium", "علاوة الوقف المضمون", None),
+    ("lot_size", "حجم اللوت", None),
+    ("contract_size", "حجم العقد", None),
+    ("pip_definition", "تعريف النقطة (onePipMeans)", None),
+    ("pip_position", "موضع النقطة (pipPosition)", None),
+    ("tick_size", "حجم التِّك", None),
+    ("decimal_places_factor", "معامل المنازل العشرية", None),
+    ("scaling_factor", "معامل التحجيم", None),
+    ("quantity_interpretation", "تفسير الكمية", None),
+    ("trading_hours", "ساعات التداول", None),
+    ("overnight_fee_long", "معدّل التبييت الخام (شراء)", None),
+    ("overnight_fee_short", "معدّل التبييت الخام (بيع)", None),
+    ("overnight_rate_unit", "وحدة معدّل التبييت", None),
+    ("overnight_fee_time", "وقت احتساب التبييت", None),
+)
+
+#: مفاتيح **ممنوعة** في التقرير العام — بيانات حساب لا شروط أداة.
+FORBIDDEN_PUBLIC_KEYS: tuple[str, ...] = (
+    "balance", "available", "profit_loss", "masked_id", "account_id",
+    "accountId", "email", "identifier", "dealing_enabled", "leverage_preferences",
+)
+
+
+def render_instrument_conditions_markdown(
+    instrument: Optional[LiveInstrumentInfo],
+) -> list[str]:
+    """
+    جدول **شروط الأداة العامة** بوحداتها.
+
+    القيمة الغائبة تظهر «—» صراحةً. الحقل الغائب من التقرير كان يعني سابقاً
+    أنه لا يمكن تدقيقه أصلاً — وهو ما حدث مع أدنى مسافة وقف والوقف المضمون.
+    """
+    lines = [
+        "## شروط الأداة لدى الوسيط",
+        "",
+        "> كل ما في هذا الجدول **شرط أداة عام**، لا بيانات حساب. القيمة «—»",
+        "> تعني أن الوسيط لم يُعِدها — لا أنها صفر ولا أنها غير مهمة.",
+        "",
+    ]
+    if instrument is None or not instrument.found:
+        return lines + ["> الأداة لم تُقرأ في هذا الاكتشاف.", ""]
+
+    data = instrument.as_dict()
+    lines += ["| الشرط | القيمة | الوحدة |", "|---|---|---|"]
+    for key, label, unit_key in PUBLIC_INSTRUMENT_FIELDS:
+        value = data.get(key)
+        if isinstance(value, bool):
+            shown = "نعم" if value else "لا"
+        elif value is None:
+            shown = "—"
+        else:
+            shown = str(value)
+        unit = data.get(unit_key) if unit_key else None
+        lines.append(f"| {label} | {shown} | {unit or '—'} |")
+
+    if instrument.notes:
+        lines += ["", "**ملاحظات الاكتشاف:**"]
+        lines += [f"- {note}" for note in instrument.notes]
+    lines.append("")
+    return lines
+
+
+def render_overnight_section(planned: Optional[dict]) -> list[str]:
+    """
+    التبييت بقيمه **الأربع منفصلة**: الخام · الوحدة · المطبَّع · النقدي.
+
+    دمجها في رقم واحد هو ما سمح بخطأ المئة ضعف بلا أن يلاحظه أحد.
+    """
+    lines = ["## تكلفة التبييت — الوحدة تُثبَت ولا تُخمَّن", ""]
+    block = (planned or {}).get("overnight")
+    if not block:
+        return lines + ["> غير محسوبة.", ""]
+
+    lines += [
+        "| البند | القيمة |",
+        "|---|---|",
+        f"| القيمة الخام من الوسيط | {block.get('raw_value') or '—'} |",
+        f"| الوحدة المُثبتة | `{block.get('unit')}` |",
+        f"| مصدر إثبات الوحدة | {block.get('unit_source_ar') or '—'} |",
+        f"| المعدّل المطبَّع (كسر/ليلة) | {block.get('normalized_rate_per_night') or '—'} |",
+        f"| **التكلفة النقدية لليلة** | **{block.get('cash_fee_one_night') or '—'}** |",
+        "",
+    ]
+    if block.get("failure_code") == OVERNIGHT_RATE_UNIT_UNKNOWN:
+        lines += [
+            f"> ⛔ **`{OVERNIGHT_RATE_UNIT_UNKNOWN}`** — الوسيط لم يُعلن وحدة",
+            "> المعدّل، ولا يوجد عقد مُثبَت في الكود. **فلا تُحسب تكلفة.**",
+            "",
+            "> القسمة على 100 «لأن الرقم يبدو كبيراً» تخمينٌ في الاتجاه المعاكس.",
+            "> تُثبَت الوحدة من وثائق الوسيط، ثم تُعلَن مرة واحدة في",
+            "> `DECLARED_CAPITAL_OVERNIGHT_UNIT`.",
+            "",
+            "> **لا أثر على قرار التداول:** التبييت ممنوع في كل الملفات الثلاثة.",
+            "> الأثر على **Backtest**: تكلفة مضخّمة مئة ضعف تُسقط استراتيجيات صالحة.",
+            "",
+        ]
+    elif block.get("normalized_rate_per_night"):
+        annual = implied_annual_percent(D(block["normalized_rate_per_night"]))
+        lines += [
+            f"المعدّل السنوي الضمني (365 ليلة): **{annual:.2f}%** — "
+            "للفحص العقلي لا للتسعير.",
+            "",
+        ]
+    return lines
+
+
+def render_thresholds_section(planned: Optional[dict]) -> list[str]:
+    """
+    ثلاثة أرقام **مختلفة** كانت مدموجة في واحد.
+
+    قول «150 دولاراً هي الحد الأدنى» كان خطأً: 150 هي نقطة انقلاب السقف
+    الدولاري، والحد الأدنى لخسارة 0.54 في المتوازن هو **108**.
+    """
+    lines = [
+        "## الحد الأدنى لحقوق الملكية — ثلاثة أرقام لا رقم واحد",
+        "",
+        "| المفهوم | المعنى |",
+        "|---|---|",
+        "| **الحد الأدنى للسيناريو** | أقل حقوق ملكية تجعل النسبة تسمح بهذه "
+        "الخسارة = الخسارة ÷ النسبة |",
+        "| **نقطة انقلاب السقف** | حقوق الملكية التي يبدأ عندها السقف الدولاري "
+        "في الحكم بدل النسبة = السقف ÷ النسبة |",
+        "| **رأس المال المخطَّط** | 150 دولاراً — قرار المالكة، لا نتيجة حساب |",
+        "",
+        "> تصادُف رقمين منها في مثال واحد لا يجعلهما شيئاً واحداً.",
+        "",
+    ]
+    if not planned:
+        return lines + ["> غير محسوبة.", ""]
+
+    lines += [
+        "| الملف | الوقف | الخسارة الكلية | الحد الأدنى | انقلاب السقف | ممكن أصلاً؟ |",
+        "|---|---|---|---|---|---|",
+    ]
+    for _key, profile in planned["profiles"].items():
+        for stop, threshold in profile["equity_thresholds"].items():
+            minimum = threshold["minimum_equity_from_percentage"]
+            possible = threshold["possible_at_any_equity"]
+            lines.append(
+                f"| {profile['name_ar']} | {stop} نقطة | "
+                f"{threshold['all_in_risk']} | "
+                f"{minimum or '**مستحيل**'} | "
+                f"{threshold['cap_binding_equity']} | "
+                f"{'نعم' if possible else 'لا — تتجاوز السقف الثابت'} |"
+            )
+    lines += [
+        "",
+        "> «مستحيل» تعني أن الخسارة تتجاوز **السقف الدولاري الثابت** للملف،",
+        "> وهو لا يرتفع بزيادة رأس المال أبداً. لا مبلغ يُصلح ذلك.",
+        "",
+    ]
+    return lines
+
+
+def render_loss_sequence_section(planned: Optional[dict]) -> list[str]:
+    """
+    سلسلة الخسائر تحت **كل** الحدود: التواتر اليومي، واليومي، والأسبوعي،
+    والتوقّف التشغيلي. لا حدّ واحد يُقتبَس منفرداً.
+    """
+    lines = [
+        "## سلسلة الخسائر المأذون بها",
+        "",
+        "> الحدود **لا تُجمع** — الأشد يفوز. والعمود الأخير يقول أيها الأشد.",
+        "> وعدد أوامر الدخول اليومي محدود بواحد في كل الملفات، وهو قيدٌ كثيراً",
+        "> ما يسبق حدّ الخسارة اليومي.",
+        "",
+    ]
+    if not planned:
+        return lines + ["> غير محسوبة.", ""]
+
+    lines += [
+        "| الملف | الوقف | الخسارة | باليوم | بالأسبوع | حتى التوقّف "
+        "(6.50) | التراكم | أيام | القيد الأشد |",
+        "|---|---|---|---|---|---|---|---|---|",
+    ]
+    for _key, profile in planned["profiles"].items():
+        for stop, seq in profile["loss_sequences"].items():
+            lines.append(
+                f"| {profile['name_ar']} | {stop} نقطة | {seq['loss_per_trade']} | "
+                f"{seq['losses_per_day_effective']} | "
+                f"{seq['losses_per_week_effective']} | "
+                f"{seq['losses_until_operational_stop']} | "
+                f"{seq['cumulative_at_operational_limit']} | "
+                f"{seq['trading_days_to_operational_stop'] or '—'} | "
+                f"`{seq['binding_constraint']}`"
+                + ("" if seq["scenario_permitted"] else " · ⛔ غير مسموح أصلاً")
+                + " |"
+            )
+    lines += [
+        "",
+        "> عمود «التراكم» هو مجموع الخسائر عند العدد المذكور — وهو **لا يتجاوز**",
+        "> حدّ التوقّف التشغيلي 6.50. الخسارة التالية هي التي تتجاوزه.",
+        "",
+    ]
+    return lines
+
+
 def render_public_feasibility_markdown(
-    *, planned: Optional[dict], instrument_epic: str = "EURUSD"
+    *,
+    planned: Optional[dict],
+    instrument_epic: str = "EURUSD",
+    instrument: Optional[LiveInstrumentInfo] = None,
 ) -> str:
     """
     تقرير **عام** صالح للبقاء تحت `docs/`.
@@ -616,8 +880,27 @@ def render_public_feasibility_markdown(
     else:
         lines += _feasibility_block(planned)
         lines.append("")
-    lines += _NO_PROFIT_CLAIM
-    return redact("\n".join(lines))
+
+    lines += render_thresholds_section(planned)
+    lines += render_loss_sequence_section(planned)
+    lines += render_overnight_section(planned)
+    lines += render_instrument_conditions_markdown(instrument)
+
+    text = redact("\n".join(lines + _NO_PROFIT_CLAIM))
+    _assert_public_text(text)
+    return text
+
+
+def _assert_public_text(text: str) -> None:
+    """
+    فحص أخير قبل إعادة النص العام: لا مفتاح حساب فيه.
+
+    التقرير العام يُكتب تحت `docs/` وهو مسار **متتبَّع**. الخطأ هنا يدخل السجل
+    ولا يخرج منه، فالفحص يسبق الكتابة لا يتبعها.
+    """
+    for key in FORBIDDEN_PUBLIC_KEYS:
+        if key in text:
+            raise SanitisationError(f"مفتاح حساب في التقرير العام: {key}")
 
 
 __all__ = [
@@ -635,6 +918,13 @@ __all__ = [
     "compute_feasibility",
     "render_actual_feasibility_markdown",
     "render_public_feasibility_markdown",
+    "render_instrument_conditions_markdown",
+    "render_overnight_section",
+    "render_thresholds_section",
+    "render_loss_sequence_section",
+    "PUBLIC_INSTRUMENT_FIELDS",
+    "FORBIDDEN_PUBLIC_KEYS",
+    "parse_unit_enum",
     "SanitisationError",
     "FORBIDDEN_JSON_KEYS",
     "STOP_DISTANCES_PIPS",

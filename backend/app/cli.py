@@ -46,6 +46,12 @@ from .live_readonly.report import (
     write_private_discovery_markdown,
 )
 from .live_readonly.session import LiveAuthError, LiveSession
+from .live_readonly.spread_sample import (
+    SPREAD_SAMPLE_EPIC,
+    SpreadSamplerError,
+    render_spread_report,
+    run_spread_sampling,
+)
 from .live_readonly.transport import LiveReadOnlyTransport, LiveTransportError
 from .diagnostics.auth_probe import (
     ProbeViolation,
@@ -362,7 +368,7 @@ def cmd_capital_live_discover(args: argparse.Namespace) -> int:
             public_path = write_public_text(
                 REPO_ROOT / "docs" / "CAPITAL_COM_150_USD_FEASIBILITY.md",
                 render_public_feasibility_markdown(
-                    planned=planned, instrument_epic="EURUSD"
+                    planned=planned, instrument_epic="EURUSD", instrument=eurusd,
                 ),
             )
         except PrivateStoreError as exc:
@@ -418,6 +424,119 @@ def cmd_capital_live_discover(args: argparse.Namespace) -> int:
     return 0 if discovery_complete else 1
 
 
+SPREAD_ACKNOWLEDGEMENT_AR = """
+════════════════════════════════════════════════════════════════════
+  قياس سبريد EUR/USD — قراءة فقط على الحساب الحقيقي
+════════════════════════════════════════════════════════════════════
+
+  • جلسة مصادقة **واحدة**، ثم لقطات سوق متكررة لـEUR/USD وحده.
+  • **لا يُطلب رصيد ولا أموال متاحة ولا تفضيلات ولا مراكز** — القياس
+    لا يحتاج بيانات حساب، فلا تُطلب أصلاً.
+  • PUT و PATCH و DELETE مرفوضة دائماً · POST للمصادقة وحدها.
+  • المخرَج **غير حسّاس**: أسعار وسبريد فقط.
+
+  **لقطة واحدة ليست «السبريد المعتاد».** هذا الأمر يبني توزيعاً.
+════════════════════════════════════════════════════════════════════
+"""
+
+
+def cmd_capital_live_spread_sample(args: argparse.Namespace) -> int:
+    """
+    يقيس توزيع سبريد EUR/USD عبر الزمن — قراءة فقط، بجلسة واحدة.
+
+    لا يكتب شيئاً في المخزن الخاص: مخرَجه لا يحتوي أي قيمة حساب، فلا يحتاج
+    فحص الخصوصية الذي يحتاجه الاكتشاف.
+    """
+    if not args.acknowledge_live_read_only:
+        print(
+            "⛔ هذا الأمر يمسّ الحساب الحقيقي ولا يعمل بلا إقرار صريح.\n"
+            "   أعيديه هكذا:\n"
+            "   python3 -m app.cli capital-live-spread-sample "
+            "--acknowledge-live-read-only",
+            file=sys.stderr,
+        )
+        return 2
+
+    print(SPREAD_ACKNOWLEDGEMENT_AR)
+
+    provider = build_secret_provider(env_file=args.secrets_file, allow_process_env=False)
+    missing = provider.missing(REQUIRED_CAPITAL_SECRETS)
+    if missing:
+        print(
+            "اعتمادات ناقصة: " + ", ".join(missing) + "\n"
+            "شغّلي scripts/configure_capital_credentials.sh ثم أعيدي المحاولة.",
+            file=sys.stderr,
+        )
+        return 1
+
+    transport = LiveReadOnlyTransport()
+    session = LiveSession(transport=transport, secrets=provider)
+    try:
+        session.authenticate()
+    except LiveAuthError as exc:
+        print("المصادقة: ❌ فشلت", file=sys.stderr)
+        print(f"⛔ {exc}", file=sys.stderr)
+        return 1
+    except LiveTransportError as exc:
+        print("المصادقة: ❌ فشلت", file=sys.stderr)
+        print(f"⛔ تعذّر الاتصال: {exc}", file=sys.stderr)
+        return 1
+    except AllowlistViolation as exc:
+        print(f"⛔ منعت القائمة البيضاء الطلب: {exc}", file=sys.stderr)
+        return 3
+
+    print("المصادقة: ✅ نجحت")
+    print(
+        f"القياس: {SPREAD_SAMPLE_EPIC} · {args.duration_minutes} دقيقة · "
+        f"كل {args.interval_seconds} ثانية. اتركي النافذة مفتوحة."
+    )
+
+    try:
+        run = run_spread_sampling(
+            session,
+            duration_minutes=args.duration_minutes,
+            interval_seconds=args.interval_seconds,
+        )
+    except SpreadSamplerError as exc:
+        print(f"⛔ {exc}", file=sys.stderr)
+        return 2
+    except AllowlistViolation as exc:
+        print(f"⛔ منعت القائمة البيضاء الطلب: {exc}", file=sys.stderr)
+        return 3
+    finally:
+        session.discard()
+
+    text = render_spread_report(run)
+    if args.markdown_out:
+        out = Path(args.markdown_out)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(text, encoding="utf-8")
+        print(f"\nالتقرير: {out}")
+
+    stats = run.statistics
+    print()
+    print(f"عيّنات مقبولة: {stats.count_accepted} · مرفوضة: {stats.count_rejected}")
+    if stats.count_accepted == 0:
+        print("⛔ لا عيّنة مقبولة — لا يُستخرج توزيع من لا شيء.")
+        return 1
+
+    def p(v):
+        return f"{v:.2f}" if v is not None else "—"
+
+    print(
+        f"السبريد بالنقاط — الأدنى {p(stats.minimum)} · الوسيط {p(stats.median)} · "
+        f"p75 {p(stats.p75)} · p95 {p(stats.p95)} · الأقصى {p(stats.maximum)}"
+    )
+    flagged = run.flagged_samples
+    if flagged:
+        print(f"عيّنات في نافذة إغلاق/تجديد: {len(flagged)} — موسومة في التقرير.")
+    print(
+        "\n**لقطة واحدة ليست السبريد المعتاد**، وهذا التقرير لا يدّعي ربحية "
+        "ولا يأذن بالتنفيذ."
+    )
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="app.cli", description="Maather Autonomous Trader CLI")
     parser.add_argument("--verbose", action="store_true")
@@ -452,6 +571,20 @@ def build_parser() -> argparse.ArgumentParser:
     live.add_argument("--markdown-out", default=None)
     live.add_argument("--no-candles", action="store_true")
     live.set_defaults(func=cmd_capital_live_discover)
+
+    spread = sub.add_parser(
+        "capital-live-spread-sample",
+        help="قياس توزيع سبريد EUR/USD — قراءة فقط، بجلسة واحدة",
+    )
+    spread.add_argument(
+        "--acknowledge-live-read-only",
+        action="store_true",
+        help="إقرار صريح بأن هذا الحساب الحقيقي وأن الوضع قراءة فقط",
+    )
+    spread.add_argument("--duration-minutes", type=int, default=30)
+    spread.add_argument("--interval-seconds", type=int, default=60)
+    spread.add_argument("--markdown-out", default=None)
+    spread.set_defaults(func=cmd_capital_live_spread_sample)
 
     probe = sub.add_parser(
         "capital-auth-probe",

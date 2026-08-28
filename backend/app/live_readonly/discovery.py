@@ -16,6 +16,11 @@ from typing import Any, Optional
 
 from ..clock import format_riyadh, now_utc
 from ..money import D
+from .overnight import (
+    OVERNIGHT_RATE_UNIT_UNKNOWN,
+    OvernightRateUnit,
+    resolve_unit,
+)
 from .session import LiveSession
 
 #: أدوات الاكتشاف. قائمة **الاكتشاف** أوسع من قائمة **التنفيذ** عمداً:
@@ -91,20 +96,33 @@ class LiveInstrumentInfo:
     ask: Optional[Decimal] = None
     spread: Optional[Decimal] = None
     min_deal_size: Optional[Decimal] = None
+    min_deal_size_unit: Optional[str] = None
     size_increment: Optional[Decimal] = None
+    size_increment_unit: Optional[str] = None
     margin_factor: Optional[Decimal] = None
     margin_factor_unit: Optional[str] = None
     min_stop_distance: Optional[Decimal] = None
     min_stop_distance_unit: Optional[str] = None
+    min_step_distance: Optional[Decimal] = None
+    min_step_distance_unit: Optional[str] = None
     min_guaranteed_stop_distance: Optional[Decimal] = None
+    min_guaranteed_stop_distance_unit: Optional[str] = None
     guaranteed_stop_available: Optional[bool] = None
     guaranteed_stop_premium: Optional[Decimal] = None
     pip_definition: Optional[str] = None
+    pip_position: Optional[str] = None
+    tick_size: Optional[Decimal] = None
+    lot_size: Optional[Decimal] = None
+    decimal_places_factor: Optional[Decimal] = None
+    scaling_factor: Optional[Decimal] = None
     contract_size: Optional[Decimal] = None
     quantity_interpretation: Optional[str] = None
     overnight_fee_long: Optional[Decimal] = None
     overnight_fee_short: Optional[Decimal] = None
     overnight_fee_time: Optional[str] = None
+    #: الوحدة **المُثبتة** لمعدّل التبييت — لا المستنتَجة. انظر `overnight.py`.
+    overnight_rate_unit: str = "UNKNOWN"
+    overnight_rate_unit_source_ar: Optional[str] = None
     trading_hours: Optional[str] = None
     candles_available: Optional[bool] = None
     candles_count: Optional[int] = None
@@ -124,20 +142,32 @@ class LiveInstrumentInfo:
             "ask": s(self.ask),
             "spread": s(self.spread),
             "min_deal_size": s(self.min_deal_size),
+            "min_deal_size_unit": self.min_deal_size_unit,
             "size_increment": s(self.size_increment),
+            "size_increment_unit": self.size_increment_unit,
             "margin_factor": s(self.margin_factor),
             "margin_factor_unit": self.margin_factor_unit,
             "min_stop_distance": s(self.min_stop_distance),
             "min_stop_distance_unit": self.min_stop_distance_unit,
+            "min_step_distance": s(self.min_step_distance),
+            "min_step_distance_unit": self.min_step_distance_unit,
             "min_guaranteed_stop_distance": s(self.min_guaranteed_stop_distance),
+            "min_guaranteed_stop_distance_unit": self.min_guaranteed_stop_distance_unit,
             "guaranteed_stop_available": self.guaranteed_stop_available,
             "guaranteed_stop_premium": s(self.guaranteed_stop_premium),
             "pip_definition": self.pip_definition,
+            "pip_position": self.pip_position,
+            "tick_size": s(self.tick_size),
+            "lot_size": s(self.lot_size),
+            "decimal_places_factor": s(self.decimal_places_factor),
+            "scaling_factor": s(self.scaling_factor),
             "contract_size": s(self.contract_size),
             "quantity_interpretation": self.quantity_interpretation,
             "overnight_fee_long": s(self.overnight_fee_long),
             "overnight_fee_short": s(self.overnight_fee_short),
             "overnight_fee_time": self.overnight_fee_time,
+            "overnight_rate_unit": self.overnight_rate_unit,
+            "overnight_rate_unit_source_ar": self.overnight_rate_unit_source_ar,
             "trading_hours": self.trading_hours,
             "candles_available": self.candles_available,
             "candles_count": self.candles_count,
@@ -259,16 +289,32 @@ def _extract_instrument(epic: str, body: Any, now: datetime) -> LiveInstrumentIn
     ask = _dec(snapshot.get("offer"))
     spread = (ask - bid) if (bid is not None and ask is not None) else None
 
-    min_size, _ = rule("minDealSize")
-    step, _ = rule("minSizeIncrement")
+    min_size, min_size_unit = rule("minDealSize")
+    step, step_unit = rule("minSizeIncrement")
     min_stop, min_stop_unit = rule("minNormalStopOrLimitDistance")
-    min_gsl, _ = rule("minControlledRiskStopDistance")
+    min_step, min_step_unit = rule("minStepDistance")
+    min_gsl, min_gsl_unit = rule("minGuaranteedStopDistance")
+    if min_gsl is None:
+        # الاسم يختلف بين إصدارات الواجهة — يُجرَّب البديل الموثَّق.
+        min_gsl, min_gsl_unit = rule("minControlledRiskStopDistance")
 
     overnight = instrument.get("overnightFee") or {}
     if not isinstance(overnight, dict):
         overnight = {}
+    overnight_unit, overnight_unit_source = resolve_unit(overnight)
+    if overnight_unit is OvernightRateUnit.UNKNOWN and (
+        overnight.get("longRate") is not None
+    ):
+        notes_unit = (
+            "وحدة معدّل التبييت غير مُثبتة ⇒ لا تُحسب تكلفة تبييت "
+            f"({OVERNIGHT_RATE_UNIT_UNKNOWN})."
+        )
+    else:
+        notes_unit = None
 
     notes: list[str] = []
+    if notes_unit:
+        notes.append(notes_unit)
     margin_factor = _dec(instrument.get("marginFactor"))
     if margin_factor is None:
         notes.append("معامل الهامش غير معلن في الاستجابة.")
@@ -295,24 +341,37 @@ def _extract_instrument(epic: str, body: Any, now: datetime) -> LiveInstrumentIn
         ask=ask,
         spread=spread,
         min_deal_size=min_size,
+        min_deal_size_unit=min_size_unit,
         size_increment=step,
+        size_increment_unit=step_unit,
         margin_factor=margin_factor,
         margin_factor_unit=instrument.get("marginFactorUnit"),
         min_stop_distance=min_stop,
         min_stop_distance_unit=min_stop_unit,
+        min_step_distance=min_step,
+        min_step_distance_unit=min_step_unit,
         min_guaranteed_stop_distance=min_gsl,
+        min_guaranteed_stop_distance_unit=min_gsl_unit,
         guaranteed_stop_available=(
             bool(gsl_available) if gsl_available is not None else None
         ),
         guaranteed_stop_premium=_dec(instrument.get("guaranteedStopPremium")),
-        pip_definition=(
-            instrument.get("onePipMeans") or instrument.get("pipPosition")
+        pip_definition=instrument.get("onePipMeans"),
+        pip_position=(
+            str(instrument.get("pipPosition"))
+            if instrument.get("pipPosition") is not None else None
         ),
+        tick_size=_dec(instrument.get("tickSize") or snapshot.get("tickSize")),
+        lot_size=_dec(instrument.get("lotSize")),
+        decimal_places_factor=_dec(snapshot.get("decimalPlacesFactor")),
+        scaling_factor=_dec(snapshot.get("scalingFactor")),
         contract_size=_dec(instrument.get("contractSize")),
         quantity_interpretation=instrument.get("unit") or instrument.get("type"),
         overnight_fee_long=_dec(overnight.get("longRate")),
         overnight_fee_short=_dec(overnight.get("shortRate")),
         overnight_fee_time=overnight.get("swapChargeTimestamp"),
+        overnight_rate_unit=overnight_unit.value,
+        overnight_rate_unit_source_ar=overnight_unit_source,
         trading_hours=_summarise_hours(instrument.get("openingHours")),
         snapshot_time=updated if isinstance(updated, str) else None,
         data_age_seconds=age,

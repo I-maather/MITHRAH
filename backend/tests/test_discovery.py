@@ -112,10 +112,14 @@ def test_cli_exposes_only_read_only_commands():
 
     `capital-live-discover` يمسّ الحساب الحقيقي **قراءةً فقط**، بقائمة بيضاء
     مفروضة على مستوى HTTP، ولا يعمل بلا إقرار صريح من المالكة.
+
+    `capital-live-spread-sample` يقيس السبريد: مصادقة واحدة ثم
+    `GET /markets/EURUSD` متكرر. **لا يطلب رصيداً ولا تفضيلات ولا مراكز.**
     """
     assert _cli_commands() == {
         "capital-discover",
         "capital-live-discover",
+        "capital-live-spread-sample",
         "capital-auth-probe",
         "secrets-status",
         "constitution",
