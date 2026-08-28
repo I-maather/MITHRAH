@@ -23,6 +23,11 @@ from .brokers.capital.session import CapitalSession
 from .brokers.capital.transport import GuardedTransport, HttpxTransport
 from .clock import format_riyadh, now_utc
 from .config import REPO_ROOT, get_settings
+from .diagnostics.auth_probe import (
+    ProbeViolation,
+    render_report,
+    run_auth_probe,
+)
 from .discovery.capital_discovery import (
     DISCOVERY_EPICS,
     DiscoveryViolation,
@@ -172,6 +177,51 @@ def cmd_capital_discover(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_capital_auth_probe(args: argparse.Namespace) -> int:
+    """
+    تشخيص مصادقة واحد على Demo. محاولة واحدة كحد أقصى لكل وضع،
+    `POST /session` فقط، ولا تراجع إلى Live بحال.
+    """
+    if args.environment.lower() != "demo":
+        print("⛔ التشخيص مسموح على demo فقط.", file=sys.stderr)
+        return 2
+    if LIVE_API_ENABLED:
+        print("⛔ قفل Live مفتوح في الكود. توقّف.", file=sys.stderr)
+        return 2
+
+    provider = build_secret_provider(env_file=args.secrets_file, allow_process_env=False)
+    missing = provider.missing(REQUIRED_CAPITAL_SECRETS)
+    if missing:
+        print(
+            "اعتمادات ناقصة: " + ", ".join(missing) + "\n"
+            "شغّلي scripts/configure_capital_credentials.sh ثم أعيدي المحاولة.",
+            file=sys.stderr,
+        )
+        return 1
+
+    transport = GuardedTransport(
+        inner=HttpxTransport(),
+        execution_lock=ExecutionLock.locked(),
+        rate_limiter=RateLimiter(),
+    )
+    try:
+        report = run_auth_probe(
+            transport=transport,
+            secrets=provider,
+            environment=CapitalEnvironment.DEMO,
+        )
+    except ProbeViolation as exc:
+        print(f"⛔ انتهاك في التشخيص: {exc}", file=sys.stderr)
+        return 3
+    except Exception as exc:  # noqa: BLE001
+        # لا تفاصيل خام: قد تحمل رسالة الاستثناء ما لا يجوز عرضه.
+        print(f"⛔ تعذّر إكمال التشخيص: {type(exc).__name__}", file=sys.stderr)
+        return 1
+
+    print(render_report(report))
+    return 0 if report.working_mode is not None else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="app.cli", description="Maather Autonomous Trader CLI")
     parser.add_argument("--verbose", action="store_true")
@@ -191,6 +241,13 @@ def build_parser() -> argparse.ArgumentParser:
     discover.add_argument("--markdown-out", default=None)
     discover.add_argument("--no-candles", action="store_true")
     discover.set_defaults(func=cmd_capital_discover)
+
+    probe = sub.add_parser(
+        "capital-auth-probe",
+        help="تشخيص مصادقة Demo: يقارن وضعَي كلمة المرور — محاولة واحدة لكل وضع",
+    )
+    probe.add_argument("--environment", default="demo", choices=["demo"])
+    probe.set_defaults(func=cmd_capital_auth_probe)
 
     status = sub.add_parser("secrets-status", help="فحص وجود الاعتمادات بلا كشفها")
     status.set_defaults(func=cmd_secrets_status)

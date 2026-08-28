@@ -92,14 +92,39 @@ def test_live_environment_is_refused_by_the_cli():
         parser.parse_args(["capital-discover", "--environment", "live"])
 
 
-def test_cli_exposes_only_read_only_commands():
+def _cli_commands() -> set[str]:
     parser = build_parser()
     actions = [a for a in parser._actions if hasattr(a, "choices") and a.choices]
     commands: set[str] = set()
     for action in actions:
         if isinstance(action.choices, dict):
             commands |= set(action.choices)
-    assert commands == {"capital-discover", "secrets-status", "constitution"}
+    return commands
+
+
+def test_cli_exposes_only_read_only_commands():
+    """
+    قائمة بيضاء صريحة. إضافة أمر جديد تتطلب تعديل هذا الاختبار عمداً —
+    وهذا هو الغرض: ألا يتسلّل أمر تنفيذي بلا قرار واعٍ.
+
+    `capital-auth-probe` تشخيصي: يصادق فقط (`POST /session`) ولا يلمس
+    مركزاً ولا أمراً ولا تفضيلاً.
+    """
+    assert _cli_commands() == {
+        "capital-discover",
+        "capital-auth-probe",
+        "secrets-status",
+        "constitution",
+    }
+
+
+def test_no_cli_command_name_suggests_execution():
+    forbidden = ("order", "trade", "buy", "sell", "position", "execute",
+                 "submit", "close", "topup", "top-up", "deposit")
+    for command in _cli_commands():
+        lowered = command.lower()
+        for word in forbidden:
+            assert word not in lowered, f"أمر يوحي بالتنفيذ: {command}"
 
 
 # --- محتوى التقرير -----------------------------------------------------------
