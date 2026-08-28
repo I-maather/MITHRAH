@@ -260,3 +260,29 @@ def test_demo_topup_is_blocked():
     adapter.connect()
     with pytest.raises(ExecutionLocked):
         adapter.top_up_demo(D("1000"))
+
+
+# ---------------------------------------------------------------------------
+# اعتماديات تسجيل الدخول — فجوة نشر حقيقية اكتُشفت قبل أول اتصال Demo
+# ---------------------------------------------------------------------------
+
+def test_cryptography_is_declared_as_a_dependency():
+    """
+    `ensure_session()` يشفّر كلمة مرور المفتاح بـRSA/PKCS1 افتراضياً
+    (`use_encrypted_password=True`). إن كانت `cryptography` غائبة عن البيئة
+    يفشل تسجيل الدخول بـ`CapitalAuthError` — لذلك يجب أن تكون مُعلنة.
+    """
+    from pathlib import Path
+
+    requirements = (
+        Path(__file__).resolve().parents[1] / "requirements.txt"
+    ).read_text(encoding="utf-8")
+    assert "cryptography" in requirements
+
+
+def test_cryptography_is_importable_in_this_environment():
+    """لو سقط هذا، فتسجيل الدخول إلى Demo سيفشل عند أول محاولة."""
+    from cryptography.hazmat.primitives.asymmetric import padding  # noqa: F401
+    from cryptography.hazmat.primitives.serialization import (  # noqa: F401
+        load_der_public_key,
+    )
