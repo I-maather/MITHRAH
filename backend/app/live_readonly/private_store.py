@@ -49,6 +49,8 @@ SENSITIVE_FILENAMES: frozenset[str] = frozenset({
 
 DIR_MODE = 0o700
 FILE_MODE = 0o600
+#: الملف العام تحت `docs/` ليس حسّاساً — لكنه يُكتب ذرّياً كذلك.
+PUBLIC_FILE_MODE = 0o644
 
 #: بتّات لا يجوز أن تكون مضبوطة على أي مخرَج حسّاس (المجموعة والعالم).
 FORBIDDEN_MODE_BITS = 0o077
@@ -321,32 +323,75 @@ def require_private_output(repo_root: Path) -> PreflightResult:
     return result
 
 
+def _atomic_write_text(path: Path, text: str, *, mode: int) -> Path:
+    """
+    كتابة **ذرّية**: ملف مؤقت في المجلد نفسه، ثم `os.replace`.
+
+    لماذا: الكتابة المباشرة بـ`O_TRUNC` تُفرغ الملف أولاً. لو انقطع التنفيذ
+    بعدها — استثناء، أو قرص ممتلئ، أو Ctrl-C — بقي في مكانه تقريرٌ **مبتور**
+    يبدو صالحاً. `os.replace` ذرّي على المستوى نفسه: إما المحتوى القديم كاملاً
+    أو الجديد كاملاً، ولا حالة ثالثة.
+
+    الملف المؤقت يُفتح بـ`O_EXCL` (فلا يُكتب فوق شيء) و`O_NOFOLLOW` (فلا يُتبَع
+    رابط زُرع)، ويُحذف في `finally` إن لم يُنقل.
+    """
+    tmp = path.with_name(f".{path.name}.tmp-{os.getpid()}")
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        os.unlink(tmp)
+    except OSError:
+        pass
+    try:
+        fd = os.open(tmp, flags, mode)
+    except OSError as exc:
+        raise PrivateStoreError(
+            f"تعذّرت الكتابة الآمنة إلى {path.name}: {exc.errno}"
+        ) from None
+    moved = False
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        if _PERMISSIONS_SUPPORTED:
+            try:
+                os.chmod(tmp, mode)
+            except OSError:
+                pass
+        os.replace(tmp, path)
+        moved = True
+    finally:
+        if not moved:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+    return path
+
+
 def write_private_text(repo_root: Path, filename: str, text: str) -> Path:
     """
-    يكتب ملفاً حسّاساً بصلاحية 600، بعد التأكد أنه ليس رابطاً رمزياً.
-    الكتابة عبر `os.open` بـ`O_NOFOLLOW` كي لا يُتبَع رابط زُرع بين الفحص والكتابة.
+    يكتب ملفاً حسّاساً بصلاحية 600، ذرّياً، بعد التأكد أنه ليس رابطاً رمزياً.
     """
     path = private_path(repo_root, filename)
     if path.is_symlink():
         raise PrivateStoreError(f"الهدف رابط رمزي: {path.name}")
+    return _atomic_write_text(path, text, mode=FILE_MODE)
 
-    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
-    if hasattr(os, "O_NOFOLLOW"):
-        flags |= os.O_NOFOLLOW
-    try:
-        fd = os.open(path, flags, FILE_MODE)
-    except OSError as exc:
-        raise PrivateStoreError(f"تعذّرت الكتابة الآمنة إلى {path.name}: {exc.errno}") from None
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            handle.write(text)
-    finally:
-        if _PERMISSIONS_SUPPORTED:
-            try:
-                path.chmod(FILE_MODE)
-            except OSError:
-                pass
-    return path
+
+def write_public_text(path: Path, text: str) -> Path:
+    """
+    كتابة ذرّية لملف **عام** (تحت `docs/`) — بصلاحيات عادية `644`.
+
+    ليس حسّاساً، لكن البتر يصيبه كما يصيب غيره: تقرير جدوى نصفه مكتوب أسوأ من
+    غياب التقرير، لأنه يبدو مكتملاً.
+    """
+    if path.is_symlink():
+        raise PrivateStoreError(f"الهدف رابط رمزي: {path.name}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return _atomic_write_text(path, text, mode=PUBLIC_FILE_MODE)
 
 
 __all__ = [
@@ -358,6 +403,7 @@ __all__ = [
     "SENSITIVE_FILENAMES",
     "DIR_MODE",
     "FILE_MODE",
+    "PUBLIC_FILE_MODE",
     "PrivateStoreError",
     "PreflightCheck",
     "PreflightResult",
@@ -367,6 +413,7 @@ __all__ = [
     "preflight",
     "require_private_output",
     "write_private_text",
+    "write_public_text",
     "is_git_tracked",
     "is_git_ignored",
 ]

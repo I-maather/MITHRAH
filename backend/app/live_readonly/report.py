@@ -49,6 +49,83 @@ class SanitisationError(RuntimeError):
     """رُفعت لأن مخرَجاً كان سيحمل ما لا يجوز — لا يُكتب الملف."""
 
 
+# ---------------------------------------------------------------------------
+# حالة تمويل الحساب — حسابٌ غير مموَّل حالةٌ صحيحة، لا خطأ
+# ---------------------------------------------------------------------------
+
+#: التصنيف حين يتعذّر تحجيم المراكز على الرصيد الفعلي.
+ACCOUNT_NOT_FUNDED = "ACCOUNT_NOT_FUNDED"
+ACCOUNT_FUNDED = "FUNDED"
+
+
+@dataclass(frozen=True)
+class EquityAssessment:
+    """
+    تقييم رصيد الحساب الفعلي **قبل** أي محاولة تحجيم.
+
+    `ProfileLimits.for_profile` ترفض حقوق ملكية غير موجبة — وهذا صحيح: لا يوجد
+    حجم مركز صالح على رصيد صفر. الخطأ كان في المستدعي الذي مرّر القيمة كما هي
+    فانهار الاكتشاف كله. الحساب غير المموَّل **حالة صحيحة** تُصنَّف ولا تُسقط
+    عملية القراءة.
+    """
+    status: str            # ACCOUNT_FUNDED | ACCOUNT_NOT_FUNDED
+    reason_code: str       # FUNDED | ZERO | NEGATIVE | MISSING | MALFORMED
+    reason_ar: str
+    equity: Optional[Decimal]   # صالحة للتحجيم فقط حين status == FUNDED
+
+    @property
+    def usable(self) -> bool:
+        return self.status == ACCOUNT_FUNDED and self.equity is not None
+
+    def as_dict(self) -> dict:
+        return {
+            "status": self.status,
+            "reason_code": self.reason_code,
+            "reason_ar": self.reason_ar,
+            "position_sizing_available": self.usable,
+        }
+
+
+def assess_equity(raw: object) -> EquityAssessment:
+    """
+    يصنّف الرصيد الفعلي بلا اختلاق أي قيمة.
+
+    **لا يوجد بديل افتراضي.** استبدال رصيد مفقود بـ150 دولاراً — كما كان
+    التنفيذ السابق يفعل — يُنتج تقريراً معنوناً «بالرصيد الفعلي» وهو ليس كذلك.
+    الغياب يُصنَّف غياباً.
+    """
+    if raw is None:
+        return EquityAssessment(
+            ACCOUNT_NOT_FUNDED, "MISSING",
+            "لم يُعِد الوسيط قيمة رصيد لهذا الحساب.", None,
+        )
+    if isinstance(raw, bool):
+        return EquityAssessment(
+            ACCOUNT_NOT_FUNDED, "MALFORMED", "قيمة الرصيد ليست عدداً.", None,
+        )
+    try:
+        value = raw if isinstance(raw, Decimal) else D(str(raw))
+    except Exception:
+        return EquityAssessment(
+            ACCOUNT_NOT_FUNDED, "MALFORMED", "تعذّر تفسير قيمة الرصيد عدداً.", None,
+        )
+    # `Decimal("NaN")` لا يرفع استثناءً، و`NaN <= 0` تساوي False — فيمرّ فحص
+    # «موجب» بلا أن يكون موجباً. يُرفض غير المنتهي صراحةً.
+    if not value.is_finite():
+        return EquityAssessment(
+            ACCOUNT_NOT_FUNDED, "MALFORMED", "قيمة الرصيد غير منتهية (NaN/∞).", None,
+        )
+    if value == 0:
+        return EquityAssessment(
+            ACCOUNT_NOT_FUNDED, "ZERO", "رصيد الحساب صفر — الحساب غير مموَّل.", None,
+        )
+    if value < 0:
+        return EquityAssessment(
+            ACCOUNT_NOT_FUNDED, "NEGATIVE", "رصيد الحساب سالب.", None,
+        )
+    return EquityAssessment(ACCOUNT_FUNDED, "FUNDED", "الحساب مموَّل.", value)
+
+
 def _fmt(value: Optional[Decimal], places: int = 2) -> str:
     if value is None:
         return "—"
@@ -94,7 +171,8 @@ def render_discovery_markdown(report: LiveDiscoveryReport) -> str:
         "# Capital.com Live Discovery — اكتشاف الحساب الحقيقي",
         "",
         "> ⚠️ **معلومة محلية حسّاسة.** هذا التقرير يحتوي رصيد حسابك الحقيقي.",
-        "> **لا يُرفع إلى مستودع بعيد ولا يُشارَك.** الملف تحت `docs/` محلياً.",
+        "> **لا يُرفع إلى مستودع بعيد ولا يُشارَك.**",
+        "> مكانه `data/private/capital_live/` — متجاهَل في git وغير متتبَّع.",
         "",
         "> **قراءة فقط.** لم يُرسل أمر ولا فُتح مركز ولا عُدِّل تفضيل.",
         "> نتيجة هذا التقرير **لا تأذن بالتنفيذ**.",
@@ -236,12 +314,16 @@ def write_private_discovery_markdown(report: LiveDiscoveryReport, repo_root: Pat
 
 
 def write_private_actual_feasibility(
-    report: LiveDiscoveryReport, repo_root: Path, *, actual: Optional[dict]
+    report: LiveDiscoveryReport,
+    repo_root: Path,
+    *,
+    actual: Optional[dict],
+    assessment: Optional[EquityAssessment] = None,
 ) -> Path:
     return write_private_text(
         repo_root,
         ACTUAL_FEASIBILITY_MARKDOWN,
-        render_actual_feasibility_markdown(report, actual=actual),
+        render_actual_feasibility_markdown(report, actual=actual, assessment=assessment),
     )
 
 
@@ -280,8 +362,14 @@ def compute_feasibility(
     """
     يحسب الجدوى من **قيم الوسيط المُكتشَفة**. يعيد `None` إن نقص ما يلزم —
     ولا يُقدَّر أي حقل غائب.
+
+    حقوق ملكية غير موجبة أو غير منتهية تعيد `None` **قبل** بلوغ
+    `ProfileLimits.for_profile`. المستدعي يصنّف الحالة بـ`assess_equity`؛
+    وهذا الفحص خطُّ دفاعٍ ثانٍ كي لا يعيد مستدعٍ مستقبليٌّ الانهيار نفسه.
     """
     if not instrument.found or instrument.bid is None or instrument.ask is None:
+        return None
+    if equity is None or not Decimal(equity).is_finite() or equity <= 0:
         return None
     size = quantity or instrument.min_deal_size
     if size is None or size <= 0:
@@ -441,7 +529,10 @@ _NO_PROFIT_CLAIM = [
 
 
 def render_actual_feasibility_markdown(
-    report: LiveDiscoveryReport, *, actual: Optional[dict]
+    report: LiveDiscoveryReport,
+    *,
+    actual: Optional[dict],
+    assessment: Optional[EquityAssessment] = None,
 ) -> str:
     """
     تقرير **خاص**: يستعمل رصيد الحساب الفعلي.
@@ -462,7 +553,30 @@ def render_actual_feasibility_markdown(
         "## الرصيد الفعلي",
         "",
     ]
-    if actual is None:
+    if assessment is not None and not assessment.usable:
+        lines += [
+            f"## الحالة: `{assessment.status}`",
+            "",
+            f"**{assessment.reason_ar}**",
+            "",
+            "**تحجيم المراكز على الرصيد الفعلي غير متاح.** لا يوجد حجم مركز",
+            "صالح على رصيد غير موجب، ولم يُختلَق أي رقم بديل: التقرير يقول",
+            "«لا أعرف» بدل أن يقول رقماً لا أساس له.",
+            "",
+            "هذا **ليس عطلاً**. الاكتشاف نجح، وقراءات الوسيط كلها اكتملت،",
+            "وشروط الأداة مسجَّلة في تقرير الاكتشاف. الناقص هو التمويل وحده.",
+            "",
+            "الجدوى بسيناريو **150 دولاراً المخطَّط** محسوبة كاملة في التقرير",
+            "العام `docs/CAPITAL_COM_150_USD_FEASIBILITY.md` — وهي المرجع",
+            "الصالح إلى أن يُموَّل الحساب.",
+            "",
+            f"| رمز السبب | `{assessment.reason_code}` |",
+            "|---|---|",
+            "| تحجيم المراكز | غير متاح |",
+            "| قرار الجدوى الفعلية | **NO-GO** |",
+            "",
+        ]
+    elif actual is None:
         lines += ["> تعذّر الحساب: قيم الأداة ناقصة.", ""]
     else:
         lines += [f"حقوق الملكية المستعملة: **{actual['equity_used']}**", ""]
@@ -507,6 +621,10 @@ def render_public_feasibility_markdown(
 
 
 __all__ = [
+    "ACCOUNT_FUNDED",
+    "ACCOUNT_NOT_FUNDED",
+    "EquityAssessment",
+    "assess_equity",
     "build_discovery_payload",
     "write_discovery_json",
     "write_discovery_markdown",

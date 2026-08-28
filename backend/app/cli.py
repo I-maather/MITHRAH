@@ -34,9 +34,11 @@ from .live_readonly.private_store import (
     PrivateStoreError,
     private_directory,
     require_private_output,
+    write_public_text,
 )
 from .live_readonly.report import (
     PLANNED_CAPITAL_USD,
+    assess_equity,
     compute_feasibility,
     render_public_feasibility_markdown,
     write_private_actual_feasibility,
@@ -337,27 +339,35 @@ def cmd_capital_live_discover(args: argparse.Namespace) -> int:
         print(f"⛔ تعذّرت الكتابة الآمنة: {exc}", file=sys.stderr)
         return 4
 
+    # --- 4ب) الجدوى -------------------------------------------------------
+    # الرصيد يُصنَّف قبل استعماله. الحساب غير المموَّل **حالة صحيحة**: الاكتشاف
+    # يكتمل، والجدوى الفعلية تُصنَّف ACCOUNT_NOT_FUNDED، ولا يُختلَق أي رقم.
     eurusd = report.instrument("EURUSD")
+    assessment = assess_equity(report.account.balance if report.account else None)
     actual_path = None
     public_path = None
     if eurusd is not None and eurusd.found:
-        actual_equity = (
-            report.account.balance
-            if report.account and report.account.balance is not None
-            else PLANNED_CAPITAL_USD
+        actual = (
+            compute_feasibility(eurusd, equity=assessment.equity)
+            if assessment.usable else None
         )
-        actual = compute_feasibility(eurusd, equity=actual_equity)
         planned = compute_feasibility(eurusd, equity=PLANNED_CAPITAL_USD)
 
-        actual_path = write_private_actual_feasibility(report, REPO_ROOT, actual=actual)
-
-        # التقرير العام: سيناريو 150 دولاراً وشروط الأداة فقط — بلا أي قيمة حساب.
-        public_path = REPO_ROOT / "docs" / "CAPITAL_COM_150_USD_FEASIBILITY.md"
-        public_path.parent.mkdir(parents=True, exist_ok=True)
-        public_path.write_text(
-            render_public_feasibility_markdown(planned=planned, instrument_epic="EURUSD"),
-            encoding="utf-8",
-        )
+        try:
+            actual_path = write_private_actual_feasibility(
+                report, REPO_ROOT, actual=actual, assessment=assessment
+            )
+            # التقرير العام: سيناريو 150 دولاراً وشروط الأداة فقط — بلا أي قيمة
+            # حساب. يُكتب **دائماً**، مموَّلاً كان الحساب أو لا.
+            public_path = write_public_text(
+                REPO_ROOT / "docs" / "CAPITAL_COM_150_USD_FEASIBILITY.md",
+                render_public_feasibility_markdown(
+                    planned=planned, instrument_epic="EURUSD"
+                ),
+            )
+        except PrivateStoreError as exc:
+            print(f"⛔ تعذّرت الكتابة الآمنة: {exc}", file=sys.stderr)
+            return 4
 
     # --- 5) مخرَج الطرفية: المسموح فقط ------------------------------------
     # لا رصيد · لا أموال متاحة · لا ربح/خسارة · لا معرّف حساب (ولو مُقنَّعاً).
@@ -378,9 +388,23 @@ def cmd_capital_live_discover(args: argparse.Namespace) -> int:
     if public_path:
         print(f"\nتقرير عام (بلا أي قيمة حساب): {public_path}")
 
-    go = bool(report.account and found == len(report.instruments) and not report.errors)
+    # الاكتمال والتمويل بُعدان منفصلان: الاكتشاف قد يكتمل تماماً على حساب
+    # غير مموَّل. الأول يحدّد رمز الخروج، والثاني يحدّد GO/NO-GO للجدوى.
+    discovery_complete = bool(
+        report.account and found == len(report.instruments) and not report.errors
+    )
+    go = discovery_complete and assessment.usable
+
     print()
-    print(f"الحالة: {'GO — الاكتشاف مكتمل' if go else 'NO-GO — الاكتشاف ناقص'}")
+    if go:
+        print("الحالة: GO — الاكتشاف مكتمل")
+    elif discovery_complete:
+        # لا يُطبع الرصيد — التصنيف وحده.
+        print(f"الحالة: NO-GO — {assessment.status} (الاكتشاف مكتمل)")
+        print("  تحجيم المراكز على الرصيد الفعلي غير متاح.")
+        print("  الجدوى بسيناريو 150 دولاراً المخطَّط محسوبة في التقرير العام.")
+    else:
+        print("الحالة: NO-GO — الاكتشاف ناقص")
     if report.errors:
         print("أسباب:")
         for error in report.errors:
@@ -389,7 +413,9 @@ def cmd_capital_live_discover(args: argparse.Namespace) -> int:
         "\nهذه نتيجة اكتشاف قراءة فقط. **لا تأذن بالتنفيذ**: "
         "لا استراتيجية معتمدة، وقفل Live العام ما زال مغلقاً."
     )
-    return 0 if go else 1
+    # رمز الخروج يعكس **اكتمال الاكتشاف** لا تمويل الحساب: حسابٌ غير مموَّل
+    # ليس فشلاً في القراءة.
+    return 0 if discovery_complete else 1
 
 
 def build_parser() -> argparse.ArgumentParser:

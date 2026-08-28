@@ -27,12 +27,18 @@ EXECUTION_EPICS: tuple[str, ...] = ("EURUSD",)
 
 
 def _dec(value: Any) -> Optional[Decimal]:
+    """
+    `Decimal("NaN")` و`Decimal("Infinity")` **لا يرفعان استثناءً** — وهذه هي
+    الخدعة: قيمة `NaN` تمرّ كل مقارنة (`NaN <= 0` تساوي False) فتتسلّل إلى
+    الحساب بلا أن يوقفها فحص «موجب». تُرفض هنا صراحةً.
+    """
     if value is None or isinstance(value, bool):
         return None
     try:
-        return D(str(value))
+        result = D(str(value))
     except (InvalidOperation, ValueError, TypeError):
         return None
+    return result if result.is_finite() else None
 
 
 def mask_account_id(account_id: Any) -> str:
