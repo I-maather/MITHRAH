@@ -30,8 +30,21 @@ from .brokers.capital.endpoints import DEMO_BASE_URL
 from .brokers.capital.safety import LIVE_API_ENABLED
 from .contracts import Broker, StopKind
 from .discovery.capital_discovery import DISCOVERY_EPICS, EXECUTION_EPICS
+from .intelligence.pipeline import STAGE_NAME_AR, STAGE_ORDER
+from .profiles import (
+    GLOBAL_ABSOLUTE_LOSS_BOUNDARY_USD,
+    GLOBAL_GAP_SLIPPAGE_RESERVE_USD,
+    GLOBAL_OPERATIONAL_DRAWDOWN_STOP_USD,
+    NEVER_WEAKENED_BY_PROFILE,
+    PROFILE_RISK_ORDER,
+    PROFILE_SPECS,
+    PROFILE_UPGRADE_COOLING_HOURS,
+    ProfileLimits,
+    TradingProfile,
+)
+from .profiles.manager import SystemGuardState
 
-app = FastAPI(title="Maather Autonomous Trader", version="0.2.0")
+app = FastAPI(title="Maather Autonomous Trader", version="0.3.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
@@ -453,3 +466,160 @@ def cfd_preview(
         "submitted": False,
         "execution_locked": not sys.execution_lock.unlocked,
     }
+
+
+# ---------------------------------------------------------------------------
+# ملفات التداول (0.3.0)
+# ---------------------------------------------------------------------------
+
+def _guard_state(sys: SystemState) -> SystemGuardState:
+    """
+    لقطة الحراسات **للقراءة فقط**. مدير الملفات يستقبلها ولا يكتب فيها،
+    ولذلك لا يستطيع تبديل الملف أن يعيد ضبط أي عدّاد.
+    """
+    st = sys.session_state
+    return SystemGuardState(
+        open_positions=st.open_positions,
+        pending_orders=0,
+        unknown_executions=0,
+        risk_engine_healthy=_safe_health(sys),
+        loss_lock_active=st.consecutive_losses >= sys.limits.consecutive_losses_pause,
+        kill_switch_active=sys.kill_switch.is_active,
+        daily_loss=st.day_loss,
+        weekly_loss=st.week_loss,
+        total_drawdown=st.total_loss,
+        consecutive_losses=st.consecutive_losses,
+        open_risk=D("0"),
+        strategy_validation_history_len=len(sys.registry.all())
+        if hasattr(sys.registry, "all") else 0,
+    )
+
+
+@app.get("/api/profiles")
+def profiles_state(sys: SystemState = Depends(system)):
+    """
+    الملف المختار · الفعّال · المعلّق · المتبقي من التهدئة · سبب المنع ·
+    وحدود الملفات الثلاثة كاملة للمقارنة.
+    """
+    guards = _guard_state(sys)
+    state = sys.profiles.state_for_display(guards, sys.session_state.current_equity)
+    state["available_profiles"] = [
+        {
+            "profile": p.value,
+            "name_ar": PROFILE_SPECS[p].name_ar,
+            "description_ar": PROFILE_SPECS[p].description_ar,
+            "risk_rank": PROFILE_RISK_ORDER[p],
+            "limits": ProfileLimits.for_profile(
+                p, sys.session_state.current_equity
+            ).as_display_dict(),
+        }
+        for p in sorted(TradingProfile, key=lambda x: PROFILE_RISK_ORDER[x])
+    ]
+    state["global_loss_constitution"] = {
+        "operational_drawdown_stop": _money(GLOBAL_OPERATIONAL_DRAWDOWN_STOP_USD),
+        "gap_slippage_reserve": _money(GLOBAL_GAP_SLIPPAGE_RESERVE_USD),
+        "absolute_loss_boundary": _money(GLOBAL_ABSOLUTE_LOSS_BOUNDARY_USD),
+        "cooling_hours": PROFILE_UPGRADE_COOLING_HOURS,
+        "note_ar": (
+            "هذه الحدود تسري على كل الملفات، ولا يُعاد ضبطها بتبديل الملف. "
+            "الوقف العادي لا يضمن الحاجز عند الفجوة."
+        ),
+    }
+    state["never_weakened_by_profile"] = list(NEVER_WEAKENED_BY_PROFILE)
+    return state
+
+
+class ProfileChangeRequestBody(BaseModel):
+    profile: str
+    owner_confirmed: bool = False
+    owner_reference: str = ""
+
+
+@app.post("/api/profiles/select")
+def select_profile(req: ProfileChangeRequestBody, sys: SystemState = Depends(system)):
+    """
+    اختيار ملف. الخفض فوري؛ الرفع يبدأ تهدئة 24 ساعة ويحتاج تأكيداً صريحاً.
+    **لا يفتح هذا المسار التداول الحقيقي بحال، ولا يعيد ضبط أي عدّاد.**
+    """
+    try:
+        target = TradingProfile(req.profile)
+    except ValueError:
+        raise HTTPException(400, "ملف غير معروف.")
+
+    guards = _guard_state(sys)
+    result = sys.profiles.request_change(
+        target, guards,
+        owner_confirmed=req.owner_confirmed,
+        owner_reference=req.owner_reference,
+    )
+    if result.record is not None:
+        sys.audit.record(
+            actor=Actor.OWNER,
+            action=AuditAction.CONFIG_CHANGE,
+            decision="PROFILE_CHANGE",
+            reason_ar=result.message_ar,
+            source="ui",
+            after=result.record.as_audit_payload(),
+        )
+    return {
+        "accepted": result.accepted,
+        "effective_profile": result.effective_profile.value,
+        "pending_profile": result.pending.target.value if result.pending else None,
+        "refusal": result.refusal.value if result.refusal else None,
+        "message_ar": result.message_ar,
+        "live_trading_enabled": sys.settings.live_trading,
+        "note_ar": "تبديل الملف لا يفتح التداول الحقيقي ولا يعيد ضبط أي عدّاد.",
+    }
+
+
+@app.post("/api/profiles/confirm-upgrade")
+def confirm_profile_upgrade(
+    req: ProfileChangeRequestBody, sys: SystemState = Depends(system)
+):
+    guards = _guard_state(sys)
+    result = sys.profiles.confirm_pending_upgrade(guards, owner_reference=req.owner_reference)
+    if result.record is not None:
+        sys.audit.record(
+            actor=Actor.OWNER,
+            action=AuditAction.CONFIG_CHANGE,
+            decision="PROFILE_UPGRADE_CONFIRMED",
+            reason_ar=result.message_ar,
+            source="ui",
+            after=result.record.as_audit_payload(),
+        )
+    return {
+        "accepted": result.accepted,
+        "effective_profile": result.effective_profile.value,
+        "refusal": result.refusal.value if result.refusal else None,
+        "message_ar": result.message_ar,
+    }
+
+
+@app.get("/api/intelligence")
+def intelligence(sys: SystemState = Depends(system)):
+    """
+    آخر قرار من خط الاستخبارات، بكل مراحله ودرجته وتناقضاته ومراجعته المستقلة.
+
+    الغرض أن يكون `NO_TRADE` **مفهوماً لا معطّلاً**: كل مرحلة تُعرض بحالتها
+    وسببها، والبيانات الناقصة والمزوّدون الناقصون بأسمائهم الدقيقة.
+    """
+    result = sys.last_intelligence
+    providers = sys.providers.as_display_dict()
+    if result is None:
+        return {
+            "available": False,
+            "reason_ar": (
+                "لم تُشغَّل دورة تحليل بعد. المزوّدون الناقصون تمنع التشغيل الحقيقي."
+            ),
+            "providers": providers,
+            "stages": [
+                {"stage": s.value, "name_ar": STAGE_NAME_AR[s], "passed": None}
+                for s in STAGE_ORDER
+            ],
+            "strategies": sys.strategy_definitions.as_dict(),
+        }
+    payload = result.as_dict()
+    payload["available"] = True
+    payload["providers"] = providers
+    payload["strategies"] = sys.strategy_definitions.as_dict()
+    return payload

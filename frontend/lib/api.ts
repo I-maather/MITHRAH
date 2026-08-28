@@ -192,3 +192,156 @@ export type CfdPreview = {
   submitted: boolean;
   execution_locked: boolean;
 };
+
+// ---------------------------------------------------------------------------
+// ملفات التداول (0.3.0)
+// ---------------------------------------------------------------------------
+
+export type ProfileLimitsView = {
+  profile: string;
+  name_ar: string;
+  profile_system_version: string;
+  equity_used: string;
+  max_risk_per_trade: string;
+  max_daily_loss: string;
+  max_weekly_loss: string;
+  operational_drawdown_stop: string;
+  gap_slippage_reserve: string;
+  absolute_loss_boundary: string;
+  max_open_positions: number;
+  max_entry_orders_per_day: number;
+  full_risk_loss_ends_day: boolean;
+  min_net_reward_risk: string;
+  min_quality_score: number;
+  allow_overnight: boolean;
+  allow_weekend_hold: boolean;
+  allowed_instruments: string[];
+};
+
+export type ProfilesState = {
+  selected_profile: string;
+  selected_name_ar: string;
+  effective_profile: string;
+  effective_name_ar: string;
+  risk_level_ar: string;
+  pending_profile: string | null;
+  pending_available_at_utc: string | null;
+  cooling_remaining_seconds: number;
+  cooling_remaining_ar: string;
+  change_blocked_reason: string | null;
+  change_blocked_reason_ar: string;
+  limits: ProfileLimitsView;
+  fingerprint: string;
+  non_resettable_counters: string[];
+  counters: Record<string, string | number | boolean>;
+  history_len: number;
+  available_profiles: {
+    profile: string;
+    name_ar: string;
+    description_ar: string;
+    risk_rank: number;
+    limits: ProfileLimitsView;
+  }[];
+  global_loss_constitution: {
+    operational_drawdown_stop: string;
+    gap_slippage_reserve: string;
+    absolute_loss_boundary: string;
+    cooling_hours: number;
+    note_ar: string;
+  };
+  never_weakened_by_profile: string[];
+};
+
+export type ProfileChangeResponse = {
+  accepted: boolean;
+  effective_profile: string;
+  pending_profile: string | null;
+  refusal: string | null;
+  message_ar: string;
+  live_trading_enabled?: boolean;
+  note_ar?: string;
+};
+
+export type StageView = {
+  stage: string;
+  name_ar: string;
+  passed: boolean | null;
+  mandatory?: boolean;
+  detail_ar?: string;
+};
+
+export type StrategyView = {
+  key: string;
+  title_ar: string;
+  state: string;
+  live_eligible: boolean;
+  compatible_regimes: string[];
+  incompatible_regimes: string[];
+  entry_rules_ar: string[];
+  invalidation_rules_ar: string[];
+  stop_rules_ar: string[];
+  exit_rules_ar: string[];
+  validation_notes_ar: string[];
+};
+
+export type IntelligenceState = {
+  available: boolean;
+  reason_ar?: string;
+  decision?: string;
+  reason_code?: string;
+  snapshot_id?: string;
+  profile?: string;
+  stages: StageView[];
+  score?: {
+    total: number;
+    max: number;
+    has_mandatory_failure: boolean;
+    mandatory_failures: { code: string; reason_ar: string }[];
+    lines: {
+      category: string;
+      category_ar: string;
+      awarded: number;
+      maximum: number;
+      reason_ar: string;
+      source_ar: string;
+    }[];
+  } | null;
+  contradictions?: {
+    count: number;
+    total_penalty: number;
+    has_unresolved_material: boolean;
+    items: {
+      kind: string;
+      side_a_ar: string;
+      side_b_ar: string;
+      severity_ar: string;
+      resolution_ar: string;
+      blocks_trading: boolean;
+    }[];
+  } | null;
+  verification?: { passed: boolean; reason_ar: string; mismatches: string[] } | null;
+  regime?: { regime: string; name_ar: string; tradable: boolean; reason_ar: string } | null;
+  timeframes?: {
+    primary_regime_trend: string;
+    structural_trend: string;
+    entry_trend: string;
+    incomplete: string[];
+  } | null;
+  fundamentals?: {
+    relative_bias_ar: string;
+    completeness: string;
+    usable: boolean;
+    unknown_fields: string[];
+  } | null;
+  missing_providers?: string[];
+  missing_data?: string[];
+  explanation_ar?: string;
+  decided_at_utc?: string | null;
+  providers: {
+    providers: { kind: string; configured: boolean; name: string; note_ar: string }[];
+    missing: string[];
+    missing_mandatory: string[];
+    live_eligible_by_providers: boolean;
+  };
+  strategies: { strategies: StrategyView[]; approved_count: number; note_ar: string };
+};

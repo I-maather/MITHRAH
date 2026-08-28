@@ -24,6 +24,11 @@ from ..risk.constitution import RiskLimits, RiskMode
 from ..risk.costs import IBKR_PRO_TIERED_US_STOCK, CostAssumptions
 from ..risk.engine import RiskEngine, SessionRiskState
 from ..strategies.base import StrategyRegistry
+from ..strategies.registry import StrategyDefinitionRegistry
+from ..intelligence.providers import ProviderRegistry
+from ..intelligence.pipeline import PipelineResult as IntelligenceResult
+from ..profiles import DEFAULT_PROFILE
+from ..profiles.manager import ProfileManager
 from ..strategies.trend_pullback_v1 import TrendPullbackV1
 from ..brokers.capital.safety import LIVE_API_ENABLED, ExecutionLock
 from ..contracts import Broker, StopKind
@@ -52,9 +57,16 @@ class SystemState:
     notifier: InMemoryNotifier
     scheduler: SafeScheduler
     secret_presence: list
+    #: مدير ملفات التداول. لا يملك مرجعاً إلى أي عدّاد — يقرأ لقطة حراسات فقط.
+    profiles: ProfileManager
+    #: سجل تعريفات الاستراتيجيات المُصدَّرة (غير سجل الاستراتيجيات القابلة للتنفيذ).
+    strategy_definitions: StrategyDefinitionRegistry
+    #: مزوّدو البيانات. الافتراضي **غير مُعدّ** لكل واحد — بلا اختراع مزوّد.
+    providers: ProviderRegistry
     #: قفل محلي يوقفه المالكة من الواجهة. لا يفتح شيئاً — يوقف فقط.
     locally_paused: bool = True
     last_result: Optional[PipelineResult] = None
+    last_intelligence: Optional[IntelligenceResult] = None
 
     def health(self) -> HealthReport:
         details: list[str] = []
@@ -159,5 +171,10 @@ def build_system(settings: Settings | None = None) -> SystemState:
         notifier=InMemoryNotifier(),
         scheduler=SafeScheduler(),
         secret_presence=[p.as_dict() for p in secret_provider.presence(REQUIRED_CAPITAL_SECRETS)],
+        profiles=ProfileManager(DEFAULT_PROFILE),
+        strategy_definitions=StrategyDefinitionRegistry(),
+        # لا مزوّد مُعدّ بعد: التقويم والأخبار والكلي وبيانات السوق كلها ناقصة،
+        # وهذا يظهر باسمه الدقيق في `/api/intelligence` ويمنع الأهلية الحقيقية.
+        providers=ProviderRegistry(),
         locally_paused=True,
     )

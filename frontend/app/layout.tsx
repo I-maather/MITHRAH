@@ -9,6 +9,8 @@ export const metadata: Metadata = {
 
 const NAV = [
   { href: "/", label: "لوحة اليوم" },
+  { href: "/profiles", label: "ملف التداول" },
+  { href: "/intelligence", label: "التحليل" },
   { href: "/broker", label: "الوسيط" },
   { href: "/opportunities", label: "الفرص" },
   { href: "/trades", label: "الصفقات" },
