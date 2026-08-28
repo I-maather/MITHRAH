@@ -146,6 +146,28 @@ class OrderIntentRow(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     idempotency_key: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     client_order_id: Mapped[str] = mapped_column(String(64), unique=True)
+    # --- سياق الوسيط (0.2.0) -------------------------------------------
+    broker: Mapped[str] = mapped_column(String(24), default="MOCK", index=True)
+    broker_environment: Mapped[str] = mapped_column(String(8), default="demo")
+    account_masked: Mapped[str] = mapped_column(String(24), default="")
+    epic: Mapped[str] = mapped_column(String(32), default="")
+    # --- اقتصاديات CFD: ثلاث قيم منفصلة لا يجوز الخلط بينها -------------
+    broker_quantity: Mapped[Decimal | None] = mapped_column(MONEY)
+    notional_exposure: Mapped[Decimal | None] = mapped_column(MONEY)
+    margin_estimate: Mapped[Decimal | None] = mapped_column(MONEY)
+    all_in_risk: Mapped[Decimal | None] = mapped_column(MONEY)
+    spread_estimate: Mapped[Decimal | None] = mapped_column(MONEY)
+    stop_kind: Mapped[str] = mapped_column(String(16), default="NORMAL")
+    stop_distance: Mapped[Decimal | None] = mapped_column(MONEY)
+    gsl_premium: Mapped[Decimal | None] = mapped_column(MONEY)
+    slippage_reserve: Mapped[Decimal | None] = mapped_column(MONEY)
+    # --- الحوكمة --------------------------------------------------------
+    strategy_name: Mapped[str] = mapped_column(String(64), default="")
+    strategy_version: Mapped[str] = mapped_column(String(24), default="")
+    risk_constitution_version: Mapped[str] = mapped_column(String(16), default="")
+    risk_mode: Mapped[str] = mapped_column(String(24), default="VALIDATION")
+    owner_authorization_reference: Mapped[str] = mapped_column(String(64), default="")
+    market_data_timestamp_utc: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     risk_decision_id: Mapped[int | None] = mapped_column(ForeignKey("risk_decisions.id"))
     symbol: Mapped[str] = mapped_column(String(24))
     side: Mapped[str] = mapped_column(String(8))
@@ -164,6 +186,11 @@ class BrokerOrderRow(Base):
     __tablename__ = "broker_orders"
     id: Mapped[int] = mapped_column(primary_key=True)
     broker_order_id: Mapped[str] = mapped_column(String(64), unique=True)
+    deal_reference: Mapped[str | None] = mapped_column(String(64), index=True)
+    broker_deal_id: Mapped[str | None] = mapped_column(String(64), index=True)
+    broker_confirmation_state: Mapped[str] = mapped_column(String(24), default="PENDING")
+    reconciliation_state: Mapped[str] = mapped_column(String(24), default="UNRECONCILED")
+    execution_uncertainty: Mapped[str] = mapped_column(String(24), default="NONE")
     client_order_id: Mapped[str] = mapped_column(String(64), index=True)
     symbol: Mapped[str] = mapped_column(String(24))
     side: Mapped[str] = mapped_column(String(8))
@@ -305,3 +332,49 @@ class ConfigurationVersion(Base, TimestampedMixin):
     fingerprint: Mapped[str] = mapped_column(String(64), unique=True)
     payload_json: Mapped[str] = mapped_column(Text)
     note_ar: Mapped[str] = mapped_column(Text, default="")
+
+
+class ExecutionAttempt(Base):
+    """
+    كل محاولة إرسال — حتى الغامضة. هذا الجدول هو ما يمنع إعادة الإرسال
+    الأعمى بعد انقطاع: عند الإقلاع نبحث عن محاولة بلا حسم ونمنع أي دخول
+    جديد حتى تُحسم بالمطابقة مع الوسيط.
+    """
+
+    __tablename__ = "execution_attempts"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    idempotency_key: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    broker: Mapped[str] = mapped_column(String(24), index=True)
+    broker_environment: Mapped[str] = mapped_column(String(8))
+    epic: Mapped[str] = mapped_column(String(32))
+    deal_reference: Mapped[str | None] = mapped_column(String(64), index=True)
+    broker_deal_id: Mapped[str | None] = mapped_column(String(64))
+    uncertainty: Mapped[str] = mapped_column(String(24), default="PENDING_CONFIRMATION", index=True)
+    resolved: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    resolution_note_ar: Mapped[str] = mapped_column(Text, default="")
+    attempted_at_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    resolved_at_utc: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class SystemStateRow(Base):
+    """
+    حالة النظام الدائمة عبر إعادات التشغيل.
+
+    القيم الافتراضية هي الحالة الآمنة: التداول مقفل، والوضع VALIDATION.
+    إعادة التشغيل لا تفتح شيئاً أبداً.
+    """
+
+    __tablename__ = "system_state"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    trading_locked: Mapped[bool] = mapped_column(Boolean, default=True)
+    kill_switch_active: Mapped[bool] = mapped_column(Boolean, default=False)
+    kill_switch_trigger: Mapped[str] = mapped_column(String(48), default="")
+    kill_switch_reason_ar: Mapped[str] = mapped_column(Text, default="")
+    risk_mode: Mapped[str] = mapped_column(String(24), default="VALIDATION")
+    risk_constitution_version: Mapped[str] = mapped_column(String(16), default="")
+    broker: Mapped[str] = mapped_column(String(24), default="CAPITAL_COM")
+    broker_environment: Mapped[str] = mapped_column(String(8), default="demo")
+    account_masked: Mapped[str] = mapped_column(String(24), default="")
+    consecutive_losses: Mapped[int] = mapped_column(Integer, default=0)
+    lifetime_entry_orders: Mapped[int] = mapped_column(Integer, default=0)
+    updated_at_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True))

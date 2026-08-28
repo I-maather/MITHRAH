@@ -54,6 +54,40 @@ class DataSource(str, Enum):
 class AssetClass(str, Enum):
     STOCK = "STK"
     ETF = "ETF"
+    CFD_CURRENCY = "CFD_CURRENCY"
+    CFD_COMMODITY = "CFD_COMMODITY"
+    CFD_INDEX = "CFD_INDEX"
+
+
+class Broker(str, Enum):
+    """
+    الوسطاء المعروفون للنظام. النظام محايد تجاه الوسيط:
+    كل حساب تكلفة ومخاطرة يُوجَّه حسب هذه القيمة.
+    """
+
+    MOCK = "MOCK"
+    CAPITAL_COM = "CAPITAL_COM"
+    IBKR = "IBKR"
+
+
+class StopKind(str, Enum):
+    NONE = "NONE"
+    NORMAL = "NORMAL"
+    GUARANTEED = "GUARANTEED"
+
+
+class ExecutionUncertainty(str, Enum):
+    """
+    حالة اليقين من التنفيذ. `UNKNOWN` ليست فشلاً — هي أخطر من الفشل،
+    لأنها تعني أن أمراً قد يكون نُفِّذ دون أن نعلم.
+    """
+
+    NONE = "NONE"
+    PENDING_CONFIRMATION = "PENDING_CONFIRMATION"
+    UNKNOWN = "UNKNOWN"
+    RESOLVED_FILLED = "RESOLVED_FILLED"
+    RESOLVED_REJECTED = "RESOLVED_REJECTED"
+    RESOLVED_ABSENT = "RESOLVED_ABSENT"
 
 
 class StrategyState(str, Enum):
@@ -201,6 +235,30 @@ class InstrumentDetails(Base):
     supports_stop_on_fractional: bool
     supported_order_types: tuple[OrderType, ...]
     as_of_utc: datetime
+
+    # --- حقول CFD (Capital.com). اختيارية حتى تبقى أدوات IBKR صالحة كما هي. ---
+    broker: Broker = Broker.MOCK
+    epic: Optional[str] = None
+    quantity_increment: Optional[Decimal] = None
+    max_quantity: Optional[Decimal] = None
+    lot_size: Optional[Decimal] = None
+    margin_factor: Optional[Decimal] = None
+    margin_factor_unit: Optional[str] = None
+    min_stop_distance: Optional[Decimal] = None
+    min_guaranteed_stop_distance: Optional[Decimal] = None
+    guaranteed_stop_available: bool = False
+    overnight_fee: Optional[Decimal] = None
+    pip_size: Optional[Decimal] = None
+    quote_currency: Optional[str] = None
+    market_status: Optional[str] = None
+
+    @property
+    def is_cfd(self) -> bool:
+        return self.asset_class in (
+            AssetClass.CFD_CURRENCY,
+            AssetClass.CFD_COMMODITY,
+            AssetClass.CFD_INDEX,
+        )
 
 
 # ---------------------------------------------------------------------------

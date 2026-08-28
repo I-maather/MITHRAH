@@ -20,9 +20,18 @@ from .config import get_settings
 from .eligibility.allowlist import ALLOWLIST, EXPLICIT_DENYLIST
 from .killswitch.engine import TRIGGER_LABELS_AR, KillSwitchTrigger
 from .money import D
-from .risk.constitution import MODE_SPECS, RiskMode, constitution_fingerprint
+from .risk.constitution import (
+    CONSTITUTION_VERSION,
+    MODE_SPECS,
+    RiskMode,
+    constitution_fingerprint,
+)
+from .brokers.capital.endpoints import DEMO_BASE_URL
+from .brokers.capital.safety import LIVE_API_ENABLED
+from .contracts import Broker, StopKind
+from .discovery.capital_discovery import DISCOVERY_EPICS, EXECUTION_EPICS
 
-app = FastAPI(title="Maather Autonomous Trader", version="0.1.0")
+app = FastAPI(title="Maather Autonomous Trader", version="0.2.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
@@ -304,4 +313,143 @@ def settings_view(sys: SystemState = Depends(system)):
         "risk_constitution_editable": False,
         "allowlist": list(ALLOWLIST.keys()),
         "blackout_days_confirmed": [d.isoformat() for d in sorted(sys.blackouts.confirmed_for)],
+    }
+
+
+# ---------------------------------------------------------------------------
+# Capital.com — الوسيط والاعتمادات والتشغيل التجريبي
+# ---------------------------------------------------------------------------
+
+@app.get("/api/broker")
+def broker_state(sys: SystemState = Depends(system)):
+    """
+    كل ما تحتاج المالكة رؤيته عن الوسيط — بلا أي سرّ ولا معرّف حساب كامل.
+    """
+    limits = sys.limits
+    ks_event = sys.kill_switch.state.current_event
+    return {
+        "broker": limits.broker.value,
+        "environment": sys.settings.risk_mode and "demo",
+        "is_demo": True,
+        "live_api_enabled_in_source": LIVE_API_ENABLED,
+        "base_url": DEMO_BASE_URL,
+        "adapter_name": sys.broker.name,
+        "connected": _safe_health(sys),
+        "account_masked": None,
+        "local_trading_paused": sys.locally_paused,
+        "execution_lock": sys.execution_lock.as_dict(),
+        "risk_mode": limits.mode.value,
+        "risk_constitution_version": CONSTITUTION_VERSION,
+        "kill_switch": {
+            "active": sys.kill_switch.is_active,
+            "trigger": ks_event.trigger.value if ks_event else None,
+            "reason_ar": ks_event.reason_ar if ks_event else None,
+        },
+        "credentials": sys.secret_presence,
+        "discovery_allowlist": list(DISCOVERY_EPICS),
+        "execution_allowlist": list(EXECUTION_EPICS),
+        "api_key_pause_instructions_ar": [
+            "افتحي حسابك على Capital.com ← Settings ← API.",
+            "أوقفي أو احذفي المفتاح المستخدم هنا لإيقاف كل وصول برمجي فوراً.",
+            "إيقاف المفتاح من الوسيط أقوى من أي زر في هذه الواجهة، لأنه لا يعتمد على تشغيل هذا النظام.",
+        ],
+    }
+
+
+def _safe_health(sys: SystemState) -> bool:
+    try:
+        return bool(sys.broker.health_check())
+    except Exception:  # noqa: BLE001
+        return False
+
+
+class PauseRequest(BaseModel):
+    reason_ar: str = Field(min_length=3)
+
+
+@app.post("/api/trading/pause")
+def pause_trading(req: PauseRequest, sys: SystemState = Depends(system)):
+    """إيقاف محلي فوري. لا يحتاج عبارة تأكيد لأن الإيقاف دائماً آمن."""
+    sys.locally_paused = True
+    sys.audit.record(
+        actor=Actor.OWNER, action=AuditAction.CONFIG_CHANGE, decision="LOCAL_PAUSE",
+        reason_ar=req.reason_ar, source="ui",
+    )
+    return {"local_trading_paused": True, "reason_ar": req.reason_ar}
+
+
+class ResumeRequest(BaseModel):
+    reason_ar: str = Field(min_length=10)
+    confirm_phrase: str
+
+
+RESUME_PHRASE = "ارفع الإيقاف المحلي"
+
+
+@app.post("/api/trading/resume")
+def resume_trading(req: ResumeRequest, sys: SystemState = Depends(system)):
+    """
+    رفع الإيقاف المحلي **لا يفعّل التداول الحقيقي**.
+    التداول الحقيقي يبقى مقفلاً بأقفال البيئة وملف الموافقة وقفل الكود.
+    """
+    if req.confirm_phrase.strip() != RESUME_PHRASE:
+        raise HTTPException(400, f"عبارة التأكيد غير مطابقة. المطلوب: «{RESUME_PHRASE}»")
+    if sys.kill_switch.is_active:
+        raise HTTPException(400, "Kill Switch مفعّل — لا يمكن رفع الإيقاف المحلي قبل إعادة تفعيله.")
+    sys.locally_paused = False
+    sys.audit.record(
+        actor=Actor.OWNER, action=AuditAction.CONFIG_CHANGE, decision="LOCAL_RESUME",
+        reason_ar=req.reason_ar, source="ui",
+    )
+    return {
+        "local_trading_paused": False,
+        "live_trading_enabled": sys.settings.live_trading,
+        "note_ar": "رُفع الإيقاف المحلي فقط. التداول الحقيقي ما زال مقفلاً.",
+    }
+
+
+@app.get("/api/cfd-preview")
+def cfd_preview(
+    stop_pips: float = 25.0,
+    take_profit_pips: float = 50.0,
+    guaranteed: bool = False,
+    sys: SystemState = Depends(system),
+):
+    """
+    بطاقة معاينة CFD. تعرض **التعرّض والهامش والخسارة منفصلة** كما يفرض
+    نموذج التكلفة، ولا تصف الأمر أبداً بأنه «أمر بـ5–10 دولارات».
+    """
+    model = sys.cost_model
+    entry = D("1.08546")
+    try:
+        economics = model.estimate(
+            size=model.economics.min_deal_size,
+            entry_price=entry,
+            stop_distance_pips=D(str(stop_pips)),
+            take_profit_distance_pips=D(str(take_profit_pips)),
+            stop_kind=StopKind.GUARANTEED if guaranteed else StopKind.NORMAL,
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from None
+
+    limits = sys.limits
+    return {
+        "epic": economics.epic,
+        "provisional": economics.provisional,
+        "provisional_note_ar": (
+            "قيم مبدئية من الموقع العام — لم تُكتشف بعد من حساب Demo. "
+            "لا يُبنى عليها قرار تنفيذ."
+            if economics.provisional
+            else "قيم مُكتشَفة من الوسيط."
+        ),
+        "display": economics.as_display_dict(),
+        "caps": {
+            "preferred_max_risk": f"{limits.target_risk_per_trade:.2f}",
+            "absolute_max_risk": f"{limits.max_risk_per_trade:.2f}",
+            "within_preferred": economics.all_in_risk <= limits.target_risk_per_trade,
+            "within_absolute": economics.all_in_risk <= limits.max_risk_per_trade,
+        },
+        "warnings_ar": list(economics.provenance_notes),
+        "submitted": False,
+        "execution_locked": not sys.execution_lock.unlocked,
     }

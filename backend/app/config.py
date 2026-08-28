@@ -44,7 +44,9 @@ class Settings(BaseSettings):
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
 
     baseline_equity_usd: str = Field(default="150.00", alias="BASELINE_EQUITY_USD")
-    risk_mode: Literal["VALIDATION", "LIVE_COMMISSIONING", "CONSERVATIVE_LIVE"] = Field(
+    risk_mode: Literal[
+        "VALIDATION", "LIVE_COMMISSIONING", "CONSERVATIVE_LIVE", "LOCKED_REVIEW"
+    ] = Field(
         default="VALIDATION", alias="RISK_MODE"
     )
 
@@ -59,7 +61,7 @@ class Settings(BaseSettings):
         لا يمكن تشغيل LIVE_COMMISSIONING أو CONSERVATIVE_LIVE على وسيط وهمي
         أو بدون موافقة موثقة.
         """
-        if self.risk_mode == "VALIDATION":
+        if self.risk_mode in ("VALIDATION", "LOCKED_REVIEW"):
             return
         if not self.live_trading:
             raise RuntimeError(

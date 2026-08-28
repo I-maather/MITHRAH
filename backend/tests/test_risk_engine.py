@@ -3,8 +3,9 @@ from __future__ import annotations
 from decimal import Decimal
 
 from app.contracts import Decision, Side, Signal
+from app.contracts import Broker
 from app.money import D
-from app.risk.constitution import RiskLimits, constitution_fingerprint
+from app.risk.constitution import RiskLimits, RiskMode, constitution_fingerprint
 from app.risk.engine import (
     CONSECUTIVE_LOSS_PAUSE,
     DAILY_ENTRY_LIMIT_REACHED,
@@ -32,7 +33,7 @@ def signal(entry="640", stop="630.40", target="659.20", now=None):
 
 
 def big_engine():
-    return RiskEngine(RiskLimits.from_baseline(D("5000.00")))
+    return RiskEngine(RiskLimits.from_baseline(D("5000.00"), Broker.IBKR))
 
 
 def big_state(**kw):
@@ -77,7 +78,9 @@ def test_viable_trade_on_adequate_capital(assumptions, schedule, now):
     assert d.approved, d.reason_ar
     assert d.quantity > 0
     assert d.expected_risk_usd <= D("5000") * D("0.005")
-    assert d.constitution_fingerprint == constitution_fingerprint()
+    assert d.constitution_fingerprint == constitution_fingerprint(
+        RiskMode.VALIDATION, Broker.IBKR
+    )
 
 
 def test_daily_loss_limit_blocks(assumptions, schedule, now):

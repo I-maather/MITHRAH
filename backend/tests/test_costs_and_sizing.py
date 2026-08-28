@@ -6,6 +6,7 @@ from decimal import Decimal
 import pytest
 
 from app.money import D
+from app.contracts import Broker
 from app.risk.constitution import MODE_SPECS, RiskLimits, RiskMode
 from app.risk.costs import (
     IBKR_PRO_FIXED_US_STOCK,
@@ -116,7 +117,7 @@ def test_150_dollar_account_cannot_produce_a_viable_trade(schedule, assumptions)
     هذا الاختبار يوثّق النتيجة ويمنع أي تخفيف صامت لمعايير الأمان لاحقاً.
     """
     for mode in (RiskMode.VALIDATION, RiskMode.CONSERVATIVE_LIVE):
-        limits = RiskLimits.for_mode(mode, D("150.00"))
+        limits = RiskLimits.for_mode(mode, D("150.00"), Broker.IBKR)
         for stop_pct in (D("0.01"), D("0.015"), D("0.02")):
             res = size_position(
                 entry_price=D("640"),
@@ -137,7 +138,7 @@ def test_commissioning_mode_allows_the_single_integration_trade(schedule, assump
     وضع Commissioning يعطّل الحواجز الاقتصادية عمداً وبموافقة المالكة،
     لأن غرض الصفقة اختبار تكامل لا ربح. لكن السقف المطلق للمخاطرة يبقى سارياً.
     """
-    limits = RiskLimits.for_mode(RiskMode.LIVE_COMMISSIONING, D("150.00"))
+    limits = RiskLimits.for_mode(RiskMode.LIVE_COMMISSIONING, D("150.00"), Broker.IBKR)
     res = size_position(
         entry_price=D("640"), stop_price=D("620.80"),
         risk_budget=limits.max_risk_per_trade,
@@ -151,7 +152,7 @@ def test_commissioning_mode_allows_the_single_integration_trade(schedule, assump
 
 
 def test_commissioning_notional_never_exceeds_ten_dollars(schedule, assumptions):
-    limits = RiskLimits.for_mode(RiskMode.LIVE_COMMISSIONING, D("150.00"))
+    limits = RiskLimits.for_mode(RiskMode.LIVE_COMMISSIONING, D("150.00"), Broker.IBKR)
     res = size_position(
         entry_price=D("640"), stop_price=D("639.00"),
         risk_budget=limits.max_risk_per_trade,
@@ -168,6 +169,20 @@ def test_economic_guards_are_only_disabled_in_commissioning():
     assert MODE_SPECS[RiskMode.LIVE_COMMISSIONING].enforce_economic_viability is False
     assert MODE_SPECS[RiskMode.LIVE_COMMISSIONING].max_lifetime_entry_orders == 1
     assert MODE_SPECS[RiskMode.LIVE_COMMISSIONING].requires_per_order_approval is True
+
+
+def test_ibkr_commissioning_notional_bounds_are_broker_scoped():
+    """
+    حدود 5–10 دولارات كانت منطق **أسهم IBKR** ولا معنى لها في CFD.
+    الدستور 0.2.0 يجعلها سياسة خاصة بالوسيط لا قاعدة عامة.
+    """
+    ibkr = RiskLimits.for_mode(RiskMode.LIVE_COMMISSIONING, D("150.00"), Broker.IBKR)
+    capital = RiskLimits.for_mode(RiskMode.LIVE_COMMISSIONING, D("150.00"), Broker.CAPITAL_COM)
+    assert ibkr.min_notional_usd == D("5.00")
+    assert ibkr.max_notional_usd == D("10.00")
+    assert capital.min_notional_usd is None
+    assert capital.max_notional_usd is None
+    assert capital.use_broker_minimum_quantity is True
 
 
 def test_larger_account_can_produce_a_viable_trade(schedule, assumptions):

@@ -15,6 +15,7 @@ from app.execution.orders import ExecutionService, IdempotencyGuard
 from app.killswitch.engine import KillSwitch, KillSwitchTrigger
 from app.money import D
 from app.pipeline.runner import BlackoutCalendar, MacroAssessment, NewsBlackout, Pipeline
+from app.contracts import Broker
 from app.risk.constitution import RiskLimits
 from app.risk.costs import IBKR_PRO_TIERED_US_STOCK, CostAssumptions
 from app.risk.engine import RiskEngine, SessionRiskState
@@ -59,7 +60,7 @@ def build(
 
     audit = AuditLog(InMemoryAuditStore())
     ks = KillSwitch()
-    engine = RiskEngine(RiskLimits.from_baseline(D(equity)))
+    engine = RiskEngine(RiskLimits.from_baseline(D(equity), Broker.IBKR))
     execution = ExecutionService(broker=broker, audit=audit, guard=IdempotencyGuard())
 
     pipeline = Pipeline(

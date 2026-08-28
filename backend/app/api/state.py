@@ -13,7 +13,7 @@ from ..audit.sqlstore import SqlAuditStore
 from ..brokers.base import BrokerAdapter
 from ..brokers.factory import build_broker
 from ..clock import now_utc, us_market_status
-from ..config import Settings, get_settings
+from ..config import REPO_ROOT, Settings, get_settings
 from ..contracts import HealthReport
 from ..db.session import get_session, init_db
 from ..execution.orders import ExecutionService, IdempotencyGuard
@@ -25,6 +25,13 @@ from ..risk.costs import IBKR_PRO_TIERED_US_STOCK, CostAssumptions
 from ..risk.engine import RiskEngine, SessionRiskState
 from ..strategies.base import StrategyRegistry
 from ..strategies.trend_pullback_v1 import TrendPullbackV1
+from ..brokers.capital.safety import LIVE_API_ENABLED, ExecutionLock
+from ..contracts import Broker, StopKind
+from ..notifications import InMemoryNotifier
+from ..risk.capital_costs import PROVISIONAL_EURUSD, CapitalComCostModel
+from ..scheduling import SafeScheduler
+from ..secretstore.provider import REQUIRED_CAPITAL_SECRETS, build_secret_provider
+from ..secretstore.redaction import install_redacting_filter
 
 
 @dataclass
@@ -40,6 +47,13 @@ class SystemState:
     blackouts: BlackoutCalendar
     limits: RiskLimits
     session_state: SessionRiskState
+    cost_model: CapitalComCostModel
+    execution_lock: ExecutionLock
+    notifier: InMemoryNotifier
+    scheduler: SafeScheduler
+    secret_presence: list
+    #: قفل محلي يوقفه المالكة من الواجهة. لا يفتح شيئاً — يوقف فقط.
+    locally_paused: bool = True
     last_result: Optional[PipelineResult] = None
 
     def health(self) -> HealthReport:
@@ -98,6 +112,7 @@ def build_system(settings: Settings | None = None) -> SystemState:
     except Exception:  # noqa: BLE001
         pass
 
+    install_redacting_filter()
     settings.assert_mode_allowed()
     limits = RiskLimits.for_mode(RiskMode(settings.risk_mode), D(settings.baseline_equity_usd))
     kill_switch = KillSwitch()
@@ -132,8 +147,17 @@ def build_system(settings: Settings | None = None) -> SystemState:
         source="build_system",
     )
 
+    secret_provider = build_secret_provider(
+        env_file=REPO_ROOT / "secrets" / "capital.env", allow_process_env=False
+    )
     return SystemState(
         settings=settings, broker=broker, audit=audit, kill_switch=kill_switch,
         risk_engine=risk_engine, execution=execution, registry=registry, pipeline=pipeline,
         blackouts=blackouts, limits=limits, session_state=state,
+        cost_model=CapitalComCostModel(PROVISIONAL_EURUSD),
+        execution_lock=ExecutionLock.locked(),
+        notifier=InMemoryNotifier(),
+        scheduler=SafeScheduler(),
+        secret_presence=[p.as_dict() for p in secret_provider.presence(REQUIRED_CAPITAL_SECRETS)],
+        locally_paused=True,
     )

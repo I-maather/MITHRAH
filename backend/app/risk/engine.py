@@ -11,9 +11,9 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
-from ..contracts import Balances, Decision, RiskDecision, Signal
+from ..contracts import Balances, Broker, Decision, RiskDecision, Signal, StopKind
 from ..money import D
-from .constitution import PauseScope, RiskLimits, constitution_fingerprint
+from .constitution import PauseScope, RiskLimits, RiskMode, constitution_fingerprint
 from .costs import CommissionSchedule, CostAssumptions
 from .sizing import size_position
 
@@ -31,6 +31,13 @@ NO_EXIT_PLAN = "NO_EXIT_PLAN"
 RISK_BUDGET_EXCEEDS_REMAINING = "RISK_BUDGET_EXCEEDS_REMAINING_DAILY_BUDGET"
 LIFETIME_ENTRY_LIMIT_REACHED = "LIFETIME_ENTRY_LIMIT_REACHED"
 PER_ORDER_APPROVAL_REQUIRED = "PER_ORDER_APPROVAL_REQUIRED"
+MODE_FORBIDS_ENTRIES = "MODE_FORBIDS_ENTRIES"
+INSTRUMENT_NOT_ALLOWED_IN_MODE = "INSTRUMENT_NOT_ALLOWED_IN_MODE"
+OPERATIONAL_DRAWDOWN_STOP = "OPERATIONAL_DRAWDOWN_STOP_REACHED"
+ACCOUNT_SIZE_INSUFFICIENT_FOR_BROKER_MINIMUM = "ACCOUNT_SIZE_INSUFFICIENT"
+CFD_QUANTITY_BELOW_BROKER_MINIMUM = "QUANTITY_BELOW_BROKER_MINIMUM"
+MARGIN_EXCEEDS_AVAILABLE = "MARGIN_EXCEEDS_AVAILABLE_FUNDS"
+NET_REWARD_RISK_TOO_LOW = "NET_REWARD_RISK_TOO_LOW"
 
 
 @dataclass(frozen=True)
@@ -71,7 +78,8 @@ class RiskEngine:
         return max(Decimal("0"), self.limits.daily_loss - state.day_loss)
 
     def remaining_total_budget(self, state: SessionRiskState) -> Decimal:
-        return max(Decimal("0"), self.limits.hard_total_loss - state.total_loss)
+        """يقيس المسافة إلى الحد **التشغيلي** لا إلى الحاجز المطلق."""
+        return max(Decimal("0"), self.limits.effective_drawdown_stop() - state.total_loss)
 
     def risk_budget_for_next_trade(self, state: SessionRiskState) -> Decimal:
         """
@@ -82,47 +90,83 @@ class RiskEngine:
         remaining_week = max(Decimal("0"), self.limits.weekly_loss - state.week_loss)
         return min(
             self.limits.target_risk_per_trade,
+            self.limits.effective_max_risk(state.current_equity),
             self.remaining_daily_budget(state),
             remaining_week,
             self.remaining_total_budget(state),
         )
 
-    def evaluate(
+    def _run_gates(
         self,
         *,
         signal: Signal,
         state: SessionRiskState,
-        balances: Balances,
-        schedule: CommissionSchedule,
-        assumptions: CostAssumptions,
-        fractional_allowed: bool,
         kill_switch_active: bool,
         now: datetime,
-    ) -> RiskDecision:
-        checks: list[tuple[str, bool, str]] = []
-        fp = constitution_fingerprint(self.limits.mode)
+    ) -> tuple[Optional[RiskDecision], list[tuple[str, bool, str]], Decimal]:
+        """
+        سلسلة البوابات المشتركة بين كل الوسطاء.
 
-        def reject(code: str, message: str) -> RiskDecision:
+        تعيد (رفض أو None، قائمة الفحوص، ميزانية المخاطرة).
+        هذه هي النقطة التي تجعل النظام محايداً تجاه الوسيط: نفس القواعد
+        تماماً تُطبَّق على أسهم IBKR وعلى CFD من Capital.com.
+        """
+        checks: list[tuple[str, bool, str]] = []
+        fp = constitution_fingerprint(self.limits.mode, self.limits.broker)
+
+        def reject(code: str, message: str):
             checks.append((code, False, message))
-            return RiskDecision(
-                approved=False,
-                decision=Decision.HALTED if code == KILL_SWITCH_ACTIVE else Decision.NO_TRADE,
-                reason_code=code,
-                reason_ar=message,
-                checks=tuple(checks),
-                risk_budget_usd=Decimal("0"),
-                constitution_fingerprint=fp,
-                decided_at_utc=now,
+            return (
+                RiskDecision(
+                    approved=False,
+                    decision=Decision.HALTED if code == KILL_SWITCH_ACTIVE else Decision.NO_TRADE,
+                    reason_code=code,
+                    reason_ar=message,
+                    checks=tuple(checks),
+                    risk_budget_usd=Decimal("0"),
+                    constitution_fingerprint=fp,
+                    decided_at_utc=now,
+                ),
+                checks,
+                Decimal("0"),
             )
 
         if kill_switch_active:
             return reject(KILL_SWITCH_ACTIVE, "Kill Switch مفعّل — ممنوع أي دخول جديد.")
         checks.append(("KILL_SWITCH", True, "Kill Switch غير مفعّل."))
 
+        if not self.limits.allows_entries:
+            return reject(
+                MODE_FORBIDS_ENTRIES,
+                f"وضع {self.limits.mode.value} لا يسمح بأي دخول جديد. "
+                "الخروج منه يتطلب مراجعة مكتملة وتفويضاً صريحاً من المالكة.",
+            )
+        checks.append((
+            "MODE_ALLOWS_ENTRIES", True,
+            f"وضع {self.limits.mode.value} يسمح بتقييم الدخول.",
+        ))
+
+        if self.limits.allowed_instruments and signal.symbol.upper() not in {
+            s.upper() for s in self.limits.allowed_instruments
+        }:
+            return reject(
+                INSTRUMENT_NOT_ALLOWED_IN_MODE,
+                f"الأداة {signal.symbol} خارج قائمة أدوات وضع {self.limits.mode.value} "
+                f"({', '.join(sorted(self.limits.allowed_instruments))}).",
+            )
+
         if state.total_loss >= self.limits.hard_total_loss:
             return reject(
                 TOTAL_LOSS_EXHAUSTED,
                 f"الخسارة الإجمالية {state.total_loss:.2f} بلغت الحد الصارم {self.limits.hard_total_loss:.2f} دولار.",
+            )
+        operational_stop = self.limits.effective_drawdown_stop()
+        if operational_stop < self.limits.hard_total_loss and state.total_loss >= operational_stop:
+            return reject(
+                OPERATIONAL_DRAWDOWN_STOP,
+                f"الخسارة الإجمالية {state.total_loss:.2f} بلغت الحد التشغيلي "
+                f"{operational_stop:.2f} دولار (قبل الحاجز المطلق "
+                f"{self.limits.hard_total_loss:.2f} بمقدار احتياطي الفجوة).",
             )
         if state.week_loss >= self.limits.weekly_loss:
             return reject(
@@ -141,11 +185,14 @@ class RiskEngine:
         ))
 
         if state.consecutive_losses >= self.limits.consecutive_losses_pause:
-            scope_ar = (
-                "حتى الجلسة التالية"
-                if self.limits.pause_scope is PauseScope.NEXT_SESSION
-                else "لبقية الأسبوع"
-            )
+            scope_ar = {
+                PauseScope.NEXT_SESSION: "حتى الجلسة التالية",
+                PauseScope.REST_OF_WEEK: "لبقية الأسبوع",
+                PauseScope.LOCKED_REVIEW: (
+                    "والانتقال إلى LOCKED_REVIEW — لا استئناف تلقائي غداً، "
+                    "ويلزم مراجعة مكتملة وتفويض صريح من المالكة"
+                ),
+            }[self.limits.pause_scope]
             return reject(
                 CONSECUTIVE_LOSS_PAUSE,
                 f"{state.consecutive_losses} خسائر متتالية — توقف {scope_ar}.",
@@ -201,6 +248,41 @@ class RiskEngine:
         if budget <= 0:
             return reject(RISK_BUDGET_EXCEEDS_REMAINING, "لا تبقّى ميزانية مخاطرة لصفقة جديدة.")
         checks.append(("RISK_BUDGET", True, f"ميزانية الصفقة {budget:.2f} دولار."))
+        return None, checks, budget
+
+    # ------------------------------------------------------------------
+    def evaluate(
+        self,
+        *,
+        signal: Signal,
+        state: SessionRiskState,
+        balances: Balances,
+        schedule: CommissionSchedule,
+        assumptions: CostAssumptions,
+        fractional_allowed: bool,
+        kill_switch_active: bool,
+        now: datetime,
+    ) -> RiskDecision:
+        """مسار الأسهم (IBKR): يحسب الكمية بحلّ عكسي من ميزانية المخاطرة."""
+        fp = constitution_fingerprint(self.limits.mode, self.limits.broker)
+        rejection, checks, budget = self._run_gates(
+            signal=signal, state=state, kill_switch_active=kill_switch_active, now=now
+        )
+        if rejection is not None:
+            return rejection
+
+        def reject(code: str, message: str) -> RiskDecision:
+            checks.append((code, False, message))
+            return RiskDecision(
+                approved=False,
+                decision=Decision.NO_TRADE,
+                reason_code=code,
+                reason_ar=message,
+                checks=tuple(checks),
+                risk_budget_usd=budget,
+                constitution_fingerprint=fp,
+                decided_at_utc=now,
+            )
 
         sizing = size_position(
             entry_price=signal.entry_price,
@@ -229,15 +311,17 @@ class RiskEngine:
         assert est is not None
 
         # الفحص الأخير والأهم: لا يجوز أن تتجاوز الخسارة القصوى الحد المطلق أبداً.
-        if est.total_risk > self.limits.max_risk_per_trade:
+        effective_cap = self.limits.effective_max_risk(state.current_equity)
+        if est.total_risk > effective_cap:
             return reject(
                 "ABSOLUTE_RISK_CAP_EXCEEDED",
-                f"أقصى خسارة {est.total_risk:.2f} تتجاوز الحد المطلق {self.limits.max_risk_per_trade:.2f} دولار.",
+                f"أقصى خسارة {est.total_risk:.2f} تتجاوز الحد الفعلي {effective_cap:.2f} دولار "
+                f"(الأصغر بين الحد الدولاري ونسبة حقوق الملكية الحالية).",
             )
         checks.append((
             "ABSOLUTE_RISK_CAP",
             True,
-            f"أقصى خسارة {est.total_risk:.2f} ضمن الحد المطلق {self.limits.max_risk_per_trade:.2f} دولار.",
+            f"أقصى خسارة {est.total_risk:.2f} ضمن الحد الفعلي {effective_cap:.2f} دولار.",
         ))
 
         return RiskDecision(
@@ -250,6 +334,138 @@ class RiskEngine:
             notional=est.notional,
             expected_risk_usd=est.total_risk,
             expected_costs_usd=est.total_costs,
+            risk_budget_usd=budget,
+            constitution_fingerprint=fp,
+            decided_at_utc=now,
+        )
+
+
+    # ------------------------------------------------------------------
+    def evaluate_cfd(
+        self,
+        *,
+        signal: Signal,
+        state: SessionRiskState,
+        balances: Balances,
+        economics,
+        kill_switch_active: bool,
+        now: datetime,
+    ) -> RiskDecision:
+        """
+        مسار CFD (Capital.com).
+
+        الفرق الجوهري عن مسار الأسهم: الكمية **ليست** متغيّراً نحلّه.
+        الوسيط يفرض كمية دنيا (100 وحدة لـEUR/USD)، فالسؤال يصبح:
+        هل الخسارة الكاملة عند هذه الكمية تقع ضمن الميزانية؟ إن لا ⇒ NO_TRADE.
+
+        `economics` هو `CfdTradeEconomics` محسوب من CapitalComCostModel.
+        """
+        fp = constitution_fingerprint(self.limits.mode, self.limits.broker)
+        rejection, checks, budget = self._run_gates(
+            signal=signal, state=state, kill_switch_active=kill_switch_active, now=now
+        )
+        if rejection is not None:
+            return rejection
+
+        def reject(code: str, message: str) -> RiskDecision:
+            checks.append((code, False, message))
+            return RiskDecision(
+                approved=False,
+                decision=Decision.NO_TRADE,
+                reason_code=code,
+                reason_ar=message,
+                checks=tuple(checks),
+                quantity=economics.size,
+                notional=economics.notional_exposure,
+                expected_risk_usd=economics.all_in_risk,
+                expected_costs_usd=economics.total_costs,
+                risk_budget_usd=budget,
+                constitution_fingerprint=fp,
+                decided_at_utc=now,
+            )
+
+        # وقف مضمون مفضّل في الأوضاع الحقيقية، لكنه لا يُفترض توفره.
+        if self.limits.prefer_guaranteed_stop and economics.stop_kind is not StopKind.GUARANTEED:
+            checks.append((
+                "GUARANTEED_STOP",
+                True,
+                "وقف عادي: الوقف المضمون غير مستعمل — الخسارة قد تتجاوز التقدير عند الفجوة.",
+            ))
+
+        if economics.size < D(0):
+            return reject(CFD_QUANTITY_BELOW_BROKER_MINIMUM, "كمية غير صالحة.")
+
+        # الكمية الدنيا للوسيط لا يمكن تقليلها — إن تجاوزت المخاطرة، لا صفقة.
+        effective_cap = self.limits.effective_max_risk(state.current_equity)
+        cap = min(budget, effective_cap)
+        if economics.all_in_risk > cap:
+            return reject(
+                ACCOUNT_SIZE_INSUFFICIENT_FOR_BROKER_MINIMUM,
+                f"الخسارة الكاملة {economics.all_in_risk:.2f} دولار عند الكمية الدنيا للوسيط "
+                f"({economics.size}) تتجاوز الحد {cap:.2f} دولار. "
+                "لا يمكن تصغير الكمية أكثر — القرار NO_TRADE: ACCOUNT_SIZE_INSUFFICIENT.",
+            )
+        checks.append((
+            "ABSOLUTE_RISK_CAP",
+            True,
+            f"الخسارة الكاملة {economics.all_in_risk:.2f} ضمن الحد الفعلي {cap:.2f} دولار.",
+        ))
+
+        if economics.margin_required > balances.available_for_new_trade:
+            return reject(
+                MARGIN_EXCEEDS_AVAILABLE,
+                f"الهامش المطلوب {economics.margin_required:.2f} يتجاوز المتاح "
+                f"{balances.available_for_new_trade:.2f} دولار.",
+            )
+        checks.append((
+            "MARGIN",
+            True,
+            f"الهامش {economics.margin_required:.2f} ضمن المتاح "
+            f"{balances.available_for_new_trade:.2f} دولار (وهو حجز لا خسارة).",
+        ))
+
+        if self.limits.enforce_economic_viability:
+            if economics.net_reward_risk_ratio < self.limits.min_reward_risk_ratio:
+                return reject(
+                    NET_REWARD_RISK_TOO_LOW,
+                    f"نسبة العائد/المخاطرة الصافية بعد التكاليف "
+                    f"{economics.net_reward_risk_ratio:.2f} أقل من الحد "
+                    f"{self.limits.min_reward_risk_ratio}.",
+                )
+            if economics.cost_ratio > self.limits.max_cost_ratio_of_risk:
+                return reject(
+                    "COST_DOMINATED",
+                    f"الاحتكاك يلتهم {economics.cost_ratio * 100:.1f}% من المخاطرة "
+                    f"(الحد {self.limits.max_cost_ratio_of_risk * 100:.0f}%).",
+                )
+        checks.append((
+            "NET_REWARD_RISK",
+            True,
+            f"العائد الصافي {economics.net_reward:.2f} ونسبته إلى المخاطرة "
+            f"{economics.net_reward_risk_ratio:.2f}.",
+        ))
+
+        if economics.provisional:
+            checks.append((
+                "PROVISIONAL_VALUES",
+                True,
+                "بعض القيم مبدئية ولم تُكتشف من الوسيط — لا يُبنى تنفيذ حقيقي على هذا القرار.",
+            ))
+
+        return RiskDecision(
+            approved=True,
+            decision=Decision.TRADE,
+            reason_code=None,
+            reason_ar=(
+                f"كمية {economics.size} بتعرّض {economics.notional_exposure:.2f} دولار، "
+                f"هامش {economics.margin_required:.2f}، وخسارة كاملة متوقعة "
+                f"{economics.all_in_risk:.2f} دولار ضمن حد {cap:.2f}."
+            ),
+            checks=tuple(checks),
+            quantity=economics.size,
+            notional=economics.notional_exposure,
+            expected_risk_usd=economics.all_in_risk,
+            expected_costs_usd=economics.total_costs,
             risk_budget_usd=budget,
             constitution_fingerprint=fp,
             decided_at_utc=now,

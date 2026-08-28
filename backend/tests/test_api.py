@@ -52,10 +52,12 @@ def test_risk_mode_defaults_to_validation_and_is_not_changeable_from_ui(client):
     assert r["baseline_equity_usd"] == "150.00"
 
 
-def test_all_three_modes_are_published_with_their_limits(client):
+def test_all_four_modes_are_published_with_their_limits(client):
     r = client.get("/api/risk").json()
     modes = r["modes"]
-    assert set(modes) == {"VALIDATION", "LIVE_COMMISSIONING", "CONSERVATIVE_LIVE"}
+    assert set(modes) == {
+        "VALIDATION", "LIVE_COMMISSIONING", "CONSERVATIVE_LIVE", "LOCKED_REVIEW"
+    }
     assert modes["CONSERVATIVE_LIVE"]["max_risk_pct"] == "1.00"
     assert modes["CONSERVATIVE_LIVE"]["weekly_loss_pct"] == "2.00"
     assert modes["LIVE_COMMISSIONING"]["max_lifetime_entry_orders"] == 1

@@ -132,3 +132,63 @@ export type SettingsResponse = {
   risk_constitution_editable: boolean; allowlist: string[];
   blackout_days_confirmed: string[];
 };
+
+export type BrokerState = {
+  broker: string;
+  is_demo: boolean;
+  live_api_enabled_in_source: boolean;
+  base_url: string;
+  adapter_name: string;
+  connected: boolean;
+  account_masked: string | null;
+  local_trading_paused: boolean;
+  execution_lock: {
+    unlocked: boolean;
+    owner_authorization_reference: string | null;
+    reason_ar: string;
+    unlocked_at_utc: string | null;
+  };
+  risk_mode: string;
+  risk_constitution_version: string;
+  kill_switch: { active: boolean; trigger: string | null; reason_ar: string | null };
+  credentials: Array<{ name: string; present: boolean; source: string }>;
+  discovery_allowlist: string[];
+  execution_allowlist: string[];
+  api_key_pause_instructions_ar: string[];
+};
+
+export type CfdPreview = {
+  epic: string;
+  provisional: boolean;
+  provisional_note_ar: string;
+  display: {
+    epic: string;
+    size_broker_units: string;
+    notional_exposure: string;
+    margin_required: string;
+    all_in_risk_at_stop: string;
+    pip_value: string;
+    stop_distance_pips: string;
+    stop_kind: string;
+    spread_cost: string;
+    guaranteed_stop_premium: string;
+    slippage_reserve: string;
+    overnight_cost: string;
+    conversion_cost: string;
+    total_costs: string;
+    net_reward: string;
+    net_reward_risk_ratio: string;
+    breakeven_move_pips: string;
+    provisional: boolean;
+    provenance_notes: string[];
+  };
+  caps: {
+    preferred_max_risk: string;
+    absolute_max_risk: string;
+    within_preferred: boolean;
+    within_absolute: boolean;
+  };
+  warnings_ar: string[];
+  submitted: boolean;
+  execution_locked: boolean;
+};

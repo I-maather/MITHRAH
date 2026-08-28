@@ -9,6 +9,7 @@ export const metadata: Metadata = {
 
 const NAV = [
   { href: "/", label: "لوحة اليوم" },
+  { href: "/broker", label: "الوسيط" },
   { href: "/opportunities", label: "الفرص" },
   { href: "/trades", label: "الصفقات" },
   { href: "/risk", label: "المخاطر" },
@@ -25,7 +26,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-6 px-4 py-6 md:px-8">
           <header className="flex flex-col gap-4 border-b border-line pb-5 md:flex-row md:items-center md:justify-between">
             <div>
-              <h1 className="text-lg font-semibold">متداول مآثر الذاتي</h1>
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-lg font-semibold">متداول مآثر الذاتي</h1>
+                <span className="pill bg-amber-50 text-warn">بيئة تجريبية · DEMO</span>
+              </div>
               <p className="mt-1 text-xs text-ink-faint">
                 استخدام شخصي — ليس خدمة استشارات مالية. جميع الأوقات بتوقيت الرياض.
               </p>
@@ -44,7 +48,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </header>
           <main className="flex-1">{children}</main>
           <footer className="border-t border-line pt-4 text-xs text-ink-faint">
-            التداول الحقيقي مقفل افتراضياً. لا يمكن تعديل دستور المخاطر من هذه الواجهة.
+            التداول الحقيقي مقفل في الكود وفي الإعدادات. لا يمكن تعديل دستور المخاطر ولا تبديل وضع المخاطرة من هذه الواجهة.
           </footer>
         </div>
       </body>

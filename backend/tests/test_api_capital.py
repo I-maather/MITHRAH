@@ -1,0 +1,160 @@
+"""واجهة API الخاصة بـCapital.com — عرض بلا أسرار، وإيقاف محلي لا يفتح شيئاً."""
+from __future__ import annotations
+
+import json
+
+import pytest
+from fastapi.testclient import TestClient
+
+from app.main import KILL_PHRASE, RESUME_PHRASE, app
+
+
+@pytest.fixture
+def client(tmp_path, monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path/'t.db'}")
+    monkeypatch.setenv("BROKER_MODE", "MOCK")
+    monkeypatch.setenv("LIVE_TRADING", "false")
+    monkeypatch.setenv("RISK_MODE", "VALIDATION")
+    import app.config as config
+    import app.db.session as dbs
+    import app.main as main
+
+    config.get_settings.cache_clear()
+    dbs.ENGINE = dbs.make_engine(f"sqlite:///{tmp_path/'t.db'}")
+    dbs.SessionLocal.configure(bind=dbs.ENGINE)
+    main._SYSTEM = None
+    with TestClient(app) as c:
+        yield c
+    main._SYSTEM = None
+    config.get_settings.cache_clear()
+
+
+# --- حالة الوسيط -------------------------------------------------------------
+
+def test_broker_endpoint_shows_demo_and_locked_live(client):
+    body = client.get("/api/broker").json()
+    assert body["is_demo"] is True
+    assert body["live_api_enabled_in_source"] is False
+    assert body["base_url"].startswith("https://demo-api-capital")
+    assert body["execution_lock"]["unlocked"] is False
+    assert body["risk_constitution_version"] == "0.2.0"
+
+
+def test_broker_endpoint_never_returns_a_credential_value(client):
+    body = client.get("/api/broker").json()
+    serialised = json.dumps(body, ensure_ascii=False)
+    for key in ("CAPITAL_API_KEY", "CAPITAL_IDENTIFIER", "CAPITAL_API_PASSWORD"):
+        # الاسم مسموح، القيمة ممنوعة — والحالة boolean فقط.
+        assert key in serialised
+    for entry in body["credentials"]:
+        assert set(entry) == {"name", "present", "source"}
+        assert isinstance(entry["present"], bool)
+
+
+def test_broker_endpoint_explains_how_to_pause_the_api_key(client):
+    body = client.get("/api/broker").json()
+    joined = " ".join(body["api_key_pause_instructions_ar"])
+    assert "Capital.com" in joined
+    assert "API" in joined
+    assert "أقوى من أي زر" in joined
+
+
+def test_allowlists_are_published(client):
+    body = client.get("/api/broker").json()
+    assert body["discovery_allowlist"] == ["EURUSD", "GBPUSD", "USDJPY", "GOLD"]
+    assert body["execution_allowlist"] == ["EURUSD"]
+
+
+# --- الإيقاف المحلي ----------------------------------------------------------
+
+def test_trading_starts_locally_paused(client):
+    assert client.get("/api/broker").json()["local_trading_paused"] is True
+
+
+def test_pause_is_always_allowed_and_needs_no_phrase(client):
+    response = client.post("/api/trading/pause", json={"reason_ar": "إيقاف احترازي"})
+    assert response.status_code == 200
+    assert response.json()["local_trading_paused"] is True
+
+
+def test_resume_requires_the_exact_phrase(client):
+    bad = client.post(
+        "/api/trading/resume",
+        json={"reason_ar": "راجعت كل شيء بالكامل", "confirm_phrase": "ارفع"},
+    )
+    assert bad.status_code == 400
+
+
+def test_resume_lifts_only_the_local_pause_never_live_trading(client):
+    response = client.post(
+        "/api/trading/resume",
+        json={"reason_ar": "راجعت كل شيء بالكامل", "confirm_phrase": RESUME_PHRASE},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["local_trading_paused"] is False
+    assert body["live_trading_enabled"] is False
+    assert "ما زال مقفلاً" in body["note_ar"]
+
+
+def test_resume_is_refused_while_kill_switch_is_active(client):
+    client.post(
+        "/api/risk/kill-switch",
+        json={"reason_ar": "إيقاف للاختبار الآن", "confirm_phrase": KILL_PHRASE},
+    )
+    response = client.post(
+        "/api/trading/resume",
+        json={"reason_ar": "راجعت كل شيء بالكامل", "confirm_phrase": RESUME_PHRASE},
+    )
+    assert response.status_code == 400
+    assert "Kill Switch" in response.json()["detail"]
+
+
+# --- بطاقة معاينة CFD ---------------------------------------------------------
+
+def test_cfd_preview_separates_exposure_margin_and_risk(client):
+    body = client.get("/api/cfd-preview?stop_pips=25&take_profit_pips=50").json()
+    display = body["display"]
+    assert display["notional_exposure"] != display["margin_required"]
+    assert display["margin_required"] != display["all_in_risk_at_stop"]
+    assert float(display["notional_exposure"]) > float(display["margin_required"])
+    assert float(display["margin_required"]) > float(display["all_in_risk_at_stop"])
+
+
+def test_cfd_preview_shows_every_required_field(client):
+    display = client.get("/api/cfd-preview").json()["display"]
+    for key in (
+        "epic", "size_broker_units", "notional_exposure", "margin_required",
+        "all_in_risk_at_stop", "pip_value", "stop_distance_pips", "stop_kind",
+        "spread_cost", "guaranteed_stop_premium", "slippage_reserve",
+        "overnight_cost", "net_reward", "net_reward_risk_ratio", "breakeven_move_pips",
+    ):
+        assert key in display, key
+
+
+def test_cfd_preview_is_marked_provisional_before_discovery(client):
+    body = client.get("/api/cfd-preview").json()
+    assert body["provisional"] is True
+    assert "لا يُبنى عليها قرار تنفيذ" in body["provisional_note_ar"]
+
+
+def test_cfd_preview_never_claims_an_order_was_submitted(client):
+    body = client.get("/api/cfd-preview").json()
+    assert body["submitted"] is False
+    assert body["execution_locked"] is True
+
+
+def test_cfd_preview_reports_cap_compliance(client):
+    within = client.get("/api/cfd-preview?stop_pips=25").json()["caps"]
+    outside = client.get("/api/cfd-preview?stop_pips=75").json()["caps"]
+    assert within["within_absolute"] is True
+    assert outside["within_absolute"] is False
+
+
+def test_cfd_preview_refuses_a_zero_stop(client):
+    assert client.get("/api/cfd-preview?stop_pips=0").status_code == 400
+
+
+def test_guaranteed_stop_unavailable_on_provisional_values(client):
+    """الوقف المضمون لا يُفترض توفره قبل الاكتشاف."""
+    assert client.get("/api/cfd-preview?guaranteed=true").status_code == 400
