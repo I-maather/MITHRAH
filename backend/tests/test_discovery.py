@@ -109,9 +109,13 @@ def test_cli_exposes_only_read_only_commands():
 
     `capital-auth-probe` تشخيصي: يصادق فقط (`POST /session`) ولا يلمس
     مركزاً ولا أمراً ولا تفضيلاً.
+
+    `capital-live-discover` يمسّ الحساب الحقيقي **قراءةً فقط**، بقائمة بيضاء
+    مفروضة على مستوى HTTP، ولا يعمل بلا إقرار صريح من المالكة.
     """
     assert _cli_commands() == {
         "capital-discover",
+        "capital-live-discover",
         "capital-auth-probe",
         "secrets-status",
         "constitution",

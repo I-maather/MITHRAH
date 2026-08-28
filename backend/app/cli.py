@@ -23,6 +23,22 @@ from .brokers.capital.session import CapitalSession
 from .brokers.capital.transport import GuardedTransport, HttpxTransport
 from .clock import format_riyadh, now_utc
 from .config import REPO_ROOT, get_settings
+from .live_readonly.allowlist import (
+    AllowlistViolation,
+    LIVE_BASE_URL as LIVE_READONLY_BASE_URL,
+    describe_allowlist,
+)
+from .live_readonly.discovery import DISCOVERY_EPICS as LIVE_DISCOVERY_EPICS
+from .live_readonly.discovery import run_live_discovery
+from .live_readonly.report import (
+    PLANNED_CAPITAL_USD,
+    compute_feasibility,
+    render_feasibility_markdown,
+    write_discovery_json,
+    write_discovery_markdown,
+)
+from .live_readonly.session import LiveAuthError, LiveSession
+from .live_readonly.transport import LiveReadOnlyTransport, LiveTransportError
 from .diagnostics.auth_probe import (
     ProbeViolation,
     render_report,
@@ -222,6 +238,115 @@ def cmd_capital_auth_probe(args: argparse.Namespace) -> int:
     return 0 if report.working_mode is not None else 1
 
 
+LIVE_ACKNOWLEDGEMENT_AR = """
+════════════════════════════════════════════════════════════════════
+  اكتشاف الحساب الحقيقي — قراءة فقط
+════════════════════════════════════════════════════════════════════
+
+  • هذا هو حساب Capital.com **الحقيقي**، لا حساب تجريبي.
+  • مفتاح API نفسه **يملك صلاحية التداول** لدى الوسيط.
+  • هذا التطبيق سيسمح بـ**المصادقة والقراءات المُدرَجة في قائمة بيضاء فقط**.
+  • **لا إذن** بإرسال أمر، ولا بفتح أو تعديل أو إغلاق مركز،
+    ولا بتغيير أي إعداد حساب، ولا بإيداع أو سحب.
+
+  الحماية مفروضة على مستوى HTTP نفسه:
+    PUT و PATCH و DELETE مرفوضة دائماً · POST مسموح للمصادقة وحدها ·
+    كل مسار خارج القائمة البيضاء مرفوض قبل مغادرة الطلب.
+
+  لن تُعرض أي قيمة سرّية، ولن يُطبع معرّف الحساب كاملاً.
+════════════════════════════════════════════════════════════════════
+"""
+
+
+def cmd_capital_live_discover(args: argparse.Namespace) -> int:
+    """اكتشاف الحساب الحقيقي — قراءة فقط، بقائمة بيضاء على مستوى HTTP."""
+    if not args.acknowledge_live_read_only:
+        print(
+            "⛔ هذا الأمر يمسّ الحساب الحقيقي ولا يعمل بلا إقرار صريح.\n"
+            "   أعيديه هكذا:\n"
+            "   python3 -m app.cli capital-live-discover --acknowledge-live-read-only",
+            file=sys.stderr,
+        )
+        return 2
+
+    print(LIVE_ACKNOWLEDGEMENT_AR)
+
+    provider = build_secret_provider(env_file=args.secrets_file, allow_process_env=False)
+    missing = provider.missing(REQUIRED_CAPITAL_SECRETS)
+    if missing:
+        print(
+            "اعتمادات ناقصة: " + ", ".join(missing) + "\n"
+            "شغّلي scripts/configure_capital_credentials.sh ثم أعيدي المحاولة.",
+            file=sys.stderr,
+        )
+        return 1
+
+    transport = LiveReadOnlyTransport()
+    session = LiveSession(transport=transport, secrets=provider)
+
+    try:
+        session.authenticate()
+    except LiveAuthError as exc:
+        print(f"⛔ {exc}", file=sys.stderr)
+        return 1
+    except LiveTransportError as exc:
+        print(f"⛔ تعذّر الاتصال: {exc}", file=sys.stderr)
+        return 1
+    except AllowlistViolation as exc:
+        print(f"⛔ منعت القائمة البيضاء الطلب: {exc}", file=sys.stderr)
+        return 3
+
+    try:
+        report = run_live_discovery(
+            session, epics=tuple(args.epics), fetch_candles=not args.no_candles
+        )
+    finally:
+        # تُمحى الرموز في كل الأحوال، حتى عند الاستثناء.
+        session.discard()
+
+    json_path = write_discovery_json(
+        report, Path(args.json_out or (REPO_ROOT / "data" / "capital_live_discovery.json"))
+    )
+    md_path = write_discovery_markdown(
+        report,
+        Path(args.markdown_out or (REPO_ROOT / "docs" / "CAPITAL_COM_LIVE_DISCOVERY.md")),
+    )
+
+    eurusd = report.instrument("EURUSD")
+    feasibility_path = None
+    if eurusd is not None and eurusd.found:
+        actual_equity = (
+            report.account.balance
+            if report.account and report.account.balance is not None
+            else PLANNED_CAPITAL_USD
+        )
+        actual = compute_feasibility(eurusd, equity=actual_equity)
+        planned = compute_feasibility(eurusd, equity=PLANNED_CAPITAL_USD)
+        text = render_feasibility_markdown(report, actual=actual, planned=planned)
+        feasibility_path = REPO_ROOT / "docs" / "CAPITAL_COM_150_USD_FEASIBILITY.md"
+        feasibility_path.parent.mkdir(parents=True, exist_ok=True)
+        feasibility_path.write_text(text, encoding="utf-8")
+
+    print(f"وقت التوليد (الرياض): {report.generated_at_riyadh}")
+    if report.account:
+        print(f"الحساب: {report.account.masked_id}  ·  العملة: {report.account.currency}")
+    print(f"العمليات المرسَلة: {len(report.operations_sent)}")
+    print(f"رموز جلسة محفوظة: {'نعم ⚠️' if session.tokens_retained else 'لا'}")
+    print(f"تقرير JSON      : {json_path}")
+    print(f"تقرير Markdown  : {md_path}")
+    if feasibility_path:
+        print(f"تقرير الجدوى    : {feasibility_path}")
+    if report.errors:
+        print("\nأخطاء مسجّلة:")
+        for e in report.errors:
+            print(f"  - {e}")
+    print(
+        "\n⚠️ التقارير تحتوي أرقام حسابك — معلومة محلية حسّاسة. لا تُرفع ولا تُشارَك."
+    )
+    print("نتيجة الاكتشاف لا تأذن بالتنفيذ. قفل Live العام ما زال مغلقاً.")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="app.cli", description="Maather Autonomous Trader CLI")
     parser.add_argument("--verbose", action="store_true")
@@ -241,6 +366,21 @@ def build_parser() -> argparse.ArgumentParser:
     discover.add_argument("--markdown-out", default=None)
     discover.add_argument("--no-candles", action="store_true")
     discover.set_defaults(func=cmd_capital_discover)
+
+    live = sub.add_parser(
+        "capital-live-discover",
+        help="اكتشاف الحساب الحقيقي — قراءة فقط، بإقرار صريح",
+    )
+    live.add_argument(
+        "--acknowledge-live-read-only",
+        action="store_true",
+        help="إقرار صريح بأن هذا الحساب الحقيقي وأن الوضع قراءة فقط",
+    )
+    live.add_argument("--epics", nargs="*", default=list(LIVE_DISCOVERY_EPICS))
+    live.add_argument("--json-out", default=None)
+    live.add_argument("--markdown-out", default=None)
+    live.add_argument("--no-candles", action="store_true")
+    live.set_defaults(func=cmd_capital_live_discover)
 
     probe = sub.add_parser(
         "capital-auth-probe",
