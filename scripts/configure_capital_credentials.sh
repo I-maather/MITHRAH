@@ -15,6 +15,11 @@
 #   * يطلب تأكيداً صريحاً قبل استبدال قيمة موجودة.
 #
 # هذا السكربت لا يتصل بالإنترنت ولا يرسل شيئاً إلى أي جهة.
+#
+# التوافق: bash 3.2 فأحدث — وهو إصدار macOS الافتراضي (/bin/bash).
+#   لا تُستعمل هنا مصفوفات ترابطية (declare -A) لأنها من bash 4.0،
+#   وتحت `set -u` في bash 3.2 يُفسَّر [KEY] رمزاً حسابياً فيسقط السكربت
+#   بـ«unbound variable» قبل أن يظهر أي سؤال. انظري prompt_for أدناه.
 
 set -euo pipefail
 set +o history 2>/dev/null || true
@@ -27,28 +32,40 @@ SECRETS_FILE="${SECRETS_DIR}/capital.env"
 
 KEYS=(CAPITAL_API_KEY CAPITAL_IDENTIFIER CAPITAL_API_PASSWORD)
 
-declare -A PROMPTS=(
-  [CAPITAL_API_KEY]="مفتاح Capital.com API (X-CAP-API-KEY)"
-  [CAPITAL_IDENTIFIER]="معرّف الدخول لدى Capital.com (البريد المسجَّل)"
-  [CAPITAL_API_PASSWORD]="كلمة المرور المخصّصة للمفتاح (وليست كلمة مرور حسابك)"
-)
+# بديل المصفوفة الترابطية: دالة بحث تعمل على bash 3.2 و4 و5 بلا فرق.
+prompt_for() {
+  case "$1" in
+    CAPITAL_API_KEY)
+      printf '%s' "مفتاح Capital.com API (X-CAP-API-KEY)" ;;
+    CAPITAL_IDENTIFIER)
+      printf '%s' "معرّف الدخول لدى Capital.com (البريد المسجَّل)" ;;
+    CAPITAL_API_PASSWORD)
+      printf '%s' "كلمة المرور المخصّصة للمفتاح (وليست كلمة مرور حسابك)" ;;
+    *)
+      printf '%s' "$1" ;;
+  esac
+}
 
 red()   { printf '\033[31m%s\033[0m\n' "$*"; }
 green() { printf '\033[32m%s\033[0m\n' "$*"; }
 dim()   { printf '\033[2m%s\033[0m\n' "$*"; }
 
 # رفض أي سرّ مُمرَّر كوسيط ------------------------------------------------
-for arg in "$@"; do
-  case "$arg" in
-    --check|--remove|--help|-h|--file) ;;
-    *)
-      red "⛔ هذا السكربت لا يقبل قيماً في سطر الأوامر."
-      red "   السبب: الوسائط تظهر في ps وفي سجل الصدفة."
-      red "   شغّليه بلا وسائط وسيسألك تفاعلياً."
-      exit 2
-      ;;
-  esac
-done
+# ملاحظة توافق: في bash < 4.4 يُعتبر "$@" غير مُعرَّف تحت `set -u` حين لا توجد
+# وسائط، فيسقط السكربت في مساره الطبيعي (بلا وسائط). لذلك يُفحص $# أولاً.
+if [[ $# -gt 0 ]]; then
+  for arg in "$@"; do
+    case "$arg" in
+      --check|--remove|--help|-h|--file) ;;
+      *)
+        red "⛔ هذا السكربت لا يقبل قيماً في سطر الأوامر."
+        red "   السبب: الوسائط تظهر في ps وفي سجل الصدفة."
+        red "   شغّليه بلا وسائط وسيسألك تفاعلياً."
+        exit 2
+        ;;
+    esac
+  done
+fi
 
 have_keychain() { [[ "$(uname -s)" == "Darwin" ]] && command -v security >/dev/null 2>&1; }
 
@@ -93,6 +110,25 @@ file_remove() {
   chmod 600 "$SECRETS_FILE"
 }
 
+# صلاحيات الملف بصيغة ثُمانية.
+# ⚠️ `stat -f` يعني «تنسيق» في BSD/macOS و«نظام الملفات» في GNU — أي أنه
+# ينجح على لينكس بمخرَج لا علاقة له بالصلاحيات. لذلك يُقبل المخرَج فقط
+# إن كان ثلاث أو أربع خانات ثُمانية، وإلا تُجرَّب الصيغة الأخرى.
+file_mode() {
+  local out=""
+  out="$(stat -f '%Lp' "$1" 2>/dev/null || true)"
+  if [[ "$out" =~ ^[0-7]{3,4}$ ]]; then
+    printf '%s' "${out: -3}"
+    return 0
+  fi
+  out="$(stat -c '%a' "$1" 2>/dev/null || true)"
+  if [[ "$out" =~ ^[0-7]{3,4}$ ]]; then
+    printf '%s' "${out: -3}"
+    return 0
+  fi
+  printf ''
+}
+
 secret_exists() {
   if have_keychain && keychain_has "$1"; then return 0; fi
   file_has "$1"
@@ -115,10 +151,10 @@ store_secret() {
 cmd_check() {
   echo "فحص وجود الاعتمادات — لن تُعرض أي قيمة."
   echo
-  local missing=0
+  local missing=0 key where mode
   for key in "${KEYS[@]}"; do
     if secret_exists "$key"; then
-      local where="ملف محلي"
+      where="ملف محلي"
       if have_keychain && keychain_has "$key"; then where="macOS Keychain"; fi
       green "  ✅ ${key}  (${where})"
     else
@@ -128,9 +164,8 @@ cmd_check() {
   done
   echo
   if [[ -f "$SECRETS_FILE" ]]; then
-    local mode
-    mode="$(stat -f '%Lp' "$SECRETS_FILE" 2>/dev/null || stat -c '%a' "$SECRETS_FILE")"
-    if [[ "$mode" != "600" ]]; then
+    mode="$(file_mode "$SECRETS_FILE")"
+    if [[ -n "$mode" && "$mode" != "600" ]]; then
       red "  ⚠️  صلاحيات ${SECRETS_FILE} هي ${mode} — يجب أن تكون 600."
       red "      نفّذي: chmod 600 ${SECRETS_FILE}"
       missing=1
@@ -147,11 +182,14 @@ cmd_check() {
 }
 
 cmd_remove() {
+  local confirm="" key
   echo "حذف الاعتمادات المخزَّنة محلياً."
-  read -r -p "هل أنتِ متأكدة؟ اكتبي yes للتأكيد: " confirm
+  read -r -p "هل أنتِ متأكدة؟ اكتبي yes للتأكيد: " confirm || true
   [[ "$confirm" == "yes" ]] || { echo "أُلغي."; exit 0; }
   for key in "${KEYS[@]}"; do
-    have_keychain && keychain_remove "$key"
+    # `if` لا `&&`: تحت `set -e` تُسقِط قائمة `a && b` الفاشلة السكربت
+    # على نظام بلا Keychain.
+    if have_keychain; then keychain_remove "$key"; fi
     file_remove "$key"
     green "  ✅ ${key} حُذف."
   done
@@ -183,36 +221,46 @@ INTRO
   fi
   echo
 
+  # كل متغيّر يُهيَّأ فارغاً قبل `read`: تحت `set -u` يكون المتغيّر غير المعيَّن
+  # خطأً قاتلاً لو انتهى الإدخال (EOF) قبل أن يكتب فيه `read` شيئاً.
+  local key prompt replace value confirm_value
   for key in "${KEYS[@]}"; do
-    local prompt="${PROMPTS[$key]}"
+    prompt="$(prompt_for "$key")"
     if secret_exists "$key"; then
       echo "• ${key} — موجود مسبقاً."
-      read -r -p "  استبداله؟ اكتبي yes للاستبدال، أو Enter للإبقاء: " replace
+      replace=""
+      read -r -p "  استبداله؟ اكتبي yes للاستبدال، أو Enter للإبقاء: " replace || true
       if [[ "$replace" != "yes" ]]; then
         dim "  أُبقي على القيمة الحالية."
         continue
       fi
     fi
 
-    local value confirm_value
     while true; do
+      value=""
+      confirm_value=""
       printf '• %s\n' "$prompt"
-      read -r -s -p "  القيمة: " value; echo
+      read -r -s -p "  القيمة: " value || true
+      echo
       if [[ -z "$value" ]]; then
         red "  القيمة فارغة — أعيدي المحاولة."
         continue
       fi
-      read -r -s -p "  أعيدي الإدخال للتأكيد: " confirm_value; echo
+      read -r -s -p "  أعيدي الإدخال للتأكيد: " confirm_value || true
+      echo
       if [[ "$value" != "$confirm_value" ]]; then
         red "  القيمتان غير متطابقتين — أعيدي المحاولة."
-        unset value confirm_value
+        value=""
+        confirm_value=""
         continue
       fi
       break
     done
 
     store_secret "$key" "$value"
-    unset value confirm_value
+    # مسح بالإسناد لا بـ`unset`: يبقى المتغيّر مُعرَّفاً ففارغاً، فلا يسقط `set -u`.
+    value=""
+    confirm_value=""
     echo
   done
 
