@@ -117,10 +117,17 @@ if grep -q "com.maather.autonomoustrader" "$MOBILE/app.config.ts" 2>/dev/null; t
   warn "Bundle ID ما زال المبدئي: com.maather.autonomoustrader"
   warn "  إن كان مسجَّلاً لديكِ في Apple، اتركيه. وإلا صدّري EXPO_PUBLIC_IOS_BUNDLE_ID"
 fi
-if grep -q "'aps-environment'" "$MOBILE/app.config.ts" 2>/dev/null; then
-  ok "استحقاق الإشعارات مُعلَن"
+# الإشعارات الفورية **معطّلة افتراضاً**، لأن الحساب المجاني (Personal Team)
+# لا يُصدر ملف تزويد يحمل استحقاق APNs — فيسقط التوقيع ويتعذّر تشغيل التطبيق
+# على الجهاز أصلاً بسبب ميزة لن تعمل قبل عضوية مدفوعة.
+if ! grep -q "EXPO_PUBLIC_ENABLE_PUSH" "$MOBILE/app.config.ts" 2>/dev/null; then
+  bad "مفتاح تفعيل الإشعارات غير موجود في app.config.ts"
+elif [ "${EXPO_PUBLIC_ENABLE_PUSH:-0}" = "1" ]; then
+  ok "الإشعارات مُفعَّلة — استحقاق aps-environment سيُعلَن"
+  warn "  يتطلب عضوية Apple Developer مدفوعة. الحساب المجاني يرفضه."
 else
-  bad "استحقاق aps-environment غير مُعلَن"
+  ok "الإشعارات معطّلة (الافتراضي) — يعمل التطبيق على الحساب المجاني"
+  say '     لتفعيلها بعد شراء العضوية: EXPO_PUBLIC_ENABLE_PUSH=1 قبل الأمر'
 fi
 
 say ''
@@ -216,6 +223,25 @@ if [ "$prebuild_ok" -ne 1 ]; then
   exit 1
 fi
 ok "expo prebuild — المشروع الأصلي مُنتَج ومُتحقَّق منه"
+
+# **يُفحَص الأثر لا النيّة.** `expo-notifications` تُربَط تلقائياً وتحقن
+# `aps-environment` حتى بعد إزالتها من `plugins`. وملحق الإلغاء يزيله —
+# لكن لا يُوثَق بذلك، بل يُقرأ الملف المُولَّد فعلاً.
+ENT="$(find "$MOBILE/ios" -maxdepth 2 -name '*.entitlements' | head -1)"
+if [ "${EXPO_PUBLIC_ENABLE_PUSH:-0}" = "1" ]; then
+  if [ -n "$ENT" ] && grep -q 'aps-environment' "$ENT"; then
+    ok "استحقاق APNs مكتوب في $(basename "$ENT")"
+  else
+    printf '  ❌ الإشعارات مُفعَّلة لكن aps-environment غير مكتوب.\n' >&2
+    exit 1
+  fi
+elif [ -n "$ENT" ] && grep -q 'aps-environment' "$ENT"; then
+  printf '  ❌ الإشعارات معطّلة لكن aps-environment ما زال في %s.\n' "$(basename "$ENT")" >&2
+  printf '     سيرفض الحساب المجاني توقيع التطبيق. راجعي plugins/with-push-disabled.js\n' >&2
+  exit 1
+else
+  ok "لا استحقاق APNs — التوقيع يمرّ على الحساب المجاني"
+fi
 
 if [ -f "$MOBILE/PrivacyInfo.xcprivacy.template" ] && [ -d "$MOBILE/ios" ]; then
   target_dir="$(find "$MOBILE/ios" -maxdepth 1 -type d ! -name ios ! -name Pods | head -1)"

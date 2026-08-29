@@ -1,5 +1,42 @@
 # Changelog
 
+## [0.5.4] — 2026-08-29 — الإشعارات معطّلة افتراضاً: الحساب المجاني يرفض استحقاق APNs
+
+سقط التوقيع على جهاز المالكة برسالة صريحة:
+
+    Personal development teams, including "maather Alrubaiani", do not
+    support the Push Notifications capability.
+
+الحساب المجاني (Personal Team) لا يُصدر ملف تزويد يحمل `aps-environment`.
+فكانت النتيجة أن التطبيق **لا يعمل على الجهاز أصلاً** بسبب ميزة لا تعمل هي
+الأخرى ولن تعمل قبل عضوية Apple Developer مدفوعة. الترتيب مقلوب: ميزة
+مؤجَّلة تمنع ميزة حاضرة.
+
+صارت الإشعارات **معطّلة افتراضاً** وتُفعَّل بمتغيّر واحد:
+
+    EXPO_PUBLIC_ENABLE_PUSH=1 ./scripts/ios_build_prep.sh
+
+### ولماذا لم يكفِ حذفها من `app.config.ts`
+
+`expo-notifications` تُربَط تلقائياً بمجرّد وجودها في `dependencies`، ويعمل
+ملحقها **سواء أُدرج في `plugins` أم لا**، فيحقن `aps-environment` بنفسه.
+قيسَ ذلك ولم يُفترَض: بعد إزالة الملحق وإزالة `entitlements` من كتلة `ios`،
+أظهر `expo config --type introspect` أن الاستحقاق ما زال موجوداً.
+
+فأُضيف `mobile/plugins/with-push-disabled.js` — يعمل بعد الجميع ويحذف ما
+حقنه غيره. النتيجة مقيسة في الحالتين:
+
+    معطّلة : entitlements {} · لا UIBackgroundModes
+    مُفعَّلة : aps-environment=development · remote-notification
+
+والحذف اليدوي من Xcode لا يدوم، لأن `prebuild --clean` يعيد توليد `ios/`.
+
+### والسكربت يفحص الأثر
+
+بعد `prebuild` يُقرأ ملف `.entitlements` **المُولَّد فعلاً**: إن كانت
+الإشعارات معطّلة ووُجد `aps-environment` يسقط البناء، والعكس كذلك. لا يُوثَق
+بالنيّة المُعلَنة في الإعداد.
+
 ## [0.5.3] — 2026-08-29 — CocoaPods متطلَّب، لا وعدٌ يقف على كلمة سرّ خفيّة
 
 `expo prebuild` نجح وولّد `mobile/ios/` كاملاً، ثم وقف السكربت صامتاً. السبب

@@ -36,6 +36,30 @@ const autoLockMinutes = Number(process.env.EXPO_PUBLIC_AUTO_LOCK_MINUTES ?? '2')
 /** تفعيل بيانات المعاينة صراحةً (وسوم «معاينة» تظهر في الواجهة). */
 const previewData = process.env.EXPO_PUBLIC_PREVIEW_DATA === '1';
 
+/**
+ * الإشعارات الفورية — **معطّلة افتراضاً**، وتُفعَّل بـ`EXPO_PUBLIC_ENABLE_PUSH=1`.
+ *
+ * ## لماذا العكس هو الخطأ
+ *
+ * كانت مُعلَنة دائماً. فسقط التوقيع على جهاز المالكة برسالة صريحة:
+ *
+ *     Personal development teams do not support the Push Notifications
+ *     capability.
+ *
+ * الحساب المجاني (Personal Team) لا يصدر ملف تزويد يحمل استحقاق APNs. فكانت
+ * النتيجة أن التطبيق **لا يعمل على الجهاز أصلاً** بسبب ميزة لا تعمل هي
+ * الأخرى ولن تعمل قبل عضوية مدفوعة.
+ *
+ * والحذف اليدوي من Xcode لا يكفي: `expo prebuild --clean` يعيد توليد
+ * `ios/` من هذا الملف، فيعود العائق عند أول إعادة بناء. مكان الإصلاح هنا.
+ *
+ * وحين تُشترى العضوية ويُنشأ مفتاح APNs، يُصدَّر المتغيّر ويعود كل شيء بلا
+ * تغيير في الكود:
+ *
+ *     EXPO_PUBLIC_ENABLE_PUSH=1 ./scripts/ios_build_prep.sh
+ */
+const enablePush = process.env.EXPO_PUBLIC_ENABLE_PUSH === '1';
+
 const config: ExpoConfig = {
   name: 'Maather Trader',
   slug: 'maather-trader',
@@ -68,26 +92,35 @@ const config: ExpoConfig = {
       },
       // إشعارات صامتة غير مطلوبة: الإشعار **استشاري** ولا يُشغّل عملاً في
       // الخلفية. `remote-notification` وحدها، وبلا `fetch` ولا `processing`.
-      UIBackgroundModes: ['remote-notification'],
+      // ولا تُعلَن إن كانت الإشعارات معطّلة — وضعُ مفتاح خلفية بلا استحقاق
+      // يقابله يجعل الإعلان كذبةً على النظام.
+      ...(enablePush ? { UIBackgroundModes: ['remote-notification'] } : {}),
     },
     // قالب الاستحقاقات. **لم يُنشَأ أي App ID ولا مفتاح APNs بعد** —
     // القيمة `development` صالحة للبناء المحلي، وتتحوّل إلى `production`
     // عند أول رفع إلى TestFlight.
-    entitlements: {
-      'aps-environment': 'development',
-    },
+    ...(enablePush ? { entitlements: { 'aps-environment': 'development' } } : {}),
   },
   plugins: [
     'expo-router',
     // للحصول على **رمز الجهاز الأصلي** فقط. التسليم يتم من الخادم مباشرةً
     // إلى APNs، لا عبر خدمة ترحيل Expo.
-    [
-      'expo-notifications',
-      {
-        icon: './assets/icon.png',
-        color: '#3A0CA3',
-      },
-    ],
+    //
+    // مشروط أيضاً: هذا الملحق **يحقن `aps-environment` بنفسه** في
+    // الاستحقاقات. فحذف الاستحقاق من كتلة `ios` وحده لا يكفي — قياسٌ
+    // بـ`expo config --type introspect` أظهر أنه يعود من هنا.
+    ...(enablePush
+      ? ([
+          [
+            'expo-notifications',
+            {
+              icon: './assets/icon.png',
+              color: '#3A0CA3',
+            },
+          ],
+        ] as NonNullable<ExpoConfig['plugins']>)
+      : // يعمل **بعد** الجميع فيحذف ما حقنه الربط التلقائي. انظر الملف نفسه.
+        (['./plugins/with-push-disabled'] as NonNullable<ExpoConfig['plugins']>)),
     [
       'expo-local-authentication',
       {
