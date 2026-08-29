@@ -168,6 +168,19 @@ describe('إتمام التسجيل', () => {
     expect(result.reasonAr).not.toMatch(/401|http|fetch/i);
   });
 
+  it('**404 تُقال كما هي: الخادم قديم، لا الرمز منتهٍ**', async () => {
+    // قيل للمالكة «انتهى أو استُعمل» على رمز جديد تماماً، والحقيقة أن
+    // الخادم كان يعمل بنسخة سابقة لإضافة المسار. فولّدت رمزاً بعد رمز بلا فائدة.
+    const fetchImpl = jest.fn(async () => ({ ok: false, status: 404 }));
+    const result = await enrolDevice(valid(), 'identity', 'Mesa', {
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    expect(result.failure).toBe('ROUTE_MISSING');
+    expect(result.reasonAr).toContain('أعيدي تشغيله');
+    expect(result.reasonAr).not.toContain('انتهى');
+    expect(result.reasonAr).not.toMatch(/404|http/i);
+  });
+
   it('عطل الشبكة لا يُظهر عنواناً ولا نصّ استثناء', async () => {
     const fetchImpl = jest.fn(async () => {
       throw new Error('connect ECONNREFUSED 100.106.54.103:8000');

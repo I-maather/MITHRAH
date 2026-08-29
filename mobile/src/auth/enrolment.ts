@@ -66,6 +66,7 @@ export type EnrolmentFailure =
   | 'UNTRUSTED_BACKEND'
   | 'EXPIRED'
   | 'REJECTED'
+  | 'ROUTE_MISSING'
   | 'NETWORK';
 
 export interface EnrolmentResult {
@@ -214,6 +215,18 @@ export async function enrolDevice(
   }
 
   if (!response.ok) {
+    // **404 ليست رفضاً للرمز.** الخادم لا يعرف مسار التسجيل أصلاً — أي أنه
+    // يعمل بنسخة أقدم من التي أضافت المسار. وقول «انتهى أو استُعمل» هنا
+    // يوجّه المالكة إلى توليد رمز بعد رمز بلا فائدة. حدث ذلك فعلاً.
+    if (response.status === 404) {
+      return fail(
+        'ROUTE_MISSING',
+        'الخادم لا يعرف مسار التسجيل — يعمل بنسخة أقدم. أعيدي تشغيله ثم ولّدي رمزاً جديداً.',
+      );
+    }
+    if (response.status === 503) {
+      return fail('ROUTE_MISSING', 'طبقة الجوال غير مُهيّأة على الخادم. أعيدي تشغيله.');
+    }
     return fail(
       'REJECTED',
       'رفض الخادم هذا الرمز. غالباً انتهى أو استُعمل من قبل — ولّدي رمزاً جديداً.',

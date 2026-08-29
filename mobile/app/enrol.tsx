@@ -25,6 +25,15 @@ import { useTheme } from '@/theme';
  * وبلا قفل، يُرسَل التحدّي الواحد عشرات المرات: الأول ينجح، والبقية تُرفَض
  * ٤٠١ فتُعرَض للمالكة رسالة فشل فوق نجاح. القفل `handled` يمنع ذلك، وهو
  * `ref` لا `state` كي يُقرأ فوراً في نفس الإطار لا بعد إعادة التصيير.
+ *
+ * ## ولماذا لا يكفي `handled` وحده
+ *
+ * فتحُ القفل بعد الفشل — كي تُتاح محاولة أخرى — **يعيد فتح الباب على نفس
+ * الرمز الباقي أمام العدسة**. فيُرسَل مئات المرات ويتجمّد الجهاز. حدث ذلك
+ * فعلاً: 404 مكرّرة بلا نهاية في سجل الخادم.
+ *
+ * فيُحفَظ نصّ الرمز الذي رُفض ويُتجاهَل تماماً بعدها. ورمزٌ **جديد** يختلف
+ * نصّه فيُعالَج فوراً بلا لمسة — وهو ما تحتاجه المالكة بالضبط.
  */
 export default function EnrolScreen(): React.JSX.Element {
   const theme = useTheme();
@@ -36,9 +45,16 @@ export default function EnrolScreen(): React.JSX.Element {
   const [busy, setBusy] = useState(false);
   const [failureAr, setFailureAr] = useState<string | null>(null);
   const handled = useRef(false);
+  /** نصّ آخر رمز رُفض — لا يُعاد إرساله أبداً. */
+  const rejectedRaw = useRef<string | null>(null);
 
   const onScanned = async (raw: string): Promise<void> => {
     if (handled.current) {
+      return;
+    }
+    // رمزٌ رُفض لن يُقبل بإعادة إرساله: منتهياً كان أو مُستهلَكاً أو
+    // والخادم لا يعرف المسار. فيُتجاهَل بلا طلب شبكة.
+    if (rejectedRaw.current === raw) {
       return;
     }
     handled.current = true;
@@ -48,8 +64,9 @@ export default function EnrolScreen(): React.JSX.Element {
       const identity = await publicIdentity();
       const result = await enrolDevice(raw, identity, t.enrol.deviceName);
       if (!result.ok || result.session === undefined) {
+        rejectedRaw.current = raw;
         setFailureAr(result.reasonAr);
-        // يُسمح بمحاولة أخرى: الفشل هنا غالباً رمز منتهٍ، لا خطأ دائم.
+        // يُفتَح القفل لرمز **آخر**، لا لهذا الرمز — يمنعه `rejectedRaw`.
         handled.current = false;
         return;
       }
