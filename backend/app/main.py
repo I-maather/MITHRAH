@@ -6,6 +6,7 @@ FastAPI application. الواجهة تقرأ من هنا فقط.
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
 from decimal import Decimal
 from typing import Optional
 
@@ -31,6 +32,10 @@ from .brokers.capital.safety import LIVE_API_ENABLED
 from .contracts import Broker, StopKind
 from .discovery.capital_discovery import DISCOVERY_EPICS, EXECUTION_EPICS
 from .intelligence.pipeline import STAGE_NAME_AR, STAGE_ORDER
+from .mobile.routes import MobileRuntime, router as mobile_router, set_runtime
+from .mobile.security import MobileSecurityService
+from .mobile.state import build_mobile_state
+from .mobile.store import MobileStateStore
 from .profiles import (
     GLOBAL_ABSOLUTE_LOSS_BOUNDARY_USD,
     GLOBAL_GAP_SLIPPAGE_RESERVE_USD,
@@ -44,7 +49,7 @@ from .profiles import (
 )
 from .profiles.manager import SystemGuardState
 
-app = FastAPI(title="Maather Autonomous Trader", version="0.5.5")
+app = FastAPI(title="Maather Autonomous Trader", version="0.5.6")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
@@ -59,6 +64,26 @@ def system() -> SystemState:
     if _SYSTEM is None:
         _SYSTEM = build_system()
     return _SYSTEM
+
+
+# ---------------------------------------------------------------------------
+# مجال الجوال — الوصلة التي كانت مفقودة
+# ---------------------------------------------------------------------------
+#
+# `app/mobile/` كُتبت واختُبرت في 0.4.0 ثم **لم تُركَّب**. فلم يكن تحت
+# `/api/mobile/v1/` مسارٌ واحد، وكان التطبيق يعرض «لا جهاز مسجَّل» بحقّ.
+#
+# الحالة تُحفَظ على القرص لا في الذاكرة: خادم يُعاد تشغيله عند كل تحديث،
+# وحالةٌ في الذاكرة تعني إعادة مسح رمز QR بعد كل إعادة تشغيل.
+
+_MOBILE_STATE_PATH = Path(__file__).resolve().parents[2] / "data" / "mobile-state.json"
+
+mobile_runtime = MobileRuntime(
+    security=MobileSecurityService(store=MobileStateStore(_MOBILE_STATE_PATH)),
+    state_source=lambda: build_mobile_state(system()),
+)
+set_runtime(mobile_runtime)
+app.include_router(mobile_router)
 
 
 def _money(value: Decimal | None) -> str:

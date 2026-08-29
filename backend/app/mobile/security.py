@@ -33,7 +33,12 @@ import secrets as _secrets
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from typing import Callable, Optional
+from typing import Callable, Optional, TYPE_CHECKING
+
+from .store import _from_iso, _to_iso
+
+if TYPE_CHECKING:  # pragma: no cover - للنوع فقط
+    from .store import MobileStateStore
 
 #: عمر تحدّي التسجيل. قصير عمداً — رمز QR يُصوَّر بسهولة.
 ENROLLMENT_CHALLENGE_TTL = timedelta(minutes=2)
@@ -191,20 +196,144 @@ class AuditEntry:
 
 class MobileSecurityService:
     """
-    كل قرار أمني للجوال يمرّ من هنا. **التخزين في الذاكرة** في هذه المرحلة:
-    التسجيل غير مُفعَّل بعد، والاستمرارية تُضاف مع تفعيله.
+    كل قرار أمني للجوال يمرّ من هنا.
+
+    ## الاستمرارية
+
+    بلا `store` تبقى الحالة في الذاكرة — وهو ما تحتاجه الاختبارات، وما كان
+    عليه الحال قبل تفعيل التسجيل. ومع `store` تُحفَظ الأجهزة والرموز على
+    القرص وتُقرأ عند الإقلاع.
+
+    ولماذا يهمّ: خادم يُعاد تشغيله عند كل تحديث، وحالةٌ في الذاكرة تعني أن
+    الجوال يُلغى مع كل إعادة تشغيل فتُعاد عملية المسح. الاستمرارية هنا **شرط
+    صلاحية لا تحسين**.
+
+    **التحدّيات لا تُحفَظ عمداً**: عمرها دقيقتان، وإعادة التشغيل تُبطلها —
+    وهذا هو السلوك الصحيح لا نقص فيه.
     """
 
     def __init__(
-        self, *, clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc)
+        self, *, clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
+        store: "MobileStateStore | None" = None,
     ) -> None:
         self.clock = clock
+        self.store = store
         self._challenges: dict[str, EnrollmentChallenge] = {}
         self._devices: dict[str, RegisteredDevice] = {}
         self._tokens: dict[str, IssuedToken] = {}
         self._audit: list[AuditEntry] = []
         #: يمنع التفعيل قبل انقضاء التبريد — **على الخادم**.
         self._upgrade_requests: dict[str, datetime] = {}
+        if store is not None:
+            self._load()
+
+    # -- الاستمرارية -------------------------------------------------------
+
+    def _load(self) -> None:
+        assert self.store is not None
+        data = self.store.load()
+        for row in data["devices"]:
+            device = RegisteredDevice(
+                device_id=row["device_id"],
+                public_identity=row["public_identity"],
+                name=row["name"],
+                state=DeviceState(row["state"]),
+                enrolled_utc=_from_iso(row["enrolled_utc"]),
+                last_seen_utc=_from_iso(row.get("last_seen_utc")),
+                apns_token=row.get("apns_token"),
+                revoked_utc=_from_iso(row.get("revoked_utc")),
+                revocation_reason=row.get("revocation_reason", ""),
+            )
+            self._devices[device.device_id] = device
+        for row in data["tokens"]:
+            token = IssuedToken(
+                token=row["token"],
+                device_id=row["device_id"],
+                issued_utc=_from_iso(row["issued_utc"]),
+                expires_utc=_from_iso(row["expires_utc"]),
+                kind=row["kind"],
+                rotated_from=row.get("rotated_from"),
+                revoked=bool(row.get("revoked", False)),
+            )
+            self._tokens[token.token] = token
+        self._load_challenges(data.get("challenges", []))
+
+    def _load_challenges(self, rows: list[dict]) -> None:
+        for row in rows:
+            challenge = EnrollmentChallenge(
+                challenge_id=row["challenge_id"],
+                nonce=row["nonce"],
+                created_utc=_from_iso(row["created_utc"]),
+                expires_utc=_from_iso(row["expires_utc"]),
+                consumed=bool(row.get("consumed", False)),
+                consumed_by=row.get("consumed_by"),
+            )
+            self._challenges[challenge.challenge_id] = challenge
+
+    def _reload_challenges(self) -> None:
+        """
+        يُقرأ التحدّي من القرص قبل كل محاولة تسجيل.
+
+        أمرُ الاقتران عملية أخرى، فالتحدّي الذي أنشأته لا يوجد في ذاكرة هذه
+        العملية. وبلا هذه القراءة يفشل **كل** تسجيل بلا سبب ظاهر.
+        """
+        if self.store is None:
+            return
+        self._load_challenges(self.store.load().get("challenges", []))
+
+    def _persist(self) -> None:
+        """
+        يُستدعى بعد كل تغيير في الأجهزة أو الرموز.
+
+        الرموز **المنتهية والمُبطَلة تُطرح** عند الحفظ: لا فائدة من إبقاء
+        رمز لا يصلح، وإبقاؤه يوسّع ما يمكن أن يُسرَّب لو قُرئ الملف.
+        """
+        if self.store is None:
+            return
+        now = self.clock()
+        self.store.save(
+            devices=[
+                {
+                    "device_id": d.device_id,
+                    "public_identity": d.public_identity,
+                    "name": d.name,
+                    "state": d.state.value,
+                    "enrolled_utc": _to_iso(d.enrolled_utc),
+                    "last_seen_utc": _to_iso(d.last_seen_utc),
+                    "apns_token": d.apns_token,
+                    "revoked_utc": _to_iso(d.revoked_utc),
+                    "revocation_reason": d.revocation_reason,
+                }
+                for d in self._devices.values()
+            ],
+            challenges=[
+                {
+                    "challenge_id": c.challenge_id,
+                    "nonce": c.nonce,
+                    "created_utc": _to_iso(c.created_utc),
+                    "expires_utc": _to_iso(c.expires_utc),
+                    "consumed": c.consumed,
+                    "consumed_by": c.consumed_by,
+                }
+                for c in self._challenges.values()
+                # المُستهلَك والمنتهي لا يُحفظان: لا قيمة لهما، وحفظُهما
+                # يُراكم ملفاً ينمو بلا سبب.
+                if not c.consumed and c.expires_utc > now
+            ],
+            tokens=[
+                {
+                    "token": t.token,
+                    "device_id": t.device_id,
+                    "issued_utc": _to_iso(t.issued_utc),
+                    "expires_utc": _to_iso(t.expires_utc),
+                    "kind": t.kind,
+                    "rotated_from": t.rotated_from,
+                    "revoked": t.revoked,
+                }
+                for t in self._tokens.values()
+                if not t.revoked and t.expires_utc > now
+            ],
+        )
 
     # -- التدقيق ----------------------------------------------------------
 
@@ -234,6 +363,7 @@ class MobileSecurityService:
             detail_ar=f"تحدّي تسجيل صالح {int(ENROLLMENT_CHALLENGE_TTL.total_seconds())} ثانية.",
             success=True,
         )
+        self._persist()
         return challenge
 
     def complete_enrollment(
@@ -243,6 +373,7 @@ class MobileSecurityService:
         يستهلك التحدّي **مرة واحدة**. الاستعمال الثاني يفشل حتى لو كان قبل
         انتهاء المهلة — وهذا هو الفرق بين «قصير العمر» و«لمرة واحدة».
         """
+        self._reload_challenges()
         now = self.clock()
         challenge = self._challenges.get(challenge_id)
         if challenge is None or not challenge.is_valid(now):
@@ -266,6 +397,7 @@ class MobileSecurityService:
             "DEVICE_ENROLLED", device_id=device.device_id,
             detail_ar=f"جهاز «{device.name}» سُجِّل.", success=True,
         )
+        self._persist()
         return device
 
     def revoke_device(self, device_id: str, *, reason: str = "") -> bool:
@@ -285,6 +417,7 @@ class MobileSecurityService:
             detail_ar=f"أُلغي الجهاز. السبب: {reason or '—'}. كل رموزه أُبطلت.",
             success=True,
         )
+        self._persist()
         return True
 
     def devices(self) -> tuple[RegisteredDevice, ...]:
@@ -305,6 +438,7 @@ class MobileSecurityService:
         )
         self._tokens[access.token] = access
         self._tokens[refresh.token] = refresh
+        self._persist()
         return access, refresh
 
     def rotate_refresh(self, refresh_token: str) -> Optional[tuple[IssuedToken, IssuedToken]]:
@@ -356,6 +490,7 @@ class MobileSecurityService:
             detail_ar="سُجِّل رمز إشعارات جديد (لا يُعرض ولا يُسجَّل نصّه).",
             success=True,
         )
+        self._persist()
         return True
 
     # -- رفع المخاطرة ------------------------------------------------------

@@ -66,13 +66,36 @@ def test_all_four_modes_are_published_with_their_limits(client):
     assert r["economic_guards_enforced"] is True
 
 
+
+def _all_paths(application) -> set[str]:
+    """كل مسار في التطبيق، بما في ذلك ما تحت الموجّهات المُضمَّنة."""
+    found: set[str] = set()
+    pending = list(application.routes)
+    while pending:
+        route = pending.pop()
+        path = getattr(route, "path", None)
+        if path is not None:
+            found.add(path)
+        nested = getattr(route, "routes", None)
+        if nested is None:
+            inner = getattr(route, "original_router", None)
+            nested = getattr(inner, "routes", None)
+        if nested:
+            pending.extend(nested)
+    return found
+
 def test_risk_constitution_is_not_editable_from_the_api(client):
     r = client.get("/api/risk").json()
     assert r["editable_from_ui"] is False
     assert r["constitution_fingerprint"]
     # لا يوجد أي endpoint للكتابة على الحدود
-    routes = {route.path for route in app.routes}
-    assert not any("limits" in p and p != "/api/risk" for p in routes)
+    #
+    # يُمشى على الموجّهات المُضمَّنة أيضاً: `include_router` يضع كائناً بلا
+    # `.path`، فقراءةُ المستوى الأول وحده كانت ستتجاهل مجالاً كاملاً —
+    # وهذا بالضبط ما يجب ألّا يفلت من هذا الفحص.
+    assert not any(
+        "limits" in path and path != "/api/risk" for path in _all_paths(app)
+    )
 
 
 def test_kill_switch_requires_exact_phrase(client):
