@@ -43,10 +43,20 @@ else
   bad "بناء iOS يتطلب macOS. النظام الحالي: $(uname -s)"
 fi
 
-if command -v xcodebuild >/dev/null 2>&1; then
-  ok "Xcode: $(xcodebuild -version 2>/dev/null | head -1)"
+# العقبة الأشهر: Xcode مثبَّت لكن `xcode-select` يشير إلى CommandLineTools،
+# فيفشل البناء برسالة غامضة عن SDK مفقود. يُفحَص المسار لا وجود الأمر وحده.
+DEV_DIR="$(xcode-select -p 2>/dev/null || true)"
+if ! command -v xcodebuild >/dev/null 2>&1; then
+  bad "Xcode غير مثبَّت — نزّليه من App Store"
+elif [ -z "$DEV_DIR" ] || case "$DEV_DIR" in *CommandLineTools*) true ;; *) false ;; esac; then
+  bad "xcode-select يشير إلى «$DEV_DIR» بدل Xcode. صحّحيه بـ:"
+  printf '     sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer\n'
+elif ! xcodebuild -version >/dev/null 2>&1; then
+  bad "Xcode مثبَّت لكنه لم يُشغَّل بعد. افتحيه مرة واقبلي الشروط، أو شغّلي:"
+  printf '     sudo xcodebuild -license accept\n'
 else
-  bad "Xcode غير مثبَّت — نزّليه من App Store ثم شغّلي: sudo xcode-select --switch /Applications/Xcode.app"
+  ok "Xcode: $(xcodebuild -version 2>/dev/null | head -1)"
+  ok "المسار: $DEV_DIR"
 fi
 
 if command -v node >/dev/null 2>&1; then
@@ -133,17 +143,30 @@ if [ -f "$MOBILE/PrivacyInfo.xcprivacy.template" ] && [ -d "$MOBILE/ios" ]; then
   fi
 fi
 
+WORKSPACE="$(ls -d "$MOBILE"/ios/*.xcworkspace 2>/dev/null | head -1)"
+
 say ''
 say '══════════════════════════════════════════════'
-say '✅ المشروع الأصلي جاهز في mobile/ios/'
+if [ -n "$WORKSPACE" ]; then
+  ok "المشروع الأصلي جاهز"
+  say ''
+  say '  افتحيه بهذا الأمر بالضبط:'
+  printf '\n     open "%s"\n\n' "$WORKSPACE"
+else
+  bad "لم يُعثر على ملف .xcworkspace بعد prebuild"
+fi
+say 'ثم داخل Xcode:'
 say ''
-say 'الخطوة التالية — **بيدكِ أنتِ**:'
+say '  1. من الشريط الجانبي اختاري المشروع (الأيقونة الزرقاء بالأعلى)'
+say '  2. تبويب Signing & Capabilities'
+say '  3. فعّلي Automatically manage signing'
+say '  4. Team ⇐ اختاري اسمكِ (Personal Team)'
+say '     إن شكا من تكرار Bundle ID، أضيفي لاحقة: com.maather.autonomoustrader.<اسمك>'
+say '  5. وصّلي الآيفون بالكابل، اختاريه من قائمة الأجهزة بالأعلى'
+say '  6. اضغطي ▶ Run'
 say ''
-say '  1. افتحي المشروع:'
-say '       open mobile/ios/*.xcworkspace'
-say '  2. في Xcode: Signing & Capabilities ⇐ اختاري فريقكِ'
-say '  3. أضيفي Push Notifications إن لم تظهر تلقائياً'
-say '  4. وصّلي الآيفون واضغطي Run لبناء تطوير'
+say '  وأول مرة على الآيفون:'
+say '    الإعدادات ← عام ← VPN وإدارة الجهاز ← وثّقي المطوّر'
 say ''
 say 'الرفع إلى TestFlight يحتاج عضوية Apple Developer المدفوعة،'
 say 'وتسجيل دخول بهويتكِ، وموافقة على اتفاقيات قانونية.'
