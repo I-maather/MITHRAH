@@ -399,25 +399,62 @@ def test_expired_tokens_are_not_written_to_disk(tmp_path):
 # 8. مصدر الحالة لا يكذب بالفراغ
 # ---------------------------------------------------------------------------
 
-def test_unwired_sections_say_so_instead_of_returning_empty():
+def test_sections_without_data_still_state_a_reason_in_arabic():
     """
     القاموس الفارغ يُقرأ في الواجهة «لا يوجد شيء»، والفرق بين «لا صفقات»
     و«لم نسأل» هو الفرق بين معلومة وجهل.
+
+    وقد تغيّرت صيغة القول لا مبدؤه: كان لكل قسم `available/reason_ar` من
+    ابتكاري، **وهو ليس عقد التطبيق**. فصار كل قسم يقول سببه بالحقل الذي
+    يعرضه التطبيق فعلاً.
     """
     state = build_mobile_state(system())
-    for section in ("decision", "intelligence", "position", "performance", "providers"):
-        assert state[section]["available"] is False
-        assert state[section]["reason_ar"], section
+
+    # القسم الوحيد الذي يحمل `available` في عقد العميل.
+    assert state["intelligence"]["available"] is False
+    assert state["intelligence"]["reason_ar"]
+
+    # والبقية تقول سببها في الحقل الذي تعرضه الشاشة.
+    assert state["status"]["no_trade_reason_ar"]
+    assert state["decision"]["explanation_ar"]
+    assert state["performance"]["insufficient_sample_note_ar"]
+    assert state["position"]["notes_ar"]
+    assert state["providers"]["missing_mandatory"]
 
 
-def test_status_and_risk_are_wired():
+def test_measured_zero_is_never_reported_as_a_result():
+    """
+    **الفراغ ليس صفراً.** لا صفقة واحدة، فلا نسبة ربح ولا توقّع — و`0`
+    هنا كذبة أخطر من `null` لأنها تُقرأ نتيجةً قيست.
+    """
+    performance = build_mobile_state(system())["performance"]
+    assert performance["sample_size"] == 0
+    assert performance["sufficient_sample"] is False
+    for inferred in ("win_rate", "average_r", "expectancy", "max_drawdown"):
+        assert performance[inferred] is None, inferred
+
+
+def test_wired_sections_carry_real_values_not_placeholders():
     state = build_mobile_state(system())
-    assert state["status"]["available"] is True
-    assert state["risk"]["available"] is True
-    assert state["profiles"]["available"] is True
+
+    # الشكل الذي انهار التطبيق بسببه: كائن لا قيمة مفردة.
+    assert isinstance(state["status"]["kill_switch"], dict)
+    assert state["status"]["kill_switch"]["active"] in (True, False)
+    assert state["status"]["broker"]["name"]
+
+    assert state["risk"]["currency"] == "USD"
+    assert state["risk"]["max_risk_per_trade"] is not None
+    assert state["risk"]["absolute_loss_boundary"] is not None
+
+    assert state["profiles"]["effective_profile"]
+    assert len(state["profiles"]["available_profiles"]) == 3
 
 
 def test_state_never_authorises_execution():
     state = build_mobile_state(system())
-    assert state["status"]["authorises_execution"] is False
-    assert state["profiles"]["changeable_from_mobile"] is False
+    # الثابت يُرسَل في الغلاف عند كل استجابة، وفي القرار صراحةً.
+    assert state["decision"]["authorises_execution"] is False
+    # والحدود لا تُعدَّل من الجهاز، والملف لا يُرقّى منه.
+    assert state["risk"]["editable_from_device"] is False
+    assert state["profiles"]["upgrade_requires_server"] is True
+    assert state["status"]["broker"]["execution_locked"] is True

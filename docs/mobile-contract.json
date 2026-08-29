@@ -1,0 +1,353 @@
+{
+  "__comment_ar__": "الشكل المرجعي لعقد الجوال. يُفحَص من الطرفين: الخادم في backend/tests/test_mobile_contract.py، والتطبيق في mobile/__tests__/contract.test.ts. تغييرُ طرفٍ وحده يُسقط اختباراً.",
+  "__non_nullable_paths__": [
+    "status.system_state",
+    "status.locally_paused",
+    "status.kill_switch",
+    "status.kill_switch.active",
+    "status.broker",
+    "status.broker.name",
+    "status.broker.connected",
+    "status.broker.is_demo",
+    "status.broker.execution_locked",
+    "status.market",
+    "status.market.is_open",
+    "status.market.reason_ar",
+    "status.data_completeness",
+    "status.data_completeness.complete",
+    "status.data_completeness.missing",
+    "intelligence.available",
+    "intelligence.stages",
+    "intelligence.missing_providers",
+    "intelligence.missing_data",
+    "decision.decision",
+    "decision.blocking_reasons_ar",
+    "decision.stages",
+    "decision.authorises_execution",
+    "risk.currency",
+    "risk.two_loss_lock_active",
+    "risk.editable_from_device",
+    "profiles.available_profiles",
+    "profiles.upgrade_requires_server",
+    "profiles.available_profiles[].profile",
+    "profiles.available_profiles[].name_ar",
+    "profiles.available_profiles[].description_ar",
+    "profiles.available_profiles[].risk_rank",
+    "profiles.available_profiles[].limits",
+    "position.has_position",
+    "position.protection_held_by_broker",
+    "position.notes_ar",
+    "performance.sample_size",
+    "performance.sufficient_sample",
+    "performance.calibration",
+    "providers.providers",
+    "providers.missing",
+    "providers.missing_mandatory",
+    "providers.live_eligible_by_providers",
+    "providers.providers[].kind",
+    "providers.providers[].name",
+    "providers.providers[].configured",
+    "providers.providers[].mandatory",
+    "providers.providers[].note_ar",
+    "trades.trades",
+    "notifications.notifications"
+  ],
+  "status": {
+    "broker": {
+      "account_masked": "string",
+      "connected": "boolean",
+      "execution_locked": "boolean",
+      "is_demo": "boolean",
+      "name": "string"
+    },
+    "data_completeness": {
+      "complete": "boolean",
+      "missing": [
+        "string"
+      ],
+      "ratio": "number"
+    },
+    "kill_switch": {
+      "active": "boolean",
+      "at_utc": "nullable",
+      "reason_ar": "nullable",
+      "trigger": "nullable"
+    },
+    "last_refresh_utc": "string",
+    "locally_paused": "boolean",
+    "market": {
+      "is_open": "boolean",
+      "next_close_utc": "nullable",
+      "next_open_utc": "string",
+      "reason_ar": "string"
+    },
+    "no_trade_reason_ar": "string",
+    "strategy_state": {
+      "key": "string",
+      "live_eligible": "boolean",
+      "state": "string",
+      "title_ar": "string"
+    },
+    "system_state": "string",
+    "system_state_ar": "string",
+    "upcoming_event": {
+      "at_utc": "string",
+      "blocks_trading": "boolean",
+      "impact_ar": "string",
+      "title_ar": "string"
+    }
+  },
+  "intelligence": {
+    "available": "boolean",
+    "contradictions": {
+      "count": "number",
+      "has_unresolved_material": "boolean",
+      "items": [
+        "unknown"
+      ],
+      "total_penalty": "number"
+    },
+    "decided_at_utc": "string",
+    "explanation_ar": "string",
+    "missing_data": [
+      "string"
+    ],
+    "missing_providers": [
+      "string"
+    ],
+    "reason_ar": "nullable",
+    "regime": {
+      "name_ar": "string",
+      "reason_ar": "string",
+      "regime": "string",
+      "tradable": "boolean"
+    },
+    "score": {
+      "has_mandatory_failure": "boolean",
+      "lines": [
+        {
+          "awarded": "number",
+          "category": "string",
+          "category_ar": "string",
+          "maximum": "number",
+          "reason_ar": "string",
+          "source_ar": "string"
+        }
+      ],
+      "mandatory_failures": [
+        {
+          "code": "string",
+          "reason_ar": "string"
+        }
+      ],
+      "max": "number",
+      "total": "number"
+    },
+    "snapshot_id": "string",
+    "stages": [
+      {
+        "detail_ar": "string",
+        "mandatory": "boolean",
+        "name_ar": "string",
+        "passed": "boolean",
+        "stage": "string"
+      }
+    ],
+    "timeframes": {
+      "entry_trend": "string",
+      "incomplete": [
+        "string"
+      ],
+      "primary_regime_trend": "string",
+      "structural_trend": "string"
+    }
+  },
+  "decision": {
+    "authorises_execution": "boolean",
+    "blocking_reasons_ar": [
+      "string"
+    ],
+    "decided_at_utc": "string",
+    "decision": "string",
+    "decision_ar": "string",
+    "explanation_ar": "string",
+    "reason_code": "string",
+    "score": {
+      "max": "number",
+      "total": "number"
+    },
+    "snapshot_id": "string",
+    "stages": [
+      {
+        "detail_ar": "string",
+        "mandatory": "boolean",
+        "name_ar": "string",
+        "passed": "boolean",
+        "stage": "string"
+      }
+    ]
+  },
+  "risk": {
+    "absolute_loss_boundary": "string",
+    "consecutive_losses": "number",
+    "currency": "string",
+    "distance_to_kill_switch": "string",
+    "editable_from_device": "boolean",
+    "entry_orders_today": "number",
+    "equity_used": "string",
+    "max_daily_loss": "string",
+    "max_entry_orders_per_day": "number",
+    "max_open_positions": "number",
+    "max_risk_per_trade": "string",
+    "max_weekly_loss": "string",
+    "open_positions": "number",
+    "operational_drawdown_stop": "string",
+    "profile": "string",
+    "profile_name_ar": "string",
+    "risk_remaining_today": "string",
+    "risk_remaining_week": "string",
+    "risk_used_today": "string",
+    "risk_used_week": "string",
+    "two_loss_lock_active": "boolean"
+  },
+  "profiles": {
+    "available_profiles": [
+      {
+        "description_ar": "string",
+        "limits": {
+          "absolute_loss_boundary": "string",
+          "allow_overnight": "boolean",
+          "allow_weekend_hold": "boolean",
+          "max_daily_loss": "string",
+          "max_entry_orders_per_day": "number",
+          "max_open_positions": "number",
+          "max_risk_per_trade": "string",
+          "max_weekly_loss": "string",
+          "min_net_reward_risk": "string",
+          "min_quality_score": "number",
+          "operational_drawdown_stop": "string"
+        },
+        "name_ar": "string",
+        "profile": "string",
+        "risk_rank": "number"
+      }
+    ],
+    "change_blocked_reason_ar": "string",
+    "cooling_remaining_seconds": "nullable",
+    "effective_name_ar": "string",
+    "effective_profile": "string",
+    "fingerprint": "string",
+    "pending_available_at_utc": "nullable",
+    "pending_profile": "nullable",
+    "risk_level_ar": "string",
+    "selected_name_ar": "string",
+    "selected_profile": "string",
+    "upgrade_requires_server": "boolean"
+  },
+  "position": {
+    "current_price": "nullable",
+    "direction_ar": "nullable",
+    "entry_price": "nullable",
+    "has_position": "boolean",
+    "instrument": "nullable",
+    "instrument_ar": "nullable",
+    "notes_ar": [
+      "string"
+    ],
+    "notional_display": "nullable",
+    "opened_utc": "nullable",
+    "protection_held_by_broker": "boolean",
+    "risk_at_stop": "nullable",
+    "size_display": "nullable",
+    "stop_price": "nullable",
+    "strategy_ar": "nullable",
+    "take_profit_price": "nullable",
+    "unrealised_pnl": "nullable",
+    "unrealised_pnl_sign": "nullable"
+  },
+  "trades": {
+    "trades": [
+      {
+        "closed_utc": "string",
+        "direction_ar": "string",
+        "entry_price": "string",
+        "exit_price": "string",
+        "exit_reason_ar": "string",
+        "id": "string",
+        "instrument": "string",
+        "instrument_ar": "string",
+        "opened_utc": "string",
+        "outcome_ar": "string",
+        "realised_pnl": "string",
+        "realised_pnl_sign": "string",
+        "strategy_ar": "string"
+      }
+    ]
+  },
+  "performance": {
+    "average_r": "nullable",
+    "calibration": [
+      {
+        "band_ar": "string",
+        "observed": "nullable",
+        "predicted": "number",
+        "sample_size": "number",
+        "sufficient": "boolean"
+      }
+    ],
+    "expectancy": "nullable",
+    "insufficient_sample_note_ar": "string",
+    "losses": "number",
+    "max_drawdown": "string",
+    "period_end_utc": "string",
+    "period_start_utc": "string",
+    "realised_pnl_total": "string",
+    "sample_size": "number",
+    "sufficient_sample": "boolean",
+    "win_rate": "nullable",
+    "wins": "number"
+  },
+  "providers": {
+    "live_eligible_by_providers": "boolean",
+    "missing": [
+      "string"
+    ],
+    "missing_mandatory": [
+      "string"
+    ],
+    "providers": [
+      {
+        "configured": "boolean",
+        "healthy": "nullable",
+        "kind": "string",
+        "last_success_utc": "nullable",
+        "mandatory": "boolean",
+        "name": "string",
+        "name_ar": "string",
+        "note_ar": "string"
+      }
+    ]
+  },
+  "notifications": {
+    "notifications": [
+      {
+        "created_utc": "string",
+        "deep_link": "string",
+        "in_app_detail_ar": "string",
+        "read": "boolean",
+        "type": "string"
+      }
+    ]
+  },
+  "audit": {
+    "entries": [
+      {
+        "action": "string",
+        "at_utc": "string",
+        "detail_ar": "string",
+        "device_id": "string",
+        "success": "boolean"
+      }
+    ]
+  }
+}

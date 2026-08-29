@@ -6,7 +6,7 @@ import { Slot, useRouter } from 'expo-router';
 import * as Linking from 'expo-linking';
 
 import { SessionProvider, useSession } from '@/auth/SessionProvider';
-import { PrivacyVeil, Text } from '@/components';
+import { CrashGuard, PrivacyVeil, Text } from '@/components';
 import { applyRtl, rtlState } from '@/i18n';
 import { ThemeProvider, useTheme } from '@/theme';
 import { resolveDeepLink } from '@/utils/deepLinks';
@@ -91,12 +91,16 @@ export function AppShell(): React.JSX.Element {
 
 export default function RootLayout(): React.JSX.Element {
   return (
-    <ThemeProvider>
-      <SafeAreaProvider>
-        <SessionProvider>
-          <AppShell />
-        </SessionProvider>
-      </SafeAreaProvider>
-    </ThemeProvider>
+    // **الحارس فوق كل شيء** — فوق السمة والجلسة معاً. لو انهار أيٌّ منهما
+    // ظهرت رسالة عربية بدل شاشة سوداء صمّاء. وقد ظهرت الشاشة السوداء فعلاً.
+    <CrashGuard>
+      <ThemeProvider>
+        <SafeAreaProvider>
+          <SessionProvider>
+            <AppShell />
+          </SessionProvider>
+        </SafeAreaProvider>
+      </ThemeProvider>
+    </CrashGuard>
   );
 }
