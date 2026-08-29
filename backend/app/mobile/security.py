@@ -40,6 +40,10 @@ from .store import _from_iso, _to_iso
 if TYPE_CHECKING:  # pragma: no cover - للنوع فقط
     from .store import MobileStateStore
 
+#: إصدار حمولة رمز QR. رُفع إلى 2 حين ضُغطت الحمولة كي يصير الرمز قابلاً
+#: للمسح — الإصدار 1 كان يُنتج رمزاً أكبر من عرض الطرفية.
+QR_PAYLOAD_VERSION = 2
+
 #: عمر تحدّي التسجيل. قصير عمداً — رمز QR يُصوَّر بسهولة.
 ENROLLMENT_CHALLENGE_TTL = timedelta(minutes=2)
 #: عمر رمز الوصول. قصير كي يقلّ أثر تسريبه.
@@ -116,16 +120,34 @@ class EnrollmentChallenge:
 
     def qr_payload(self, *, backend_url: str) -> dict:
         """
-        محتوى رمز QR. يُفحَص في الاختبارات أنه **لا يحتوي أي اسم من
-        `NEVER_ON_DEVICE`** ولا أي قيمة تشبه مفتاحاً.
+        محتوى رمز QR — **مضغوط عمداً**.
+
+        ## لماذا الضغط ليس تجميلاً
+
+        النسخة الأولى كانت 216 محرفاً، فأنتجت رمزاً من الإصدار 11 بعرض 69
+        وحدة. ورسمُه في الطرفية يتجاوز عرض الشاشة فيلتفّ السطر، والرمز
+        الملتفّ **لا يُمسح إطلاقاً**. جرّبته المالكة فلم تستطع.
+
+            216 محرفاً ⇒ إصدار 11 ⇒ 69 وحدة ⇒ لا يُمسح
+             98 محرفاً ⇒ إصدار  5 ⇒ 45 وحدة ⇒ يُمسح
+
+        ما حُذف ولماذا:
+
+        * **`nonce`** — كان 32 محرفاً ولا يُفحَص في أي مكان. التحدّي يُعرَّف
+          بمعرّفه، والحماية من إعادة الاستعمال بالاستهلاك لا بقيمة عشوائية
+          إضافية. حقلٌ يُرسَل ولا يُقرأ ليس أماناً، هو حجم.
+        * **`expires_utc`** بصيغة ISO — 32 محرفاً صارت 10 بثوانٍ منذ Epoch.
+        * **`contains_secret`** — استُبدل بحارس أقوى وبلا تكلفة: العميل
+          يرفض أي مفتاح **خارج** المفاتيح الأربعة المعروفة. فحمولةٌ تُهرّب
+          سرّاً في حقل إضافي تُرفَض، بدل أن نأمل أنها ستعترف.
+
+        والمفاتيح مختصرة: `v` الإصدار · `b` الخادم · `c` التحدّي · `e` الانتهاء.
         """
         return {
-            "v": 1,
-            "backend": backend_url,
-            "challenge_id": self.challenge_id,
-            "nonce": self.nonce,
-            "expires_utc": self.expires_utc.isoformat(),
-            "contains_secret": False,
+            "v": QR_PAYLOAD_VERSION,
+            "b": backend_url,
+            "c": self.challenge_id,
+            "e": int(self.expires_utc.timestamp()),
         }
 
 
@@ -532,7 +554,7 @@ def constant_time_equals(a: str, b: str) -> bool:
 
 
 __all__ = [
-    "ENROLLMENT_CHALLENGE_TTL", "ACCESS_TOKEN_TTL", "REFRESH_TOKEN_TTL",
+    "QR_PAYLOAD_VERSION", "ENROLLMENT_CHALLENGE_TTL", "ACCESS_TOKEN_TTL", "REFRESH_TOKEN_TTL",
     "PROFILE_UPGRADE_COOLING", "MobilePermission", "GRANTED_PERMISSIONS",
     "FORBIDDEN_MOBILE_ACTIONS", "NEVER_ON_DEVICE", "DeviceState",
     "EnrollmentChallenge", "RegisteredDevice", "IssuedToken", "AuditEntry",

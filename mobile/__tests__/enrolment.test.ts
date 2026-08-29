@@ -12,18 +12,11 @@ import { enrolDevice, parseEnrolmentPayload } from '@/auth/enrolment';
  * طلب شبكة.
  */
 
-const future = (): string => new Date(Date.now() + 90_000).toISOString();
+/** ثوانٍ منذ Epoch — الصيغة المضغوطة. */
+const future = (): number => Math.floor((Date.now() + 90_000) / 1000);
 
 const valid = (over: Record<string, unknown> = {}): string =>
-  JSON.stringify({
-    v: 1,
-    backend: API_BASE_URL,
-    challenge_id: 'CHALLENGE',
-    nonce: 'NONCE-VALUE',
-    expires_utc: future(),
-    contains_secret: false,
-    ...over,
-  });
+  JSON.stringify({ v: 2, b: API_BASE_URL, c: 'CHALLENGE', e: future(), ...over });
 
 describe('فحص حمولة الاقتران قبل أي طلب', () => {
   it('يقبل حمولة سليمة تشير إلى الخادم المُجمَّع', () => {
@@ -32,7 +25,7 @@ describe('فحص حمولة الاقتران قبل أي طلب', () => {
   });
 
   it('**يرفض رمزاً يشير إلى خادم آخر**', () => {
-    const result = parseEnrolmentPayload(valid({ backend: 'https://evil.example' }));
+    const result = parseEnrolmentPayload(valid({ b: 'https://evil.example' }));
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.result.failure).toBe('BACKEND_MISMATCH');
@@ -40,23 +33,34 @@ describe('فحص حمولة الاقتران قبل أي طلب', () => {
   });
 
   it('يرفض عنواناً غير مُعمّى خارج الشبكات الخاصة', () => {
-    const result = parseEnrolmentPayload(valid({ backend: 'http://evil.example' }));
+    const result = parseEnrolmentPayload(valid({ b: 'http://evil.example' }));
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.result.failure).toBe('UNTRUSTED_BACKEND');
     }
   });
 
-  it('يرفض رمزاً يقرّ بحمل سرّ', () => {
-    const result = parseEnrolmentPayload(valid({ contains_secret: true }));
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.result.failure).toBe('CLAIMS_SECRET');
+  it('**يرفض أي حقل زائد** — وهو المكان الذي يُهرَّب فيه محتوى', () => {
+    for (const extra of [
+      { contains_secret: true },
+      { CAPITAL_API_KEY: 'x' },
+      { note: 'شيء ما' },
+    ]) {
+      const result = parseEnrolmentPayload(valid(extra));
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.result.failure).toBe('UNEXPECTED_FIELD');
+      }
     }
   });
 
+  it('الحمولة صغيرة بما يكفي لرمز يُمسح', () => {
+    // 216 محرفاً كانت تُنتج إصدار 11 بعرض 69 وحدة فلا يُمسح من الطرفية.
+    expect(valid().length).toBeLessThan(140);
+  });
+
   it('يرفض إصداراً غير معروف بدل أن يخمّن', () => {
-    const result = parseEnrolmentPayload(valid({ v: 2 }));
+    const result = parseEnrolmentPayload(valid({ v: 9 }));
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.result.failure).toBe('UNSUPPORTED_VERSION');
@@ -64,7 +68,7 @@ describe('فحص حمولة الاقتران قبل أي طلب', () => {
   });
 
   it('يرفض رمزاً منتهياً', () => {
-    const stale = valid({ expires_utc: new Date(Date.now() - 1000).toISOString() });
+    const stale = valid({ e: Math.floor((Date.now() - 1000) / 1000) });
     const result = parseEnrolmentPayload(stale);
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -75,15 +79,15 @@ describe('فحص حمولة الاقتران قبل أي طلب', () => {
   it.each([
     ['نص ليس JSON', 'مجرّد نص'],
     ['JSON ليس كائناً', '[1,2,3]'],
-    ['بلا معرّف تحدٍّ', JSON.stringify({ v: 1, backend: API_BASE_URL, nonce: 'N' })],
-    ['معرّف تحدٍّ فارغ', valid({ challenge_id: '' })],
-    ['وقت انتهاء غير مفهوم', valid({ expires_utc: 'ليس تاريخاً' })],
+    ['بلا معرّف تحدٍّ', JSON.stringify({ v: 2, b: API_BASE_URL, e: 1 })],
+    ['معرّف تحدٍّ فارغ', valid({ c: '' })],
+    ['وقت انتهاء غير مفهوم', valid({ e: 'ليس رقماً' })],
   ])('يرفض %s', (_label, raw) => {
     expect(parseEnrolmentPayload(raw).ok).toBe(false);
   });
 
   it('لا يتعثّر على شرطة مائلة زائدة في العنوان', () => {
-    expect(parseEnrolmentPayload(valid({ backend: `${API_BASE_URL}/` })).ok).toBe(true);
+    expect(parseEnrolmentPayload(valid({ b: `${API_BASE_URL}/` })).ok).toBe(true);
   });
 });
 
@@ -91,7 +95,7 @@ describe('إتمام التسجيل', () => {
   it('لا يُرسل أي طلب إن سقط الفحص', async () => {
     const fetchImpl = jest.fn();
     const result = await enrolDevice(
-      valid({ backend: 'https://evil.example' }), 'identity', 'Mesa',
+      valid({ b: 'https://evil.example' }), 'identity', 'Mesa',
       { fetchImpl: fetchImpl as unknown as typeof fetch },
     );
     expect(result.ok).toBe(false);

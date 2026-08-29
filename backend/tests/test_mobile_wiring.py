@@ -266,25 +266,49 @@ def test_no_secret_name_appears_in_any_response(wired, route):
 def test_qr_payload_carries_no_secret(wired):
     _, service, _ = wired
     challenge = service.create_enrollment_challenge()
-    payload = challenge.qr_payload(backend_url="http://100.64.0.1:8000")
-    assert payload["contains_secret"] is False
+    payload = challenge.qr_payload(backend_url="https://host.example.ts.net")
+    assert set(payload) == {"v", "b", "c", "e"}
     assert_payload_carries_no_secret(payload)
     blob = json.dumps(payload, ensure_ascii=False)
     for name in NEVER_ON_DEVICE:
         assert name not in blob
 
 
+def test_qr_payload_is_small_enough_to_scan(wired):
+    """
+    الحمولة الأولى كانت 216 محرفاً ⇒ رمز إصدار 11 بعرض 69 وحدة ⇒ يتجاوز
+    عرض الطرفية فيلتفّ ⇒ **لا يُمسح**. جرّبته المالكة فلم تستطع.
+
+    الحدّ هنا ليس تفضيلاً جمالياً: فوقه يصير الرمز غير قابل للاستعمال.
+    """
+    _, service, _ = wired
+    challenge = service.create_enrollment_challenge()
+    payload = challenge.qr_payload(backend_url="https://maathers-macbook-pro.taildd422e.ts.net")
+    text = json.dumps(payload, separators=(",", ":"))
+    assert len(text) < 140, f"الحمولة {len(text)} محرفاً — الرمز سيكبر عن الشاشة"
+
+
+def test_pairing_guard_rejects_an_extra_field(wired):
+    """الحقل الزائد هو المكان الذي يُهرَّب فيه محتوى — يُرفَض بوجوده."""
+    _, service, _ = wired
+    challenge = service.create_enrollment_challenge()
+    payload = challenge.qr_payload(backend_url="https://host.example.ts.net")
+    payload["note"] = "شيء ما"
+    with pytest.raises(SystemExit):
+        assert_payload_carries_no_secret(payload)
+
+
 def test_pairing_guard_rejects_a_payload_carrying_a_secret_name():
     """الحارس يفحص ما يُطبَع فعلاً، لا ما يفترض الاختبار أنه سيُطبَع."""
     with pytest.raises(SystemExit):
         assert_payload_carries_no_secret(
-            {"contains_secret": False, "note": "CAPITAL_API_KEY"}
+            {"v": 2, "b": "CAPITAL_API_KEY", "c": "y", "e": 1}
         )
 
 
-def test_pairing_guard_rejects_payload_that_does_not_declare_itself_clean():
+def test_pairing_guard_rejects_an_unknown_payload_version():
     with pytest.raises(SystemExit):
-        assert_payload_carries_no_secret({"v": 1})
+        assert_payload_carries_no_secret({"v": 99, "b": "x", "c": "y", "e": 1})
 
 
 # ---------------------------------------------------------------------------

@@ -32,7 +32,12 @@ import json
 import sys
 from pathlib import Path
 
-from .security import ENROLLMENT_CHALLENGE_TTL, NEVER_ON_DEVICE, MobileSecurityService
+from .security import (
+    ENROLLMENT_CHALLENGE_TTL,
+    NEVER_ON_DEVICE,
+    QR_PAYLOAD_VERSION,
+    MobileSecurityService,
+)
 from .store import MobileStateStore
 
 
@@ -45,8 +50,12 @@ def assert_payload_carries_no_secret(payload: dict) -> None:
     for name in NEVER_ON_DEVICE:
         if name in blob:
             raise SystemExit(f"⛔ حمولة الاقتران كانت ستحمل «{name}» — أُوقفت.")
-    if payload.get("contains_secret") is not False:
-        raise SystemExit("⛔ الحمولة لا تُعلن خلوّها من الأسرار.")
+    # حارس الشكل: لا حقل خارج الأربعة. حقلٌ إضافي هو المكان الذي يُهرَّب فيه
+    # سرّ، فيُرفَض بوجوده لا باعترافه.
+    if set(payload) != {"v", "b", "c", "e"}:
+        raise SystemExit(f"⛔ حمولة الاقتران بحقول غير متوقَّعة: {sorted(payload)}")
+    if payload["v"] != QR_PAYLOAD_VERSION:
+        raise SystemExit("⛔ إصدار حمولة غير متوقَّع.")
 
 
 def render_qr(text: str) -> str:
@@ -67,7 +76,9 @@ def render_qr(text: str) -> str:
     from io import StringIO
 
     buffer = StringIO()
-    segno.make(text, error="m").terminal(out=buffer, border=2)
+    # `compact=True` يرسم وحدتين رأسياً في محرف واحد، فينصّف الارتفاع.
+    # و`border=2` أدنى ما تقبله المواصفة عملياً لتمييز الرمز عن الخلفية.
+    segno.make(text, error="m").terminal(out=buffer, border=2, compact=True)
     return buffer.getvalue()
 
 
@@ -104,15 +115,18 @@ def main(argv: list[str] | None = None) -> int:
     payload = challenge.qr_payload(backend_url=backend)
     assert_payload_carries_no_secret(payload)
 
-    text = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    text = json.dumps(payload, separators=(",", ":"))
     seconds = int(ENROLLMENT_CHALLENGE_TTL.total_seconds())
 
-    print()
+    # **تُمسح الشاشة أولاً.** رمزٌ سابق باقٍ في سجل الطرفية تلتقطه الكاميرا
+    # بدل الجديد، فتُرفَض المحاولة بـ«منتهٍ أو مُستهلَك» والمالكة تظنّ أن
+    # الرمز الجديد هو المرفوض. حدث ذلك فعلاً.
+    print("\033[2J\033[H", end="")
     print(render_qr(text))
     print(f"  صالح {seconds} ثانية · لمرة واحدة · ينتهي {challenge.expires_utc:%H:%M:%S} UTC")
-    print(f"  الخادم: {backend}")
+    print(f"  حجم الحمولة: {len(text)} محرفاً")
     print()
-    print("  امسحيه من شاشة «لا جهاز مسجَّل» في التطبيق.")
+    print("  وجّهي كاميرا التطبيق إلى الرمز أعلاه.")
     print("  ولو انتهى قبل أن تمسحيه، أعيدي تشغيل هذا الأمر — لا ضرر.")
     print()
     return 0

@@ -19,8 +19,9 @@
  *
  * وأربعة فحوص أخرى قبل أي طلب شبكة:
  *
+ *   * **لا حقل خارج الأربعة المعروفة** — الحقل الزائد هو المكان الذي
+ *     يُهرَّب فيه محتوى، فيُرفَض بوجوده لا باعترافه
  *   * الشكل صحيح والإصدار معروف
- *   * `contains_secret` يساوي `false` صراحةً — رمزٌ يعترف بحمل سرّ يُرفَض
  *   * لم ينتهِ وقته (يُفحَص محلياً كي تُقال الرسالة فوراً، والخادم يفحص أيضاً)
  *   * العنوان يجتاز `verifyBaseUrl`
  *
@@ -28,22 +29,39 @@
  */
 import { API_BASE_URL, SESSION_ENROLL_PATH, verifyBaseUrl } from '@/api/config';
 
-/** ما يقبله التطبيق من إصدارات حمولة الرمز. */
-const SUPPORTED_PAYLOAD_VERSION = 1;
+/**
+ * إصدار حمولة الرمز المقبول.
+ *
+ * رُفع إلى 2 حين ضُغطت الحمولة: النسخة الأولى كانت 216 محرفاً فأنتجت رمزاً
+ * بعرض 69 وحدة يتجاوز عرض الطرفية فيلتفّ — ورمزٌ ملتفّ **لا يُمسح**.
+ * الحمولة الآن 98 محرفاً و45 وحدة.
+ */
+const SUPPORTED_PAYLOAD_VERSION = 2;
+
+/**
+ * المفاتيح المسموح بها في الحمولة — **لا واحد زائد**.
+ *
+ * هذا بديلٌ أقوى عن `contains_secret: false` الذي كان يُرسَل قبلاً: حقلٌ
+ * إضافي هو المكان الذي يُهرَّب فيه سرّ، فيُرفَض **بوجوده** لا باعترافه.
+ * والرفض بالبنية لا يعتمد على صدق من صنع الرمز.
+ */
+const ALLOWED_PAYLOAD_KEYS = ['v', 'b', 'c', 'e'] as const;
 
 export interface EnrolmentPayload {
+  /** إصدار الحمولة. */
   v: number;
-  backend: string;
-  challenge_id: string;
-  nonce: string;
-  expires_utc: string;
-  contains_secret: boolean;
+  /** عنوان الخادم. */
+  b: string;
+  /** معرّف التحدّي. */
+  c: string;
+  /** لحظة الانتهاء — ثوانٍ منذ Epoch. */
+  e: number;
 }
 
 export type EnrolmentFailure =
   | 'MALFORMED'
   | 'UNSUPPORTED_VERSION'
-  | 'CLAIMS_SECRET'
+  | 'UNEXPECTED_FIELD'
   | 'BACKEND_MISMATCH'
   | 'UNTRUSTED_BACKEND'
   | 'EXPIRED'
@@ -95,13 +113,23 @@ export function parseEnrolmentPayload(
   }
   const record = parsed as Record<string, unknown>;
 
+  // **لا حقل زائد.** يُفحَص قبل كل شيء: الحقل الإضافي هو المكان الذي
+  // يُهرَّب فيه محتوى، فيُرفَض بوجوده.
+  const unexpected = Object.keys(record).filter(
+    (key) => !(ALLOWED_PAYLOAD_KEYS as readonly string[]).includes(key),
+  );
+  if (unexpected.length > 0) {
+    return {
+      ok: false,
+      result: fail('UNEXPECTED_FIELD', 'رمز اقتران يحمل حقولاً غير متوقَّعة — رُفض.'),
+    };
+  }
+
   const shapeOk =
-    typeof record.backend === 'string' &&
-    typeof record.challenge_id === 'string' &&
-    typeof record.nonce === 'string' &&
-    typeof record.expires_utc === 'string' &&
-    record.challenge_id.length > 0 &&
-    record.nonce.length > 0;
+    typeof record.b === 'string' &&
+    typeof record.c === 'string' &&
+    typeof record.e === 'number' &&
+    (record.c as string).length > 0;
   if (!shapeOk) {
     return { ok: false, result: fail('MALFORMED', 'رمز اقتران ناقص أو تالف.') };
   }
@@ -116,16 +144,7 @@ export function parseEnrolmentPayload(
     };
   }
 
-  // رمزٌ يعترف بحمل سرّ يُرفَض بلا نقاش: رموز مآثر لا تحمل أسراراً أصلاً،
-  // فالإقرار بخلاف ذلك دليل أن الرمز ليس منّا.
-  if (record.contains_secret !== false) {
-    return {
-      ok: false,
-      result: fail('CLAIMS_SECRET', 'رمز اقتران يدّعي حمل سرّ — رُفض.'),
-    };
-  }
-
-  const backend = normalise(record.backend as string);
+  const backend = normalise(record.b as string);
   const verdict = verifyBaseUrl(backend);
   if (!verdict.ok) {
     return { ok: false, result: fail('UNTRUSTED_BACKEND', verdict.reasonAr) };
@@ -143,8 +162,9 @@ export function parseEnrolmentPayload(
     };
   }
 
-  const expiresAt = Date.parse(record.expires_utc as string);
-  if (Number.isNaN(expiresAt)) {
+  // ثوانٍ منذ Epoch لا نصّ ISO: عشرة محارف بدل اثنين وثلاثين.
+  const expiresAt = (record.e as number) * 1000;
+  if (!Number.isFinite(expiresAt)) {
     return { ok: false, result: fail('MALFORMED', 'وقت انتهاء الرمز غير مفهوم.') };
   }
   if (expiresAt <= now) {
@@ -183,7 +203,7 @@ export async function enrolDevice(
       method: 'POST',
       headers: { 'content-type': 'application/json', accept: 'application/json' },
       body: JSON.stringify({
-        challenge_id: checked.payload.challenge_id,
+        challenge_id: checked.payload.c,
         public_identity: publicIdentity,
         device_name: deviceName,
       }),

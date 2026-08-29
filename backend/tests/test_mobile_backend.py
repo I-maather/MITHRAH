@@ -77,8 +77,10 @@ def test_qr_payload_carries_no_secret():
     blob = repr(payload)
     for name in NEVER_ON_DEVICE:
         assert name not in blob
-    assert payload["contains_secret"] is False
     assert "capital" not in blob.lower()
+    # الحقول الأربعة لا غير. `contains_secret` حُذف في الإصدار 2 واستُبدل
+    # بحارس أقوى: أي حقل زائد يُرفَض بوجوده لا باعترافه.
+    assert set(payload) == {"v", "b", "c", "e"}
 
 
 def test_challenge_is_single_use():
