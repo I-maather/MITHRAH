@@ -79,9 +79,16 @@ module.exports = {
       },
     },
     {
-      // العميل ومزوّد الجلسة هما الموضعان الوحيدان اللذان يلمسان الشبكة:
-      // الأول للبيانات، والثاني لتجديد الرمز خارج مجال v1.
-      files: ['src/api/client.ts', 'src/auth/SessionProvider.tsx'],
+      // ثلاثة مواضع وحدها تلمس الشبكة، وكلها **خارج شاشات العرض**:
+      //   client.ts          البيانات
+      //   SessionProvider    تجديد الرمز — خارج مجال v1
+      //   enrolment.ts       التسجيل — يسبق وجود أي رمز، فلا عميل بعد
+      // القاعدة الباقية: لا شاشة تلمس `fetch` مباشرةً.
+      files: [
+        'src/api/client.ts',
+        'src/auth/SessionProvider.tsx',
+        'src/auth/enrolment.ts',
+      ],
       rules: { 'no-restricted-globals': 'off' },
     },
     {

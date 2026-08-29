@@ -92,12 +92,22 @@ export default function SecureLaunchScreen(): React.JSX.Element {
         ) : null}
 
         {status === 'NO_SESSION' ? (
-          <Banner
-            testID="no-session-banner"
-            tone="caution"
-            title={t.gate.noSessionTitle}
-            body={t.gate.noSessionBody}
-          />
+          <Card testID="no-session-card">
+            <Banner
+              testID="no-session-banner"
+              tone="caution"
+              title={t.gate.noSessionTitle}
+              body={t.gate.noSessionBody}
+            />
+            <Button
+              label={t.gate.enrolAction}
+              accessibilityLabel={t.gate.enrolAction}
+              testID="enrol-button"
+              onPress={() => {
+                router.push('/enrol');
+              }}
+            />
+          </Card>
         ) : null}
 
         {lastGateMessageAr !== null ? (

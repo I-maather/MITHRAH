@@ -21,12 +21,15 @@ import * as SecureStore from 'expo-secure-store';
 const ACCESS_TOKEN_KEY = 'maather.session.access';
 const REFRESH_TOKEN_KEY = 'maather.session.refresh';
 const DEVICE_ID_KEY = 'maather.session.device_id';
+/** هوية الجهاز المُعلَنة عند التسجيل. ليست سرّاً — انظر `identity.ts`. */
+const PUBLIC_IDENTITY_KEY = 'maather.device.public_identity';
 
 /** المفاتيح المسموح بها. أي مفتاح خارجها خطأ برمجي. */
 export const ALLOWED_KEYCHAIN_KEYS: readonly string[] = [
   ACCESS_TOKEN_KEY,
   REFRESH_TOKEN_KEY,
   DEVICE_ID_KEY,
+  PUBLIC_IDENTITY_KEY,
 ];
 
 const OPTIONS: SecureStore.SecureStoreOptions = {
@@ -97,6 +100,19 @@ export const tokenStore = {
     await deleteItem(ACCESS_TOKEN_KEY);
     await deleteItem(REFRESH_TOKEN_KEY);
     await deleteItem(DEVICE_ID_KEY);
+  },
+
+  async loadPublicIdentity(): Promise<string | null> {
+    return getItem(PUBLIC_IDENTITY_KEY);
+  },
+
+  /**
+   * الهوية **لا تُمحى مع `clear()`** عمداً: إلغاء الجلسة لا يجعل الجهاز
+   * جهازاً آخر. إبقاؤها يجعل إعادة التسجيل تُقرأ في التدقيق «الجهاز نفسه
+   * عاد» لا «جهاز جديد ظهر».
+   */
+  async savePublicIdentity(value: string): Promise<void> {
+    await setItem(PUBLIC_IDENTITY_KEY, value);
   },
 
   async hasSession(): Promise<boolean> {

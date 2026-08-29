@@ -13,7 +13,7 @@ import { AppState, type AppStateStatus } from 'react-native';
 import { MobileApiClient, type TokenSource } from '@/api/client';
 import { API_BASE_URL, AUTO_LOCK_MINUTES, SESSION_REFRESH_PATH, verifyBaseUrl } from '@/api/config';
 import { requestUnlock, type GateOutcome } from './biometrics';
-import { tokenStore } from './tokenStore';
+import { tokenStore, type StoredSession } from './tokenStore';
 
 /**
  * حالة الجلسة والقفل.
@@ -52,6 +52,8 @@ export interface SessionContextValue {
   registerActivity: () => void;
   capturePendingDeepLink: (url: string) => void;
   consumePendingDeepLink: () => string | null;
+  /** تبنّي جلسة بعد تسجيل ناجح من رمز QR. ينتهي إلى `LOCKED`. */
+  adoptSession: (session: StoredSession) => Promise<void>;
   /** إنهاء الجلسة محلياً ومحو الرموز. */
   signOut: () => Promise<void>;
   /** تُستدعى بعد نجاح `device/revoke` على الجهاز نفسه. */
@@ -95,6 +97,19 @@ export function SessionProvider({
     setDeviceId(null);
     setPendingDeepLink(null);
     setStatus('NO_SESSION');
+  }, []);
+
+  /**
+   * تبنّي جلسة جديدة بعد نجاح التسجيل من رمز QR.
+   *
+   * ينتهي إلى **`LOCKED` لا `UNLOCKED`**: التسجيل يثبت أن الجهاز مأذون له
+   * لدى الخادم، ولا يثبت أن حامل الجهاز هو المالكة. بوابة Face ID تبقى
+   * قائمة بعده مباشرةً.
+   */
+  const adoptSession = useCallback(async (session: StoredSession) => {
+    await tokenStore.save(session);
+    setDeviceId(session.deviceId);
+    setStatus('LOCKED');
   }, []);
 
   const markRevoked = useCallback(async () => {
@@ -279,6 +294,7 @@ export function SessionProvider({
       registerActivity,
       capturePendingDeepLink,
       consumePendingDeepLink,
+      adoptSession,
       signOut,
       markRevoked,
     }),
@@ -295,6 +311,7 @@ export function SessionProvider({
       registerActivity,
       capturePendingDeepLink,
       consumePendingDeepLink,
+      adoptSession,
       signOut,
       markRevoked,
     ],

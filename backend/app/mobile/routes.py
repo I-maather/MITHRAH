@@ -34,7 +34,18 @@ from pydantic import BaseModel, Field
 from .api import API_PREFIX, MobileApi, MobileApiError, describe_api
 from .security import MobileSecurityService
 
+#: مجال البيانات — قراءة، وثلاثة إجراءات تُقلّل المخاطرة.
 router = APIRouter(prefix=API_PREFIX, tags=["mobile"])
+
+#: مجال الجلسة — **خارج `v1` عمداً**.
+#:
+#: `MobileApi` ترفض أي `POST` غير الثلاثة المُقلِّلة للمخاطرة. والتسجيل
+#: والتجديد ليسا منها ولا يجوز أن يصيرا استثناءً داخلها، وإلا صار في
+#: المجال بابٌ يقبل ما ليس في القائمة. ففُصلا إلى مسار مستقلّ.
+#:
+#: والتطبيق يعلن هذا المسار في `src/api/config.ts` — والخادم يتبع عقد
+#: العميل هنا لا العكس، لأن العميل مُثبَّت على أجهزة لا تُحدَّث بأمر.
+session_router = APIRouter(prefix="/api/mobile/session", tags=["mobile-session"])
 
 
 def _bearer(authorization: Optional[str]) -> Optional[str]:
@@ -108,7 +119,7 @@ def _error(exc: MobileApiError) -> JSONResponse:
 # التسجيل
 # ---------------------------------------------------------------------------
 
-@router.post("/enroll/complete")
+@session_router.post("/enroll")
 def enroll_complete(body: EnrollRequest) -> Any:
     """
     يستهلك التحدّي ويصدر أول زوج رموز.
@@ -144,7 +155,7 @@ def enroll_complete(body: EnrollRequest) -> Any:
         return _error(exc)
 
 
-@router.post("/token/refresh")
+@session_router.post("/refresh")
 def token_refresh(body: RefreshRequest) -> Any:
     """
     تدوير إجباري: الرمز المُقدَّم يُبطَل، ويُصدر زوج جديد.
@@ -169,7 +180,7 @@ def token_refresh(body: RefreshRequest) -> Any:
         return _error(exc)
 
 
-@router.post("/push/register")
+@session_router.post("/push-token")
 def push_register(
     body: PushTokenRequest, authorization: Optional[str] = Header(default=None)
 ) -> Any:
@@ -230,4 +241,7 @@ async def mobile_mutate(
         return _error(exc)
 
 
-__all__ = ["router", "MobileRuntime", "set_runtime", "get_runtime"]
+__all__ = [
+    "router", "session_router",
+    "MobileRuntime", "set_runtime", "get_runtime",
+]

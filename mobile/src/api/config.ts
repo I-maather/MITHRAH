@@ -51,6 +51,12 @@ export const API_PREFIX = '/api/mobile/v1';
  */
 export const SESSION_REFRESH_PATH = '/api/mobile/session/refresh';
 
+/**
+ * مسار التسجيل. **خارج مجال البيانات** للسبب نفسه: مجال `v1` يرفض أي POST
+ * غير الثلاثة المُقلِّلة للمخاطرة، ولا يجوز أن يصير التسجيل استثناءً داخله.
+ */
+export const SESSION_ENROLL_PATH = '/api/mobile/session/enroll';
+
 /** عناوين محلية/خاصة يُسمح فيها بـhttp أثناء التطوير. */
 const PRIVATE_HOST_PATTERNS: RegExp[] = [
   /^localhost$/i,

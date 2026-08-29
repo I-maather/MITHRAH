@@ -83,6 +83,9 @@ const config: ExpoConfig = {
     infoPlist: {
       NSFaceIDUsageDescription:
         'يُستعمل Face ID لفتح تطبيق مآثر على هذا الجهاز. هو بوابة وصول محلية ولا يأذن بأي تنفيذ.',
+      // الكاميرا لقراءة رمز الاقتران وحده. لا تُلتقط صور ولا تُرفع.
+      NSCameraUsageDescription:
+        'تُستعمل الكاميرا لقراءة رمز اقتران الجهاز مرة واحدة. لا تُلتقط صور ولا يُرسَل شيء منها.',
       ITSAppUsesNonExemptEncryption: false,
       NSAppTransportSecurity: {
         // TLS مفروض. الاستثناء الوحيد هو الشبكة المحلية أثناء التطوير،

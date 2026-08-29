@@ -32,7 +32,12 @@ from .brokers.capital.safety import LIVE_API_ENABLED
 from .contracts import Broker, StopKind
 from .discovery.capital_discovery import DISCOVERY_EPICS, EXECUTION_EPICS
 from .intelligence.pipeline import STAGE_NAME_AR, STAGE_ORDER
-from .mobile.routes import MobileRuntime, router as mobile_router, set_runtime
+from .mobile.routes import (
+    MobileRuntime,
+    router as mobile_router,
+    session_router as mobile_session_router,
+    set_runtime,
+)
 from .mobile.security import MobileSecurityService
 from .mobile.state import build_mobile_state
 from .mobile.store import MobileStateStore
@@ -49,7 +54,7 @@ from .profiles import (
 )
 from .profiles.manager import SystemGuardState
 
-app = FastAPI(title="Maather Autonomous Trader", version="0.5.6")
+app = FastAPI(title="Maather Autonomous Trader", version="0.6.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
@@ -83,6 +88,8 @@ mobile_runtime = MobileRuntime(
     state_source=lambda: build_mobile_state(system()),
 )
 set_runtime(mobile_runtime)
+# مجال الجلسة أولاً: مساراته صريحة، ومجال البيانات ينتهي بمُلتقِط عام.
+app.include_router(mobile_session_router)
 app.include_router(mobile_router)
 
 

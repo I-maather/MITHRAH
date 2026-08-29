@@ -44,7 +44,7 @@ def wired(tmp_path: Path):
 def enrol(client: TestClient, service: MobileSecurityService, name: str = "Mesa"):
     challenge = service.create_enrollment_challenge()
     response = client.post(
-        "/api/mobile/v1/enroll/complete",
+        "/api/mobile/session/enroll",
         json={
             "challenge_id": challenge.challenge_id,
             "public_identity": "PUBLIC-KEY-FINGERPRINT",
@@ -126,7 +126,7 @@ def test_challenge_cannot_be_replayed(wired):
     challenge, first = enrol(client, service)
     assert first.status_code == 200
     second = client.post(
-        "/api/mobile/v1/enroll/complete",
+        "/api/mobile/session/enroll",
         json={
             "challenge_id": challenge.challenge_id,
             "public_identity": "ANOTHER-DEVICE-KEY",
@@ -150,7 +150,7 @@ def test_expired_challenge_is_rejected(wired, tmp_path):
 
     clock["now"] = moment + timedelta(minutes=3)
     response = client.post(
-        "/api/mobile/v1/enroll/complete",
+        "/api/mobile/session/enroll",
         json={
             "challenge_id": challenge.challenge_id,
             "public_identity": "PUBLIC-KEY-FINGERPRINT",
@@ -163,7 +163,7 @@ def test_expired_challenge_is_rejected(wired, tmp_path):
 def test_unknown_challenge_is_rejected(wired):
     client, _, _ = wired
     response = client.post(
-        "/api/mobile/v1/enroll/complete",
+        "/api/mobile/session/enroll",
         json={
             "challenge_id": "does-not-exist",
             "public_identity": "PUBLIC-KEY-FINGERPRINT",
@@ -226,11 +226,11 @@ def test_refresh_rotates_and_old_token_dies(wired):
     _, response = enrol(client, service)
     refresh = response.json()["refresh_token"]
 
-    rotated = client.post("/api/mobile/v1/token/refresh", json={"refresh_token": refresh})
+    rotated = client.post("/api/mobile/session/refresh", json={"refresh_token": refresh})
     assert rotated.status_code == 200
     assert rotated.json()["refresh_token"] != refresh
 
-    reused = client.post("/api/mobile/v1/token/refresh", json={"refresh_token": refresh})
+    reused = client.post("/api/mobile/session/refresh", json={"refresh_token": refresh})
     assert reused.status_code == 401
 
 
