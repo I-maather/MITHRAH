@@ -1,7 +1,9 @@
 import React, { type ReactNode } from 'react';
 import { render, type RenderResult } from '@testing-library/react-native';
 
-import { SessionProvider } from '@/auth/SessionProvider';
+import { Text } from 'react-native';
+
+import { SessionProvider, useSession } from '@/auth/SessionProvider';
 import { ThemeProvider } from '@/theme';
 import type { GateOutcome } from '@/auth/biometrics';
 
@@ -47,6 +49,31 @@ export function Harness({
     >
       <SessionProvider overrides={overrides}>{children}</SessionProvider>
     </ThemeProvider>
+  );
+}
+
+/**
+ * مِجَسّ حالة الجلسة — يُصيّر القيم التي لا تظهر في الواجهة.
+ *
+ * `AppShell` يُصيّر `<Slot />` وهو مُقلَّد بلا محتوى، فلا شاشة تظهر تحته في
+ * الاختبار. ومن دون هذا المِجَسّ يصبح التأكيد «الشاشة الرئيسية غير ظاهرة»
+ * **صحيحاً بالفراغ**: لا شيء كان سيظهر أصلاً، مقفلاً كان التطبيق أو مفتوحاً.
+ *
+ * المِجَسّ يعطي علامة استقرار حقيقية، ويُظهر أن الرابط **احتُجِز فعلاً** بدل
+ * أن يكون لم يصل بعد — وهما حالتان يخلطهما التأكيد السلبي وحده.
+ */
+export function SessionProbe(): React.JSX.Element {
+  const { status, pendingDeepLink, unlock } = useSession();
+  return (
+    <>
+      <Text testID="probe-status">{status}</Text>
+      <Text testID="probe-pending">{pendingDeepLink ?? 'NONE'}</Text>
+      {/* زرّ فتح للاختبار وحده: يسمح باختبار **الانتقال** من مقفل إلى مفتوح،
+          لا بالبدء من حالة مفتوحة — والانتقال هو ما يجب أن يُثبَت. */}
+      <Text testID="probe-unlock" onPress={() => void unlock()}>
+        unlock
+      </Text>
+    </>
   );
 }
 

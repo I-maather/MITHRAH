@@ -79,6 +79,17 @@ const mockRouter = {
 };
 (globalThis as any).__routerMock = mockRouter;
 
+// مُقلِّد الموجّه **مفردة عامة**، فاستدعاءاته تتراكم عبر اختبارات الملف
+// الواحد ما لم تُصفَّر. وهذا يُبطل أي تأكيد من نوع `toHaveBeenCalledTimes(1)`:
+// ينجح صدفةً لأن ما قبله لم يوجّه، ويسقط أو يمرّ كذباً بمجرد إعادة الترتيب.
+// التصفير هنا لا في كل ملف، كي لا يُنسى في ملف جديد.
+beforeEach(() => {
+  mockRouter.push.mockClear();
+  mockRouter.replace.mockClear();
+  mockRouter.back.mockClear();
+  mockRouter.navigate.mockClear();
+});
+
 jest.mock('expo-router', () => {
   const React = jest.requireActual('react');
   const { View } = jest.requireActual('react-native');

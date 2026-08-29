@@ -1,6 +1,6 @@
 {
   "name": "maather-trader-mobile",
-  "version": "0.4.0",
+  "version": "0.5.1",
   "private": true,
   "main": "expo-router/entry",
   "scripts": {
@@ -34,7 +34,7 @@
     "react-native-screens": "3.31.1"
   },
   "devDependencies": {
-    "@babel/core": "7.24.9",
+    "@babel/core": "^7.29.1",
     "@testing-library/react-native": "12.5.2",
     "@types/jest": "29.5.12",
     "@types/react": "18.2.79",
@@ -51,5 +51,14 @@
   },
   "engines": {
     "node": ">=18.18"
+  },
+  "overrides": {
+    "tar": "^7.5.21",
+    "@xmldom/xmldom": "^0.9.8",
+    "postcss": "^8.5.23",
+    "fast-xml-parser": "^5.7.0",
+    "send": "^0.19.0",
+    "uuid": "^11.1.1",
+    "turbo-stream": "^3.0.0"
   }
 }

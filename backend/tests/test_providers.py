@@ -14,6 +14,8 @@ from pathlib import Path
 
 import pytest
 
+import app.providers as _providers_pkg
+
 from app.money import D
 from app.providers import PROVIDER_CREDENTIALS
 from app.providers.cache import ProviderCache, cache_key, deduplicate
@@ -493,7 +495,7 @@ def test_finnhub_never_stores_article_body():
 
 
 def test_finnhub_module_never_calls_the_premium_calendar():
-    source = Path("app/providers/finnhub_news.py").read_text(encoding="utf-8")
+    source = (PROVIDERS_DIR / "finnhub_news.py").read_text(encoding="utf-8")
     code_lines = [
         line for line in source.splitlines()
         if not line.strip().startswith("#") and "calendar/economic" not in line
@@ -874,7 +876,21 @@ def test_health_recovers_after_a_success():
 # 14. العزل — لا مزوّد ينفّذ
 # ===========================================================================
 
-PROVIDER_MODULES = sorted(Path("app/providers").glob("*.py"))
+#: مجلّد المزوّدات مأخوذ من **الحزمة المستورَدة نفسها**، لا من مسار نسبي.
+#:
+#: `Path("app/providers")` كان يعمل فقط حين تكون دفّة التشغيل `backend/`.
+#: ومن جذر المستودع لا يرمي خطأ — بل يعيد قائمة **فارغة**، فتُجمَّع
+#: الاختبارات المُوسَّمة أدناه بصفر حالة وتمرّ بلا أن تفحص شيئاً. اختبارٌ
+#: يمرّ لأنه فارغ أسوأ من اختبار يسقط: يعطي طمأنينة كاذبة.
+PROVIDERS_DIR = Path(_providers_pkg.__file__).resolve().parent
+PROVIDER_MODULES = sorted(PROVIDERS_DIR.glob("*.py"))
+
+#: حارس ضدّ عودة العطب نفسه: لو أفرغت القائمة لأي سبب، تسقط هنا صراحةً
+#: بدل أن تختفي حالات الاختبار بصمت.
+assert len(PROVIDER_MODULES) >= 10, (
+    f"لم يُعثر على وحدات المزوّدات في {PROVIDERS_DIR} — "
+    "الاختبارات المُوسَّمة كانت ستُجمَّع فارغة."
+)
 BANNED_IMPORT_TOKENS = (
     "execution", "order", "killswitch", "commissioning", "scheduler",
     "brokers.capital.adapter", "pipeline.runner",

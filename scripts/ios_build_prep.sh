@@ -126,14 +126,61 @@ fi
 say ''
 say 'التثبيت والفحوص:'
 cd "$MOBILE"
-npm install
-npx tsc --noEmit && ok "TypeScript نظيف"
-npx eslint . --ext .ts,.tsx --max-warnings 0 && ok "ESLint نظيف"
-npx jest --silent && ok "اختبارات الجوال ناجحة"
+
+# **فشل مغلق.** `set -e` وحده لا يكفي: الأمر داخل `cmd && ok "..."` يُعامَل
+# جزءاً من قائمة شرطية، فلا يُسقط الصدفة عند فشله — وهذا ما جعل النسخة
+# السابقة تصل إلى `expo prebuild` بعد فشل اختبار. الآن كل فحص يُقيَّم صراحةً.
+gate() {
+  local label="$1"; shift
+  if "$@"; then
+    ok "$label"
+  else
+    printf '  ❌ %s — فشل. توقّف قبل توليد مشروع iOS.\n' "$label" >&2
+    exit 1
+  fi
+}
+
+gate "تثبيت الاعتماديات" npm install
+
+gate "TypeScript" npx tsc --noEmit
+gate "ESLint" npx eslint . --ext .ts,.tsx --max-warnings 0
+gate "اختبارات الجوال" npx jest --silent --ci
+
+# --- بوابة أمنية: لا ثغرة critical/high **قابلة للوصول في الإنتاج** --------
+# الحكم على القابلية للوصول لا على العدد: أغلب ما يبلّغ عنه npm audit في مشروع
+# Expo هو أدوات بناء لا تدخل حزمة التطبيق. `--omit=dev` وحده لا يفرّق، لأن
+# `expo` و`react-native` تبعيات إنتاج تجرّ معها سلاسل بناء كاملة.
+say ''
+say 'الفحص الأمني:'
+AUDIT_JSON="$(npm audit --json 2>/dev/null || true)"
+if [ -z "$AUDIT_JSON" ]; then
+  warn "تعذّر تشغيل npm audit — يُتخطّى بلا ادعاء سلامة"
+else
+  printf '%s' "$AUDIT_JSON" > /tmp/maather-audit.json
+  if python3 "$REPO_ROOT/scripts/audit_gate.py" /tmp/maather-audit.json; then
+    ok "لا ثغرة critical/high خارج قائمة أدوات البناء الموثَّقة"
+  else
+    printf '  ❌ الفحص الأمني — ثغرة غير موثَّقة. راجعي docs/MOBILE_DEPENDENCY_AUDIT.md\n' >&2
+    exit 1
+  fi
+fi
+
+# --- شجرة العمل: لا يُولَّد مشروع فوق تغييرات غير ملتزَمة ------------------
+say ''
+say 'شجرة العمل:'
+DIRTY="$(git -C "$REPO_ROOT" status --porcelain -- mobile 2>/dev/null || true)"
+if [ -n "$DIRTY" ]; then
+  printf '  ❌ توجد تغييرات غير ملتزَمة تحت mobile/:\n' >&2
+  printf '%s\n' "$DIRTY" | sed 's/^/       /' >&2
+  printf '  التزمي بها أولاً. `expo prebuild --clean` يحذف ويعيد بناء\n' >&2
+  printf '  mobile/ios/ ولا يمكن التراجع عنه بلا التزام سابق.\n' >&2
+  exit 1
+fi
+ok "شجرة mobile/ نظيفة"
 
 say ''
 say 'توليد مشروع iOS الأصلي:'
-npx expo prebuild --platform ios --clean
+gate "expo prebuild" npx expo prebuild --platform ios --clean
 
 if [ -f "$MOBILE/PrivacyInfo.xcprivacy.template" ] && [ -d "$MOBILE/ios" ]; then
   target_dir="$(find "$MOBILE/ios" -maxdepth 1 -type d ! -name ios ! -name Pods | head -1)"
