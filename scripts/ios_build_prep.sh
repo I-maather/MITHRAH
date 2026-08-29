@@ -65,10 +65,23 @@ else
   bad "Node غير مثبَّت"
 fi
 
+# **متطلَّب لا تحذير.** كان هذا `warn` مع وعدٍ بأن `expo prebuild` سيثبّته.
+# وهو يحاول فعلاً — بـ`sudo gem install` — فيقف على طلب كلمة سرّ **لا يظهر**
+# وسط مخرجات الأمر، فيبدو السكربت معلّقاً بلا سبب. وهذا ما حدث.
+#
+# سكربت بناء لا يجوز أن ينتظر إدخالاً غير مرئي. يتوقف هنا برسالة صريحة،
+# وتُثبَّت الأداة بأمر واحد واعٍ، ثم يُعاد التشغيل.
 if command -v pod >/dev/null 2>&1; then
   ok "CocoaPods: $(pod --version 2>/dev/null)"
 else
-  warn "CocoaPods غير مثبَّت — سيثبّته expo prebuild، أو: sudo gem install cocoapods"
+  bad "CocoaPods غير مثبَّت. ثبّتيه ثم أعيدي التشغيل:"
+  if command -v brew >/dev/null 2>&1; then
+    printf '     brew install cocoapods\n'
+  else
+    printf '     sudo gem install cocoapods\n'
+    printf '     (سيطلب كلمة سرّ الماك. الحروف لا تظهر أثناء الكتابة — طبيعي.)\n'
+  fi
+  printf '     ولا يُترَك ذلك لـexpo prebuild: يطلبها بصمت فيبدو معلّقاً.\n'
 fi
 
 say ''
