@@ -25,6 +25,7 @@
 """
 from __future__ import annotations
 
+import logging
 from typing import Any, Callable, Optional
 
 from fastapi import APIRouter, Header, Request
@@ -115,6 +116,27 @@ def _error(exc: MobileApiError) -> JSONResponse:
     return JSONResponse(status_code=exc.status, content={"error_ar": str(exc)})
 
 
+#: رسالة العطل غير المتوقَّع — **ثابتة**، ولا تحمل شيئاً من الاستثناء.
+UNEXPECTED_ERROR_AR = "تعذّرت الاستجابة الآن. سُجِّل العطل على الخادم."
+
+_log = logging.getLogger(__name__)
+
+
+def _unexpected(exc: Exception) -> JSONResponse:
+    """
+    يترجم أي استثناء غير متوقَّع إلى 500 برسالة ثابتة.
+
+    كان هذا موصوفاً في رأس الملف وغير مُنفَّذ: لم يكن يُلتقَط إلا
+    `MobileApiError`، فيصعد ما عداه إلى uvicorn. وقد ظهر ذلك فعلاً حين
+    تسابقت الخيوط على إنشاء الجداول.
+
+    **يُسجَّل كاملاً على الخادم ولا يُعاد منه حرف**: نصوص الاستثناءات تحمل
+    مسارات وأسماء حقول وأحياناً قيماً.
+    """
+    _log.exception("عطل غير متوقَّع في مجال الجوال: %s", type(exc).__name__)
+    return JSONResponse(status_code=500, content={"error_ar": UNEXPECTED_ERROR_AR})
+
+
 # ---------------------------------------------------------------------------
 # التسجيل
 # ---------------------------------------------------------------------------
@@ -153,6 +175,8 @@ def enroll_complete(body: EnrollRequest) -> Any:
         }
     except MobileApiError as exc:
         return _error(exc)
+    except Exception as exc:  # noqa: BLE001 - الحدّ الأخير: لا استثناء يصعد إلى الجوال
+        return _unexpected(exc)
 
 
 @session_router.post("/refresh")
@@ -178,6 +202,8 @@ def token_refresh(body: RefreshRequest) -> Any:
         }
     except MobileApiError as exc:
         return _error(exc)
+    except Exception as exc:  # noqa: BLE001 - الحدّ الأخير: لا استثناء يصعد إلى الجوال
+        return _unexpected(exc)
 
 
 @session_router.post("/push-token")
@@ -194,6 +220,8 @@ def push_register(
         return {"registered": ok, "has_push_token": ok}
     except MobileApiError as exc:
         return _error(exc)
+    except Exception as exc:  # noqa: BLE001 - الحدّ الأخير: لا استثناء يصعد إلى الجوال
+        return _unexpected(exc)
 
 
 # ---------------------------------------------------------------------------
@@ -219,6 +247,8 @@ def mobile_read(
         return result.body
     except MobileApiError as exc:
         return _error(exc)
+    except Exception as exc:  # noqa: BLE001 - الحدّ الأخير: لا استثناء يصعد إلى الجوال
+        return _unexpected(exc)
 
 
 @router.post("/{route:path}")
@@ -239,6 +269,8 @@ async def mobile_mutate(
         return result.body
     except MobileApiError as exc:
         return _error(exc)
+    except Exception as exc:  # noqa: BLE001 - الحدّ الأخير: لا استثناء يصعد إلى الجوال
+        return _unexpected(exc)
 
 
 __all__ = [

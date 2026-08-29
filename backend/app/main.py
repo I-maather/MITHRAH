@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
+from threading import Lock
 from decimal import Decimal
 from typing import Optional
 
@@ -54,7 +55,7 @@ from .profiles import (
 )
 from .profiles.manager import SystemGuardState
 
-app = FastAPI(title="Maather Autonomous Trader", version="0.6.1")
+app = FastAPI(title="Maather Autonomous Trader", version="0.6.4")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
@@ -63,11 +64,27 @@ app.add_middleware(
 
 _SYSTEM: Optional[SystemState] = None
 
+#: قفل البناء — **ليس تحسيناً، بل تصحيحاً.**
+#:
+#: المسارات المتزامنة تعمل في خيوط منفصلة عند uvicorn. واللوحة الرئيسية في
+#: الجوال تطلب خمسة مسارات في اللحظة نفسها، فرأى كلٌّ منها `_SYSTEM is None`
+#: وبدأ يبني النظام — فتسابقت الخيوط على `create_all`:
+#:
+#:     sqlite3.OperationalError: table accounts already exists
+#:
+#: و`checkfirst` لا يحمي من ذلك: بين الفحص والإنشاء فجوة. والبناء نفسه ثقيل
+#: (يفتح اتصالاً بالوسيط)، فتكراره خطأ حتى لو نجح.
+_SYSTEM_LOCK = Lock()
+
 
 def system() -> SystemState:
     global _SYSTEM
-    if _SYSTEM is None:
-        _SYSTEM = build_system()
+    if _SYSTEM is not None:
+        return _SYSTEM
+    with _SYSTEM_LOCK:
+        # يُعاد الفحص **داخل القفل**: خيطٌ آخر ربما بناه أثناء الانتظار.
+        if _SYSTEM is None:
+            _SYSTEM = build_system()
     return _SYSTEM
 
 

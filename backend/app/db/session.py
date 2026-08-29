@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from threading import Lock
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -24,8 +25,21 @@ ENGINE = make_engine()
 SessionLocal = sessionmaker(bind=ENGINE, class_=Session, expire_on_commit=False, future=True)
 
 
+#: قفل التهيئة — حارس ثانٍ مستقلّ عن قفل بناء النظام.
+#:
+#: `create_all(checkfirst=True)` يفحص ثم يُنشئ، وبين الفحص والإنشاء فجوة.
+#: فخيطان يبدآن معاً يريان الجدول غائباً فيُنشئانه، ويفشل الثاني:
+#:
+#:     sqlite3.OperationalError: table accounts already exists
+#:
+#: القفل هنا لا يغني عن القفل في `main.system()` ولا يُغني عنه: ذاك يمنع
+#: بناء النظام مرّتين، وهذا يحمي أي مسار آخر يهيّئ القاعدة.
+_INIT_LOCK = Lock()
+
+
 def init_db(engine=None) -> None:
-    Base.metadata.create_all(engine or ENGINE)
+    with _INIT_LOCK:
+        Base.metadata.create_all(engine or ENGINE)
 
 
 def get_session() -> Session:
