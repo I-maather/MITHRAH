@@ -37,11 +37,26 @@
 
 ## 2. تشغيل الخادم
 
+> **لا تُلصَق تعليقات مع الأوامر.** `zsh` التفاعلي على macOS لا يعامل `#`
+> تعليقاً افتراضياً (`interactive_comments` مُطفأة)، فيقرأ ما بعده وسيطاً
+> ويسقط بـ`unknown file attribute`. كل سطر أدناه يُلصَق وحده.
+
+مرة واحدة، لتثبيت `segno` المُضافة:
+
 ```bash
 cd ~/Desktop/Trading/Maather-Autonomous-Trader/backend
-pip install -r requirements.txt          # مرة واحدة (أُضيفت segno)
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+ثم التشغيل:
+
+```bash
 uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
+
+الأمر **يمسك الطرفية ولا يعيد السطر** — وهذا معنى أنه يعمل. يُترَك مفتوحاً،
+ويُفتَح تبويب آخر (⌘T) لكل ما بعده.
 
 يستمع على الحلقة المحلية **عمداً**. ويوجد اختباران يُسقطان أي محاولة لتغيير
 ذلك إلى `0.0.0.0`: الأول يفحص كل ملف في المستودع، والثاني يفحص الإعدادات.
@@ -54,6 +69,7 @@ uvicorn app.main:app --host 127.0.0.1 --port 8000
 
 ```bash
 cd ~/Desktop/Trading/Maather-Autonomous-Trader/backend
+source .venv/bin/activate
 python3 -m app.mobile.pairing --backend http://<عنوان-الخادم-الخاص>:8000
 ```
 
