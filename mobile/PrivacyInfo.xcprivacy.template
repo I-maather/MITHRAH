@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  قالب بيان الخصوصية (Privacy Manifest) — Apple تطلبه لبعض الفئات.
+
+  التطبيق **لا يجمع بيانات لأغراض التتبّع**، ولا يستعمل تحليلات، ولا يرسل
+  بيانات إلى أي طرف ثالث. الحقول أدناه تعكس ذلك حرفياً.
+
+  يُنسخ إلى `ios/MaatherTrader/PrivacyInfo.xcprivacy` بعد `expo prebuild`.
+-->
+<plist version="1.0">
+<dict>
+  <key>NSPrivacyTracking</key>
+  <false/>
+  <key>NSPrivacyTrackingDomains</key>
+  <array/>
+  <key>NSPrivacyCollectedDataTypes</key>
+  <array/>
+  <key>NSPrivacyAccessedAPITypes</key>
+  <array>
+    <dict>
+      <key>NSPrivacyAccessedAPIType</key>
+      <string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+      <key>NSPrivacyAccessedAPITypeReasons</key>
+      <array><string>CA92.1</string></array>
+    </dict>
+  </array>
+</dict>
+</plist>

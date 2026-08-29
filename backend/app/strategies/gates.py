@@ -69,6 +69,10 @@ class AdmissionReport:
         }
 
 
+#: رمز استبعاد نتائج تعتمد على تكلفة تبييت مجهولة الوحدة.
+OVERNIGHT_DEPENDENT_RESULT_EXCLUDED = "OVERNIGHT_DEPENDENT_RESULT_EXCLUDED"
+
+
 def evaluate_admission(
     *,
     strategy_label: str,
@@ -77,12 +81,30 @@ def evaluate_admission(
     parameter_positive_share: Optional[Decimal] = None,
     shadow: Optional[ShadowSession] = None,
     regimes: Optional[dict[str, BacktestResult]] = None,
+    overnight_unit_established: bool = True,
+    overnight_dependent: bool = False,
 ) -> AdmissionReport:
     """
     يقيّم كل البوابات. غياب دليل = سقوط البوابة، لا تجاوزها.
+
+    `overnight_unit_established=False` مع `overnight_dependent=True` ⇒
+    **تُستبعَد النتيجة كلها**. السبب حسابي لا احترازي فقط: خطأ وحدة قدره مئة
+    ضعف في تكلفة التبييت يقلب إشارة التوقّع بعد التكاليف (البوابة 2)، فيُعتمَد
+    استراتيجية خاسرة أو تُرفَض رابحة. نتيجةٌ مبنية على تكلفة مجهولة الوحدة
+    ليست دليلاً ضعيفاً — هي **ليست دليلاً**.
     """
     report = AdmissionReport(strategy=strategy_label)
     add = report.gates.append
+
+    if overnight_dependent and not overnight_unit_established:
+        add(GateOutcome(
+            OVERNIGHT_DEPENDENT_RESULT_EXCLUDED,
+            False,
+            "نتيجة تعتمد على تكلفة تبييت مجهولة الوحدة "
+            "(OVERNIGHT_RATE_UNIT_UNKNOWN) — تُستبعَد من التحقق ولا تُقيَّم. "
+            "أثبتي الوحدة من وثائق الوسيط ثم أعيدي التشغيل.",
+        ))
+        return report
 
     # 1) حجم العيّنة
     if full_sample is None:

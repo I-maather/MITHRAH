@@ -46,6 +46,9 @@ from .live_readonly.report import (
     write_private_discovery_markdown,
 )
 from .live_readonly.session import LiveAuthError, LiveSession
+from .providers import PROVIDER_CREDENTIALS
+from .providers.fmp_calendar import FmpEconomicCalendarProvider
+from .providers.probe import AVAILABLE_PROBES, probe_fmp_calendar
 from .live_readonly.spread_sample import (
     SPREAD_SAMPLE_EPIC,
     SpreadSamplerError,
@@ -537,6 +540,61 @@ def cmd_capital_live_spread_sample(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_provider_probe(args: argparse.Namespace) -> int:
+    """
+    يُثبت قدرة الخطة لدى مزوّد — **طلب واحد، قراءة فقط**.
+
+    لا يُشغَّل تلقائياً ولا في أي اختبار. المالكة تشغّله بمفتاحها على جهازها،
+    ولا يُطلب المفتاح في أي محادثة.
+    """
+    if args.probe not in AVAILABLE_PROBES:
+        print(
+            f"⛔ مسبار غير معروف: {args.probe}. المتاح: {', '.join(AVAILABLE_PROBES)}",
+            file=sys.stderr,
+        )
+        return 2
+
+    provider_secrets = build_secret_provider(
+        env_file=args.secrets_file, allow_process_env=False
+    )
+    missing = provider_secrets.missing(("FMP_API_KEY",))
+    if missing:
+        print(
+            "المفتاح FMP_API_KEY غير مُعدّ.\n"
+            "شغّلي scripts/configure_provider_credentials.sh ثم أعيدي المحاولة.\n"
+            "**لا يُلصَق مفتاح في المحادثة.**",
+            file=sys.stderr,
+        )
+        return 1
+
+    provider = FmpEconomicCalendarProvider(
+        api_key=provider_secrets.get("FMP_API_KEY")
+    )
+    outcome = probe_fmp_calendar(provider)
+    print(outcome.report_ar())
+    return 0 if outcome.usable else 1
+
+
+def cmd_provider_status(args: argparse.Namespace) -> int:
+    """يعرض حالة إعداد المزوّدين **بلا كشف أي قيمة**."""
+    provider_secrets = build_secret_provider(
+        env_file=args.secrets_file, allow_process_env=False
+    )
+    print("حالة اعتمادات المزوّدين — لا تُعرض أي قيمة:")
+    print()
+    for name in PROVIDER_CREDENTIALS:
+        present = not provider_secrets.missing((name,))
+        print(f"  {'✅' if present else '❌'}  {name}")
+    print()
+    print("  ✅  EcbMacroDataProvider — لا يحتاج مفتاحاً (وصول مفتوح)")
+    print()
+    print(
+        "المفاتيح تبقى في Keychain، ولا تدخل التطبيق، ولا تُرسَل إلى أي طرف، "
+        "ولا تُودَع في git."
+    )
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="app.cli", description="Maather Autonomous Trader CLI")
     parser.add_argument("--verbose", action="store_true")
@@ -592,6 +650,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
     probe.add_argument("--environment", default="demo", choices=["demo"])
     probe.set_defaults(func=cmd_capital_auth_probe)
+
+    probe_cmd = sub.add_parser(
+        "provider-probe", help="إثبات قدرة خطة مزوّد — طلب واحد، قراءة فقط",
+    )
+    probe_cmd.add_argument("probe", choices=list(AVAILABLE_PROBES))
+    probe_cmd.set_defaults(func=cmd_provider_probe)
+
+    provider_status = sub.add_parser(
+        "provider-status", help="حالة إعداد المزوّدين بلا كشف أي قيمة",
+    )
+    provider_status.set_defaults(func=cmd_provider_status)
 
     status = sub.add_parser("secrets-status", help="فحص وجود الاعتمادات بلا كشفها")
     status.set_defaults(func=cmd_secrets_status)

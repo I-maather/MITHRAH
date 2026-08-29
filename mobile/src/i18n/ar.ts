@@ -1,0 +1,318 @@
+/**
+ * نصوص الواجهة — عربية، وهي **المصدر الوحيد**. لا نصّ إنجليزي في الشاشات.
+ * Every user-visible string lives here so the wording can be reviewed in one
+ * place; nothing is assembled from fragments at render time.
+ */
+
+export const t = {
+  app: {
+    name: 'مآثر',
+    fullName: 'Maather Trader',
+    tagline: 'مراقبة النظام — بلا تنفيذ.',
+  },
+
+  common: {
+    unavailable: 'غير متاح',
+    notComputed: 'لم يُحتسب بعد',
+    loading: 'جارٍ التحميل…',
+    retry: 'إعادة المحاولة',
+    refresh: 'تحديث',
+    close: 'إغلاق',
+    cancel: 'إلغاء',
+    confirm: 'تأكيد',
+    back: 'رجوع',
+    yes: 'نعم',
+    no: 'لا',
+    none: '—',
+    previewBadge: 'معاينة / Preview',
+    previewNotice:
+      'هذه بيانات معاينة للتطوير، ليست حالة النظام الحقيقية. لا يُتّخذ عليها قرار.',
+    lastRefresh: 'آخر تحديث',
+    serverTime: 'وقت الخادم',
+    readOnly: 'عرض فقط',
+    noExecution: 'هذا العرض لا يأذن بأي تنفيذ.',
+  },
+
+  errors: {
+    offlineTitle: 'لا اتصال بالخادم',
+    offlineBody:
+      'تعذّر الوصول إلى خادم مآثر. ما يظهر هنا آخر ما وصل، وقد يكون قديماً.',
+    staleTitle: 'الحالة قديمة',
+    staleBody: 'لم تصل حالة جديدة منذ',
+    unauthorisedTitle: 'انتهت الجلسة',
+    unauthorisedBody: 'يلزم التحقق من جديد قبل عرض أي بيانات.',
+    untrustedTitle: 'هوية الخادم غير مؤكدة',
+    untrustedBody:
+      'أُوقف الاتصال ولم يُرسَل أي رمز. تحقّقي من عنوان الخادم في الإعدادات.',
+    malformedTitle: 'استجابة مرفوضة',
+    malformedBody: 'وصلت استجابة لا تطابق عقد الجوال، فأُهملت ولم تُعرض.',
+    serverTitle: 'خطأ من الخادم',
+  },
+
+  gate: {
+    title: 'مآثر',
+    subtitle: 'التطبيق مقفل.',
+    unlock: 'فتح التطبيق',
+    unlocking: 'جارٍ التحقق…',
+    faceIdNote:
+      'Face ID بوابة وصول على هذا الجهاز فقط. المصادقة الفعلية رمز قصير العمر من الخادم.',
+    fallbackNote: 'إن تعذّرت البصمة، يُطلب رمز الجهاز.',
+    noSessionTitle: 'لا جهاز مسجَّل',
+    noSessionBody:
+      'هذا الجهاز غير مسجَّل لدى خادم مآثر. التسجيل يتم من لوحة الخادم برمز QR صالح دقيقتين ولمرة واحدة.',
+    revokedTitle: 'أُلغي هذا الجهاز',
+    revokedBody:
+      'أُبطلت كل رموز هذا الجهاز. لن يُعرض أي شيء حتى يُسجَّل من جديد من الخادم.',
+    deepLinkHeld: 'وصل رابط، وسيُفتح بعد التحقق.',
+  },
+
+  nav: {
+    home: 'الرئيسية',
+    intelligence: 'قراءة السوق',
+    decision: 'تفصيل القرار',
+    profiles: 'ملفات المخاطرة',
+    position: 'المركز الحالي',
+    history: 'سجل الصفقات',
+    performance: 'الأداء والمعايرة',
+    providers: 'صحة المزوّدين',
+    notifications: 'مركز الإشعارات',
+    audit: 'خط التدقيق',
+    system: 'النظام والوسيط',
+    settings: 'الإعدادات',
+    emergency: 'الطوارئ',
+  },
+
+  home: {
+    title: 'الرئيسية',
+    systemState: 'حالة النظام',
+    brokerConnection: 'اتصال الوسيط',
+    marketStatus: 'حالة السوق',
+    profile: 'الملف المختار / الفعّال',
+    risk: 'المخاطرة المستهلكة والمتبقية',
+    decision: 'القرار النهائي الحالي',
+    score: 'النتيجة الحتمية',
+    strategy: 'حالة الاستراتيجية',
+    completeness: 'اكتمال البيانات',
+    upcomingEvent: 'حدث قادم مهم',
+    position: 'المركز الحالي',
+    noTrade: 'سبب الامتناع',
+    noPosition: 'لا مركز مفتوح.',
+    noEvent: 'لا حدث مُعلَن ضمن النافذة.',
+    openDetail: 'التفاصيل',
+  },
+
+  intelligence: {
+    title: 'قراءة السوق',
+    unavailable: 'لا توجد قراءة متاحة بعد.',
+    regime: 'النظام السائد',
+    timeframes: 'الأطر الزمنية',
+    stages: 'مراحل الفحص',
+    score: 'النتيجة',
+    contradictions: 'التناقضات',
+    missingProviders: 'مزوّدون ناقصون',
+    missingData: 'بيانات ناقصة',
+    explanation: 'الشرح',
+    mandatory: 'إلزامية',
+    optional: 'اختيارية',
+    passed: 'اجتازت',
+    failed: 'أخفقت',
+    pending: 'لم تُقيَّم',
+    blocksTrading: 'يمنع التداول',
+  },
+
+  decision: {
+    title: 'تفصيل القرار',
+    finalDecision: 'القرار النهائي',
+    reasonCode: 'رمز السبب',
+    blocking: 'أسباب المنع',
+    stages: 'المراحل',
+    snapshot: 'معرّف اللقطة',
+    decidedAt: 'وقت القرار',
+    descriptiveOnly:
+      'هذا وصف لقرار اتخذه الخادم. التطبيق لا يقترح ولا يعدّل ولا ينفّذ.',
+  },
+
+  profiles: {
+    title: 'ملفات المخاطرة',
+    selected: 'المختار',
+    effective: 'الفعّال',
+    pending: 'قيد التبريد',
+    coolingRemaining: 'المتبقي من التبريد',
+    blocked: 'سبب المنع',
+    available: 'الملفات المتاحة',
+    limits: 'الحدود',
+    cannotChange:
+      'تغيير الملف لا يتم من الهاتف. رفع المخاطرة يحتاج الخادم وتبريداً مفروضاً عليه.',
+    riskRank: 'رتبة المخاطرة',
+  },
+
+  position: {
+    title: 'المركز الحالي',
+    none: 'لا مركز مفتوح الآن.',
+    instrument: 'الأداة',
+    direction: 'الاتجاه',
+    opened: 'فُتح',
+    entry: 'سعر الدخول',
+    current: 'السعر الحالي',
+    stop: 'الوقف',
+    target: 'الهدف',
+    size: 'الحجم',
+    notional: 'التعرّض',
+    unrealised: 'ربح/خسارة غير محققة',
+    riskAtStop: 'المخاطرة عند الوقف',
+    strategy: 'الاستراتيجية',
+    protection:
+      'الوقف والهدف محفوظان لدى الوسيط لا في هذا التطبيق. لو صمت الهاتف تبقى الحماية قائمة.',
+    cannotModify: 'لا يمكن تعديل هذا المركز ولا إغلاقه من الهاتف.',
+  },
+
+  history: {
+    title: 'سجل الصفقات',
+    empty: 'لا صفقات مسجّلة بعد.',
+    opened: 'الفتح',
+    closed: 'الإغلاق',
+    result: 'النتيجة',
+    exitReason: 'سبب الخروج',
+  },
+
+  performance: {
+    title: 'الأداء والمعايرة',
+    sample: 'حجم العيّنة',
+    insufficient: 'العيّنة أصغر من أن يُقرأ منها استنتاج.',
+    wins: 'رابحة',
+    losses: 'خاسرة',
+    winRate: 'نسبة الربح',
+    averageR: 'متوسط R',
+    expectancy: 'التوقّع',
+    maxDrawdown: 'أقصى تراجع',
+    totalPnl: 'المحصّلة',
+    calibration: 'المعايرة',
+    predicted: 'المتوقَّع',
+    observed: 'المُلاحَظ',
+    bucketSample: 'العيّنة',
+    period: 'الفترة',
+  },
+
+  providers: {
+    title: 'صحة المزوّدين',
+    configured: 'مُعدّ',
+    notConfigured: 'غير مُعدّ',
+    healthy: 'سليم',
+    unhealthy: 'متعطّل',
+    unknown: 'غير معروف',
+    mandatory: 'إلزامي',
+    lastSuccess: 'آخر نجاح',
+    missingMandatory: 'مزوّدون إلزاميون ناقصون',
+    eligibility: 'الأهلية بحسب المزوّدين',
+  },
+
+  notifications: {
+    title: 'مركز الإشعارات',
+    empty: 'لا إشعارات.',
+    privacyTitle: 'الخصوصية على شاشة القفل',
+    privacyBody:
+      'لا يظهر على شاشة القفل رصيد ولا ربح ولا خسارة ولا حجم مركز ولا سعر ولا اتجاه. النص هناك ثابت: «لدى Maather Trader تحديث. افتحي التطبيق للتفاصيل.» والتفصيل هنا بعد المصادقة فقط.',
+    advisoryTitle: 'الإشعار استشاري',
+    advisoryBody:
+      'لا شيء في سلامة النظام يعتمد على وصول الإشعار. الوقف والهدف لدى الوسيط.',
+    read: 'مقروء',
+    unread: 'جديد',
+  },
+
+  audit: {
+    title: 'خط التدقيق',
+    empty: 'لا قيود.',
+    action: 'الإجراء',
+    device: 'الجهاز',
+    outcome: 'النتيجة',
+    success: 'نجح',
+    failure: 'أخفق',
+  },
+
+  system: {
+    title: 'النظام والوسيط',
+    backend: 'الخادم',
+    transport: 'قناة الاتصال',
+    trusted: 'موثوقة',
+    untrusted: 'غير موثوقة',
+    broker: 'الوسيط',
+    connected: 'متصل',
+    disconnected: 'غير متصل',
+    demo: 'حساب تجريبي',
+    live: 'حساب حقيقي',
+    accountMasked: 'الحساب (مقنَّع)',
+    executionLock: 'قفل التنفيذ',
+    locked: 'مقفل',
+    unlocked: 'مفتوح',
+    killSwitch: 'قاطع الطوارئ',
+    active: 'مُفعَّل',
+    inactive: 'غير مُفعَّل',
+    device: 'هذا الجهاز',
+    sessionToken: 'رمز الجلسة',
+    bundleId: 'معرّف الحزمة',
+    whatAppCannotDo: 'ما لا يستطيعه هذا التطبيق',
+  },
+
+  settings: {
+    title: 'الإعدادات',
+    appearance: 'المظهر',
+    appearanceSystem: 'تِبعاً للنظام',
+    appearanceLight: 'فاتح',
+    appearanceDark: 'داكن',
+    security: 'الأمان',
+    autoLock: 'القفل التلقائي بعد خمول',
+    minutes: 'دقيقة',
+    hideInSwitcher: 'ستر المحتوى في مبدّل التطبيقات',
+    alwaysOn: 'مُفعَّل دائماً ولا يُطفأ',
+    connection: 'الاتصال',
+    session: 'الجلسة',
+    signOut: 'إنهاء الجلسة على هذا الجهاز',
+    signOutNote: 'يمحو الرموز من سلسلة المفاتيح. لا يوقف النظام.',
+    dataSource: 'مصدر البيانات',
+    live: 'الخادم',
+    preview: 'معاينة (تطوير)',
+    about: 'عن التطبيق',
+    version: 'الإصدار',
+  },
+
+  emergency: {
+    title: 'الطوارئ',
+    intro:
+      'ثلاثة إجراءات فقط، وكلها **تقلّل** المخاطرة. لا يوجد هنا ما يفتح شيئاً.',
+    pause: 'طلب إيقاف مؤقت',
+    pauseBody:
+      'يطلب من الخادم إيقاف الدخول في صفقات جديدة. لا يغلق مركزاً قائماً ولا يعدّله.',
+    pauseConfirm: 'أطلب الإيقاف المؤقت',
+    pauseDone: 'أُرسل طلب الإيقاف.',
+    kill: 'تفعيل قاطع الطوارئ',
+    killBody:
+      'يوقف النظام كاملاً على الخادم. **لا يُلغى من الهاتف** — الإلغاء يزيد المخاطرة ويحتاج الخادم.',
+    killConfirmTitle: 'تفعيل قاطع الطوارئ؟',
+    killConfirmBody:
+      'سيتوقف النظام. لا يمكن إلغاء القاطع من هذا التطبيق بعد التفعيل.',
+    killConfirm: 'فعّلي القاطع',
+    killDone: 'فُعِّل القاطع.',
+    revoke: 'إلغاء هذا الجهاز',
+    revokeBody:
+      'يُبطل كل رموز هذا الجهاز فوراً. استعمليه إذا فُقد الهاتف أو شككتِ فيه.',
+    revokeConfirmTitle: 'إلغاء هذا الجهاز؟',
+    revokeConfirmBody: 'ستُمحى الرموز ولن يُعرض شيء حتى يُسجَّل الجهاز من جديد.',
+    revokeConfirm: 'ألغي الجهاز',
+    revokeDone: 'أُلغي الجهاز.',
+    sending: 'جارٍ الإرسال…',
+    failed: 'لم يُقبل الطلب.',
+  },
+
+  boundary: {
+    title: 'حدّ هذا التطبيق',
+    items: [
+      'لا يُنشئ أمراً ولا يعدّل كمية ولا وقفاً ولا هدفاً.',
+      'لا يفتح مركزاً ولا يغلقه ولا يغيّر رافعة.',
+      'لا يعيد تفعيل مفتاح وسيط ولا يغيّر تفضيلاته.',
+      'لا يحمل مفتاح وسيط ولا مفتاح مزوّد بيانات ولا مفتاح إشعارات.',
+      'لا يصل إلى الوسيط إطلاقاً — كل وصول للوسيط في الخادم.',
+    ],
+  },
+} as const;
+
+export type Strings = typeof t;

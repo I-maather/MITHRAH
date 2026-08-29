@@ -35,3 +35,10 @@ out/
 .DS_Store
 .idea/
 .vscode/
+
+# الجوال
+mobile/node_modules/
+mobile/.expo/
+mobile/ios/
+mobile/android/
+mobile/dist/
