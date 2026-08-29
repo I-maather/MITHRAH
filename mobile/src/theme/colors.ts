@@ -59,8 +59,8 @@ export const lightColors: ColorScheme = {
   textTertiary: palette.ink[300],
   textOnAccent: palette.paper[0],
 
-  accent: palette.athl.light,
-  accentSoft: palette.athl.lightSoft,
+  accent: palette.zaafaran.light,
+  accentSoft: palette.zaafaran.lightSoft,
 
   positive: palette.nakhl.light,
   positiveSoft: '#E4F1EA',
@@ -87,8 +87,8 @@ export const darkColors: ColorScheme = {
   textTertiary: palette.glow[600],
   textOnAccent: palette.night[950],
 
-  accent: palette.athl.dark,
-  accentSoft: palette.athl.darkSoft,
+  accent: palette.zaafaran.dark,
+  accentSoft: palette.zaafaran.darkSoft,
 
   positive: palette.nakhl.dark,
   positiveSoft: '#132C22',
