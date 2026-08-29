@@ -44,7 +44,7 @@ from .profiles import (
 )
 from .profiles.manager import SystemGuardState
 
-app = FastAPI(title="Maather Autonomous Trader", version="0.5.1")
+app = FastAPI(title="Maather Autonomous Trader", version="0.5.2")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],

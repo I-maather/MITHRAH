@@ -146,6 +146,10 @@ gate "TypeScript" npx tsc --noEmit
 gate "ESLint" npx eslint . --ext .ts,.tsx --max-warnings 0
 gate "اختبارات الجوال" npx jest --silent --ci
 
+# `override` يرفع حزمة خارج النطاق الذي يعلنه مستهلكها يكسر البناء برسالة
+# لا تدلّ على سببها. حدث ذلك فعلاً: tar 7 مقابل `@expo/cli: ^6.0.5`.
+gate "نطاقات overrides" node scripts/check-overrides.mjs
+
 # --- بوابة أمنية: لا ثغرة critical/high **قابلة للوصول في الإنتاج** --------
 # الحكم على القابلية للوصول لا على العدد: أغلب ما يبلّغ عنه npm audit في مشروع
 # Expo هو أدوات بناء لا تدخل حزمة التطبيق. `--omit=dev` وحده لا يفرّق، لأن
@@ -180,7 +184,25 @@ ok "شجرة mobile/ نظيفة"
 
 say ''
 say 'توليد مشروع iOS الأصلي:'
-gate "expo prebuild" npx expo prebuild --platform ios --clean
+
+# **رمز الخروج يكذب هنا.** رُصد `expo prebuild` يطبع
+# «✖ Failed to create the native directory» ثم يخرج بـ0، فطبعت البوابة ✅
+# على فشل تامّ ولم يُولَّد شيء. فلا يُوثَق برمز الخروج وحده: يُتحقَّق من
+# **الأثر** — أن المشروع الأصلي موجود فعلاً بعد الأمر.
+npx expo prebuild --platform ios --clean || true
+
+prebuild_ok=1
+[ -d "$MOBILE/ios" ] || prebuild_ok=0
+ls "$MOBILE"/ios/*.xcodeproj >/dev/null 2>&1 || prebuild_ok=0
+[ -f "$MOBILE/ios/Podfile" ] || prebuild_ok=0
+
+if [ "$prebuild_ok" -ne 1 ]; then
+  printf '  ❌ expo prebuild — لم يُنتج مشروعاً أصلياً صالحاً.\n' >&2
+  printf '     المتوقَّع: mobile/ios/ وفيه ملف .xcodeproj وPodfile.\n' >&2
+  printf '     اقرئي رسالة الخطأ أعلاه — قد يخرج الأمر بنجاح وهو فاشل.\n' >&2
+  exit 1
+fi
+ok "expo prebuild — المشروع الأصلي مُنتَج ومُتحقَّق منه"
 
 if [ -f "$MOBILE/PrivacyInfo.xcprivacy.template" ] && [ -d "$MOBILE/ios" ]; then
   target_dir="$(find "$MOBILE/ios" -maxdepth 1 -type d ! -name ios ! -name Pods | head -1)"
@@ -200,7 +222,12 @@ if [ -n "$WORKSPACE" ]; then
   say '  افتحيه بهذا الأمر بالضبط:'
   printf '\n     open "%s"\n\n' "$WORKSPACE"
 else
-  bad "لم يُعثر على ملف .xcworkspace بعد prebuild"
+  # `bad` ترفع علماً لا تُنهي، وكانت هنا في آخر السكربت فتُطبع رسالة فشل
+  # ثم يخرج بـ0. غياب مساحة العمل يعني أن CocoaPods لم يعمل — عطل حقيقي.
+  printf '  ❌ لم يُعثر على ملف .xcworkspace بعد prebuild.\n' >&2
+  printf '     غالباً لم يعمل CocoaPods. جرّبي: sudo gem install cocoapods\n' >&2
+  printf '     ثم من mobile/ios: pod install\n' >&2
+  exit 1
 fi
 say 'ثم داخل Xcode:'
 say ''
