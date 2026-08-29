@@ -65,12 +65,58 @@ uvicorn app.main:app --host 127.0.0.1 --port 8000
 
 ---
 
+## 2.5 متى يكفي `pod install` ومتى لا يكفي
+
+**قاعدة تعلَّمناها بانهيار تطبيق على الجهاز:**
+
+| تغيّر | ما يكفي |
+|---|---|
+| كود TypeScript/React فقط | ▶ Run |
+| حزمة جديدة بلا كود أصلي | `npm install` ثم ▶ Run |
+| حزمة بكود أصلي (كاميرا، إشعارات…) | `npm install` ثم `pod install` ثم ▶ Run |
+| **أي تغيير في `app.config.ts`** | **`expo prebuild` — ولا يكفي غيره** |
+
+`app.config.ts` هو مصدر `Info.plist` والاستحقاقات، ولا يُترجَم إليهما إلا
+عبر `prebuild`. و`pod install` يربط المكتبات ولا يمسّ الأذونات إطلاقاً.
+
+### ما حدث فعلاً
+
+أُضيف `NSCameraUsageDescription` إلى `app.config.ts`، ثم بُني المشروع
+بـ`pod install` وحده حفاظاً على إعداد التوقيع. فبقي الإذن **في المصدر
+وغائباً عن التطبيق المبنيّ**. وiOS يقتل أي تطبيق يفتح الكاميرا بلا إذن
+مُعلَن — انهيار كامل بلا رسالة:
+
+```
+This app is missing NSCameraUsageDescription
+```
+
+فبدا للمالكة أن «الزر لا يعمل»، والزر كان يعمل تماماً.
+
+**نصيحة «تخطّي prebuild للحفاظ على التوقيع» صحيحة — إلا حين يتغيّر
+`app.config.ts`.** والنصيحتان تُقالان معاً أو لا تُقال إحداهما.
+
+### مخرجٌ حين لا تريدين إعادة التوقيع
+
+يُضاف المفتاح مباشرةً إلى `ios/<التطبيق>/Info.plist`. وهو ملف مُولَّد
+ومُتجاهَل في Git، فلا يُلتزَم به — و`app.config.ts` يحمله لكل `prebuild`
+قادم، فلا يضيع.
+
+```bash
+python3 - <<'PLIST'
+import plistlib, pathlib
+p = pathlib.Path('mobile/ios/MaatherTrader/Info.plist')
+d = plistlib.loads(p.read_bytes())
+d['NSCameraUsageDescription'] = 'تُستعمل الكاميرا لقراءة رمز الاقتران وحده.'
+p.write_bytes(plistlib.dumps(d))
+PLIST
+```
+
 ## 3. توليد رمز الاقتران
 
 ```bash
 cd ~/Desktop/Trading/Maather-Autonomous-Trader/backend
 source .venv/bin/activate
-python3 -m app.mobile.pairing --backend http://<عنوان-الخادم-الخاص>:8000
+python3 -m app.mobile.pairing --backend https://<اسم-الجهاز>.<الشبكة>.ts.net
 ```
 
 يرسم الرمز في الطرفية. امسحيه من شاشة «لا جهاز مسجَّل».
@@ -94,7 +140,7 @@ python3 -m app.mobile.pairing --backend http://<عنوان-الخادم-الخا
 ## 4. ما يحدث عند المسح
 
 ```
-التطبيق يقرأ الحمولة  ⇒  POST /api/mobile/v1/enroll/complete
+التطبيق يقرأ الحمولة  ⇒  POST /api/mobile/session/enroll
 الخادم يستهلك التحدّي  ⇒  يصدر رمز وصول (15 دقيقة) + تجديد (30 يوماً)
 التطبيق يحفظهما في سلسلة مفاتيح iOS
 ```
