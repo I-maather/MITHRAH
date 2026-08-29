@@ -19,7 +19,14 @@
 set -euo pipefail
 umask 077
 
-SERVICE_PREFIX="maather-trader"
+# **يجب أن يطابق `KEYCHAIN_SERVICE` في `backend/app/secretstore/provider.py`.**
+# اختلافهما هو الخلل الذي جعل المفاتيح تُحفظ بنجاح ثم لا يجدها القارئ:
+# كل مفتاح إدخالة مستقلة تحت **خدمة واحدة**، والحساب هو اسم المفتاح.
+# اختبار `test_credential_script_service_matches_the_reader` يمنع تكرار ذلك.
+SERVICE="maather-autonomous-trader"
+
+# التسمية القديمة الخاطئة — تُنظَّف عند إعادة الضبط.
+LEGACY_SERVICE_PREFIX="maather-trader"
 
 # التوافق: bash 3.2 لا يملك المصفوفات الترابطية، فالوصف عبر دالة `case`.
 prompt_for() {
@@ -49,20 +56,30 @@ have_keychain() {
   command -v security >/dev/null 2>&1
 }
 
-keychain_service() {
-  printf '%s-%s' "$SERVICE_PREFIX" "$(printf '%s' "$1" | tr '[:upper:]_' '[:lower:]-')"
+legacy_service() {
+  printf '%s-%s' "$LEGACY_SERVICE_PREFIX" \
+    "$(printf '%s' "$1" | tr '[:upper:]_' '[:lower:]-')"
 }
 
 # **يفحص الوجود فقط.** لا يطبع القيمة ولا يمرّرها ولا يحتفظ بها.
 keychain_has() {
-  security find-generic-password -s "$(keychain_service "$1")" -a "$USER" \
-    >/dev/null 2>&1
+  security find-generic-password -s "$SERVICE" -a "$1" >/dev/null 2>&1
 }
 
 keychain_store() {
   # `-U` يحدّث الموجود بدل أن يُنشئ نسخة ثانية صامتة.
-  security add-generic-password \
-    -s "$(keychain_service "$1")" -a "$USER" -w "$2" -U >/dev/null 2>&1
+  security add-generic-password -U -s "$SERVICE" -a "$1" -w "$2" >/dev/null 2>&1
+}
+
+# حذف الإدخالة المكتوبة بالتسمية القديمة. **الحذف لا يقرأ القيمة.**
+keychain_drop_legacy() {
+  security delete-generic-password -s "$(legacy_service "$1")" -a "$USER" \
+    >/dev/null 2>&1 || true
+}
+
+legacy_present() {
+  security find-generic-password -s "$(legacy_service "$1")" -a "$USER" \
+    >/dev/null 2>&1
 }
 
 check_only() {
@@ -74,6 +91,9 @@ check_only() {
       missing=1
     elif keychain_has "$key"; then
       printf '  ✅  %-18s موجود\n' "$key"
+    elif legacy_present "$key"; then
+      printf '  ⚠️   %-18s محفوظ بتسمية قديمة — أعيدي الضبط\n' "$key"
+      missing=1
     else
       printf '  ❌  %-18s غير مُعدّ\n' "$key"
       missing=1
@@ -131,7 +151,12 @@ configure_one() {
     return 1
   fi
   if keychain_store "$key" "$value"; then
-    printf '  ✅ حُفظ في Keychain. لم تُطبع القيمة ولن تُقرأ ثانيةً من هنا.\n'
+    printf '  ✅ حُفظ في Keychain (service=%s, account=%s).\n' "$SERVICE" "$key"
+    printf '     لم تُطبع القيمة ولن تُقرأ ثانيةً من هنا.\n'
+    if legacy_present "$key"; then
+      keychain_drop_legacy "$key"
+      printf '     🧹 حُذفت الإدخالة القديمة الخاطئة.\n'
+    fi
   else
     printf '  ⛔ تعذّر الحفظ في Keychain.\n' >&2
     return 1

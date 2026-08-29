@@ -318,3 +318,65 @@ def test_no_test_invokes_the_real_macos_keychain():
             if "/usr/bin/security" in line:
                 offenders.append(f"{path.name}: {line.strip()[:70]}")
     assert not offenders, offenders
+
+
+# ===========================================================================
+# 9. سكربتات الاعتمادات تكتب حيث يقرأ القارئ
+# ===========================================================================
+
+CREDENTIAL_SCRIPTS = (
+    REPO_ROOT / "scripts" / "configure_capital_credentials.sh",
+    REPO_ROOT / "scripts" / "configure_provider_credentials.sh",
+)
+
+
+@pytest.mark.parametrize("script", CREDENTIAL_SCRIPTS, ids=lambda p: p.name)
+def test_credential_script_service_matches_the_reader(script):
+    """
+    الخلل الذي يمنعه هذا الاختبار وقع فعلاً: سكربت المزوّدين كان يكتب تحت
+    `service="maather-trader-<key>"` و`account=$USER`، بينما القارئ
+    (`KeychainSecretProvider`) يبحث تحت `service="maather-autonomous-trader"`
+    و`account=<KEY_NAME>`.
+
+    النتيجة كانت أسوأ من فشل صريح: السكربت يطبع **«✅ حُفظ»** — وهو صادق،
+    فالقيمة حُفظت فعلاً — ثم `provider-status` يطبع **❌** لكل مفتاح. نجاحٌ
+    وفشلٌ متزامنان، ولا رسالة تشير إلى السبب.
+
+    الكاتب والقارئ **يتفقان بالاختبار**، لا بالانتباه.
+    """
+    from app.secretstore.provider import KEYCHAIN_SERVICE
+
+    text = script.read_text(encoding="utf-8")
+    assignments = [
+        line for line in text.splitlines()
+        if line.strip().startswith("SERVICE=")
+    ]
+    assert assignments, f"{script.name}: لا تعريف SERVICE"
+    value = assignments[0].split("=", 1)[1].strip().strip('"').strip("'")
+    assert value == KEYCHAIN_SERVICE, (
+        f"{script.name} يكتب تحت «{value}» والقارئ يبحث في «{KEYCHAIN_SERVICE}»"
+    )
+
+
+@pytest.mark.parametrize("script", CREDENTIAL_SCRIPTS, ids=lambda p: p.name)
+def test_credential_script_uses_the_key_name_as_the_account(script):
+    """
+    القارئ يمرّر `-a <KEY_NAME>`. فلو كتب السكربت `-a "$USER"` لضاعت المطابقة
+    حتى مع اتفاق اسم الخدمة.
+    """
+    text = script.read_text(encoding="utf-8")
+    for line in text.splitlines():
+        if "add-generic-password" in line and not line.strip().startswith("#"):
+            assert '-a "$USER"' not in line, line.strip()
+            assert '-a "$1"' in line, line.strip()
+
+
+def test_provider_status_reads_the_same_names_the_script_writes():
+    """أسماء المفاتيح نفسها في السكربت وفي الكود."""
+    from app.providers import PROVIDER_CREDENTIALS
+
+    text = (REPO_ROOT / "scripts" / "configure_provider_credentials.sh").read_text(
+        encoding="utf-8"
+    )
+    for name in PROVIDER_CREDENTIALS:
+        assert name in text, name
