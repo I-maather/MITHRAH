@@ -8,6 +8,9 @@
  * ترفضها الطبقة الحقيقية.
  */
 import '@testing-library/react-native/extend-expect';
+// يُستورَد في الأعلى لا داخل الخطّاف: هذه الحزمة تسجّل خطّافات تنظيف عند
+// استيرادها، و`jest-circus` يرفض إضافة خطّاف بعد بدء التشغيل.
+import { render as renderForWarmup } from '@testing-library/react-native';
 
 // -- expo-constants ---------------------------------------------------------
 jest.mock('expo-constants', () => ({
@@ -79,17 +82,6 @@ const mockRouter = {
 };
 (globalThis as any).__routerMock = mockRouter;
 
-// مُقلِّد الموجّه **مفردة عامة**، فاستدعاءاته تتراكم عبر اختبارات الملف
-// الواحد ما لم تُصفَّر. وهذا يُبطل أي تأكيد من نوع `toHaveBeenCalledTimes(1)`:
-// ينجح صدفةً لأن ما قبله لم يوجّه، ويسقط أو يمرّ كذباً بمجرد إعادة الترتيب.
-// التصفير هنا لا في كل ملف، كي لا يُنسى في ملف جديد.
-beforeEach(() => {
-  mockRouter.push.mockClear();
-  mockRouter.replace.mockClear();
-  mockRouter.back.mockClear();
-  mockRouter.navigate.mockClear();
-});
-
 jest.mock('expo-router', () => {
   const React = jest.requireActual('react');
   const { View } = jest.requireActual('react-native');
@@ -127,8 +119,62 @@ jest.mock('react-native-safe-area-context', () => {
   };
 });
 
+// ---------------------------------------------------------------------------
+// تسخين: أول تصيير يدفع فاتورة ترجمة Babel، فلا يدفعها **تأكيد**
+// ---------------------------------------------------------------------------
+//
+// ## العطب المرصود
+//
+// على ذاكرة ترجمة باردة — وهي حالة كل تشغيل يلي `npm install` — كان أول
+// اختبار يُصيِّر مكوّناً يسقط بمهلة الخمس ثوانٍ، بينما يمرّ كل ما بعده في
+// عشرات المللي ثانية. القياس على جهاز المالكة:
+//
+//     أول تصيير  5666 ms      ← يسقط
+//     ما بعده      55–113 ms
+//
+// السبب ليس بطء الاختبار ولا تعليقاً في منطق التطبيق. `react-native` تُحمِّل
+// وحداتها الداخلية **كسولاً** عند أول وصول، لا عند الاستيراد: قياسُ
+// `require` وحده يعطي ~940 ms، والباقي يُدفَع داخل `render()` نفسه. فأول
+// تصيير في العملية يترجم عشرات الوحدات، ثم تُخدَم البقية من ذاكرة القرص.
+//
+// ## لماذا ليس رفع المهلة
+//
+// رفع `testTimeout` يخفي العطب ولا يزيله: يبقى تأكيدٌ واحد رهينةَ حالة
+// الذاكرة المؤقتة على جهاز غير معلوم. والصحيح نقل التكلفة إلى حيث تنتمي —
+// **التهيئة**. تصييرٌ تافه هنا يمتصّ الفاتورة كاملة:
+//
+//     التسخين  6046 ms
+//     التصيير الحقيقي بعده  124 ms
+//
+// فتبقى مهلة كل `it` عند الافتراضي (5000 ms) وتظلّ ذات معنى: أي تأكيد
+// يتجاوزها بعد اليوم هو بطء حقيقي أو تعليق حقيقي، لا ضجيج ترجمة.
+//
+// المهلة الممنوحة هنا لخطّاف تهيئة لا لتأكيد، ومهمّته المعلنة دفع كلفة
+// تُدفَع مرة واحدة لكل عملية.
+beforeAll(() => {
+  const React = jest.requireActual('react');
+  const { View, Text, Pressable, ScrollView } = jest.requireActual('react-native');
+  renderForWarmup(
+    React.createElement(
+      ScrollView,
+      null,
+      React.createElement(
+        Pressable,
+        null,
+        React.createElement(View, null, React.createElement(Text, null, 'warmup')),
+      ),
+    ),
+  );
+}, 60_000);
+
 beforeEach(() => {
   mockSecureStoreMemory.clear();
+  // مُقلِّد الموجّه **مفردة عامة**، فاستدعاءاته تتراكم عبر اختبارات الملف
+  // الواحد ما لم تُصفَّر. وهذا يُبطل أي تأكيد من نوع `toHaveBeenCalledTimes(1)`:
+  // ينجح صدفةً لأن ما قبله لم يوجّه، ويمرّ كذباً بمجرد إعادة الترتيب.
+  // التصفير هنا لا في كل ملف، كي لا يُنسى في ملف جديد.
   mockRouter.push.mockClear();
   mockRouter.replace.mockClear();
+  mockRouter.back.mockClear();
+  mockRouter.navigate.mockClear();
 });
