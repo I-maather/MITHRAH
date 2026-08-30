@@ -18,6 +18,7 @@ from ..contracts import HealthReport
 from ..db.session import get_session, init_db
 from ..execution.orders import ExecutionService, IdempotencyGuard
 from ..killswitch.engine import KillSwitch
+from ..killswitch.store import load_kill_switch_state, record_trigger
 from ..money import D
 from ..pipeline.runner import BlackoutCalendar, MacroAssessment, Pipeline, PipelineResult
 from ..risk.constitution import RiskLimits, RiskMode
@@ -66,6 +67,8 @@ class SystemState:
     providers: ProviderRegistry
     #: قفل محلي يوقفه المالكة من الواجهة. لا يفتح شيئاً — يوقف فقط.
     locally_paused: bool = True
+    #: جلسة قاعدة البيانات — تلزم لتثبيت إطفاء قاطع الطوارئ بموافقة مكتوبة (C2).
+    db_session: object = None
     last_result: Optional[PipelineResult] = None
     last_intelligence: Optional[IntelligenceResult] = None
 
@@ -128,7 +131,12 @@ def build_system(settings: Settings | None = None) -> SystemState:
     install_redacting_filter()
     settings.assert_mode_allowed()
     limits = RiskLimits.for_mode(RiskMode(settings.risk_mode), D(settings.baseline_equity_usd))
-    kill_switch = KillSwitch()
+    # C2: الحالة تُستعاد من السجل، والتفعيل يُكتَب فوراً.
+    # قاطع الطوارئ لا يُطفَأ بإعادة تشغيل — بموافقة إنسان مكتوبة فقط.
+    kill_switch = KillSwitch(
+        state=load_kill_switch_state(session),
+        notifier=lambda event: record_trigger(session, event),
+    )
     risk_engine = RiskEngine(limits)
     execution = ExecutionService(broker=broker, audit=audit, guard=IdempotencyGuard())
 
@@ -171,6 +179,7 @@ def build_system(settings: Settings | None = None) -> SystemState:
         scheduler=SafeScheduler(),
         secret_presence=[p.as_dict() for p in secret_provider.presence(REQUIRED_CAPITAL_SECRETS)],
         profiles=ProfileManager(DEFAULT_PROFILE),
+        db_session=session,
         strategy_definitions=StrategyDefinitionRegistry(),
         # لا مزوّد مُعدّ بعد: التقويم والأخبار والكلي وبيانات السوق كلها ناقصة،
         # وهذا يظهر باسمه الدقيق في `/api/intelligence` ويمنع الأهلية الحقيقية.

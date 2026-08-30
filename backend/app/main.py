@@ -21,6 +21,7 @@ from .clock import format_riyadh, now_utc, us_market_status
 from .config import get_settings
 from .eligibility.allowlist import ALLOWLIST, EXPLICIT_DENYLIST
 from .killswitch.engine import TRIGGER_LABELS_AR, KillSwitchTrigger
+from .killswitch.store import record_reset
 from .money import D
 from .risk.constitution import (
     CONSTITUTION_VERSION,
@@ -277,6 +278,9 @@ def reset_kill(req: ResetRequest, sys: SystemState = Depends(system)):
         raise HTTPException(400, f"عبارة التأكيد غير مطابقة. المطلوب: «{RESET_PHRASE}»")
     try:
         approval = sys.kill_switch.reset(approved_by=req.approved_by, reason_ar=req.reason_ar)
+        # C2: يُثبَّت الإطفاء في السجل، وإلا عاد القاطع مفعّلاً بعد إعادة التشغيل.
+        if sys.db_session is not None:
+            record_reset(sys.db_session, approval)
     except (RuntimeError, ValueError) as exc:
         raise HTTPException(400, str(exc)) from exc
     sys.audit.record(
