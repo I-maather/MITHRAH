@@ -22,6 +22,9 @@ APP_DIR="/opt/mathrah"
 BUNDLE="/tmp/mathrah.bundle"
 SERVICE="/etc/systemd/system/mathrah.service"
 
+#: الكوميت المتوقَّع، يمرّره سكربت النقل. **يُقارَن بما وصل فعلاً.**
+EXPECTED_SHA="${1:-}"
+
 red()   { printf '\033[31m%s\033[0m\n' "$*"; }
 green() { printf '\033[32m%s\033[0m\n' "$*"; }
 step()  { printf '\n\033[1m▸ %s\033[0m\n' "$*"; }
@@ -57,6 +60,11 @@ green "✅ المستخدم $APP_USER"
 step "٣ · الكود"
 # ---------------------------------------------------------------------------
 mkdir -p "$APP_DIR"
+# الجذر يقرأ مستودعاً يملكه مستخدم آخر، فيرفض git ذلك افتراضاً
+# («dubious ownership»). ولولا هذا السطر لفشل كل أمر git صامتاً بعد
+# تغيير الملكية — وقد فشل فعلاً، وطُبع «✅» فوق فشل.
+git config --global --add safe.directory "$APP_DIR" >/dev/null 2>&1 || true
+
 if [ -d "$APP_DIR/.git" ]; then
   git -C "$APP_DIR" fetch "$BUNDLE" 'refs/heads/*:refs/remotes/bundle/*' -f \
     >/dev/null 2>&1 || die "تعذّر جلب التحديث من الحزمة."
@@ -67,7 +75,17 @@ else
   git clone -q "$BUNDLE" "$APP_DIR" || die "تعذّر استنساخ الكود."
 fi
 chown -R "$APP_USER:$APP_USER" "$APP_DIR"
-green "✅ الكود في $APP_DIR ($(git -C "$APP_DIR" rev-parse --short HEAD))"
+
+# **يُقرأ ما وصل، ويُقارَن بما كان يجب أن يصل.**
+#
+# السطر السابق كان `green "… ($(git rev-parse …))"` — فحين فشل الأمر طُبع
+# قوسان فارغان تحت علامة ✅. لا يُعلَن نجاح بلا دليل، والدليل يُقرأ لا يُفترض.
+DEPLOYED_SHA="$(git -C "$APP_DIR" rev-parse HEAD 2>/dev/null || true)"
+[ -n "$DEPLOYED_SHA" ] || die "تعذّرت قراءة الكوميت المنقول — لا يُعلَن نجاح بلا دليل."
+if [ -n "$EXPECTED_SHA" ] && [ "$DEPLOYED_SHA" != "$EXPECTED_SHA" ]; then
+  die "الكوميت المنقول ${DEPLOYED_SHA:0:7} يخالف المتوقَّع ${EXPECTED_SHA:0:7}."
+fi
+green "✅ الكود في $APP_DIR (${DEPLOYED_SHA:0:7}${EXPECTED_SHA:+ · مطابق للمتوقَّع})"
 
 # ---------------------------------------------------------------------------
 step "٤ · بيئة بايثون"

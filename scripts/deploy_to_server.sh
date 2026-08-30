@@ -59,7 +59,9 @@ fi
 BUNDLE="$(mktemp -t mathrah).bundle"
 git -C "$ROOT" bundle create "$BUNDLE" --all >/dev/null 2>&1 \
   || { red "⛔ تعذّر إنشاء الحزمة."; exit 1; }
-green "✅ حزمة بحجم $(du -h "$BUNDLE" | cut -f1) · $(git -C "$ROOT" rev-parse --short HEAD)"
+# الكوميت المتوقَّع يُمرَّر إلى الخادم كي **يقارن ما وصل بما أُرسل**.
+EXPECTED_SHA="$(git -C "$ROOT" rev-parse HEAD)"
+green "✅ حزمة بحجم $(du -h "$BUNDLE" | cut -f1) · ${EXPECTED_SHA:0:7}"
 
 # ---------------------------------------------------------------------------
 step "٣ · النقل"
@@ -80,7 +82,7 @@ green "✅ النقل تمّ"
 # ---------------------------------------------------------------------------
 step "٤ · التهيئة على الخادم"
 # ---------------------------------------------------------------------------
-"${SSH[@]}" -t "root@$SERVER_IP" "bash /tmp/bootstrap.sh"
+"${SSH[@]}" -t "root@$SERVER_IP" "bash /tmp/bootstrap.sh $EXPECTED_SHA"
 status=$?
 
 echo
