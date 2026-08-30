@@ -1,0 +1,185 @@
+#!/usr/bin/env bash
+#
+# تهيئة خادم مَثْراة — يُنفَّذ **على الخادم** لا على الماك.
+#
+# يُستدعى من `scripts/deploy_to_server.sh`، ولا يُشغَّل يدوياً.
+#
+# ## المبدأ
+#
+# **يفشل مغلقاً، ويتحقّق من الأثر لا من نيّة الأمر.** نفس الدرس الذي علّمنا
+# إياه رمز خروج `expo prebuild`: أمرٌ ينجح ظاهرياً وقد لا يترك شيئاً.
+#
+# ## وما لا يفعله
+#
+# * **لا يفعّل التداول.** `LIVE_TRADING=false` وهو الافتراضي، ولا يُلمَس.
+# * **لا ينقل أي سرّ.** مجلّد `secrets/` و`data/private/` لا يُنسخان.
+# * **لا يفتح الخادم على الإنترنت.** يستمع على `127.0.0.1` وحدها، والوصول
+#   عبر الشبكة الخاصة فقط. والجدار يرفض كل وارد عدا SSH.
+set -uo pipefail
+
+APP_USER="mathrah"
+APP_DIR="/opt/mathrah"
+BUNDLE="/tmp/mathrah.bundle"
+SERVICE="/etc/systemd/system/mathrah.service"
+
+red()   { printf '\033[31m%s\033[0m\n' "$*"; }
+green() { printf '\033[32m%s\033[0m\n' "$*"; }
+step()  { printf '\n\033[1m▸ %s\033[0m\n' "$*"; }
+
+die() { red "⛔ $*"; exit 1; }
+
+[ "$(id -u)" -eq 0 ] || die "لا بدّ من الجذر."
+[ -f "$BUNDLE" ] || die "حزمة الكود غير موجودة: $BUNDLE"
+
+# ---------------------------------------------------------------------------
+step "١ · الحزم الأساسية"
+# ---------------------------------------------------------------------------
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -qq || die "تعذّر تحديث قوائم الحزم."
+apt-get install -y -qq git python3 python3-venv python3-pip curl ufw jq \
+  >/dev/null || die "تعذّر تثبيت الحزم الأساسية."
+green "✅ git · python3 · venv · ufw"
+
+python3 --version
+
+# ---------------------------------------------------------------------------
+step "٢ · مستخدم لا يملك الجذر"
+# ---------------------------------------------------------------------------
+# الخدمة **لا تعمل بصلاحية الجذر**: ثغرةٌ في اعتمادية ما تصير عندها ثغرة
+# في النظام كلّه. والمستخدم بلا صدفة دخول ولا كلمة مرور.
+if ! id -u "$APP_USER" >/dev/null 2>&1; then
+  useradd --system --create-home --home-dir "/home/$APP_USER" \
+          --shell /usr/sbin/nologin "$APP_USER" || die "تعذّر إنشاء المستخدم."
+fi
+green "✅ المستخدم $APP_USER"
+
+# ---------------------------------------------------------------------------
+step "٣ · الكود"
+# ---------------------------------------------------------------------------
+mkdir -p "$APP_DIR"
+if [ -d "$APP_DIR/.git" ]; then
+  git -C "$APP_DIR" fetch "$BUNDLE" 'refs/heads/*:refs/remotes/bundle/*' -f \
+    >/dev/null 2>&1 || die "تعذّر جلب التحديث من الحزمة."
+  git -C "$APP_DIR" reset --hard bundle/main >/dev/null 2>&1 \
+    || git -C "$APP_DIR" reset --hard bundle/master >/dev/null 2>&1 \
+    || die "تعذّر تحديث الشجرة."
+else
+  git clone -q "$BUNDLE" "$APP_DIR" || die "تعذّر استنساخ الكود."
+fi
+chown -R "$APP_USER:$APP_USER" "$APP_DIR"
+green "✅ الكود في $APP_DIR ($(git -C "$APP_DIR" rev-parse --short HEAD))"
+
+# ---------------------------------------------------------------------------
+step "٤ · بيئة بايثون"
+# ---------------------------------------------------------------------------
+sudo -u "$APP_USER" python3 -m venv "$APP_DIR/.venv" >/dev/null 2>&1 \
+  || die "تعذّر إنشاء البيئة الافتراضية."
+sudo -u "$APP_USER" "$APP_DIR/.venv/bin/pip" install -q --upgrade pip >/dev/null
+sudo -u "$APP_USER" "$APP_DIR/.venv/bin/pip" install -q \
+  -r "$APP_DIR/backend/requirements.txt" || die "تعذّر تثبيت الاعتماديات."
+green "✅ البيئة جاهزة"
+
+# ---------------------------------------------------------------------------
+step "٥ · مجلّد الحالة بصلاحيات مغلقة"
+# ---------------------------------------------------------------------------
+# `MobileStateStore` يرفض ملفاً مقروءاً لغير مالكه — فالصلاحيات هنا شرط
+# تشغيل لا تزيين.
+install -d -o "$APP_USER" -g "$APP_USER" -m 700 "$APP_DIR/data"
+if [ -f /tmp/mobile-state.json ]; then
+  install -o "$APP_USER" -g "$APP_USER" -m 600 \
+    /tmp/mobile-state.json "$APP_DIR/data/mobile-state.json"
+  shred -u /tmp/mobile-state.json 2>/dev/null || rm -f /tmp/mobile-state.json
+  green "✅ حالة الجوال نُقلت — الجهاز يبقى مسجَّلاً"
+else
+  green "✅ مجلّد الحالة (بلا حالة سابقة)"
+fi
+
+# ---------------------------------------------------------------------------
+step "٦ · خدمة تعيد تشغيل نفسها"
+# ---------------------------------------------------------------------------
+cat > "$SERVICE" <<UNIT
+[Unit]
+Description=Mathrah Autonomous Trader — backend
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=$APP_USER
+Group=$APP_USER
+WorkingDirectory=$APP_DIR/backend
+Environment=PYTHONUNBUFFERED=1
+# التنفيذ الحقيقي مُطفأ. لا يُغيَّر هنا ولا في أي مكان بلا قرار مكتوب.
+Environment=LIVE_TRADING=false
+ExecStart=$APP_DIR/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=3
+
+# تضييق الصلاحيات: الخدمة لا تحتاج شيئاً من النظام خارج مجلّدها.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=$APP_DIR/data
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+systemctl daemon-reload
+systemctl enable --now mathrah >/dev/null 2>&1 || die "تعذّر تشغيل الخدمة."
+
+# **يُتحقَّق من الأثر.** `systemctl enable` ينجح ولو لم تُقلع الخدمة.
+ready=0
+for _ in $(seq 1 40); do
+  if [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 \
+        http://127.0.0.1:8000/api/mobile/v1/describe 2>/dev/null)" = "200" ]; then
+    ready=1; break
+  fi
+  sleep 0.5
+done
+if [ "$ready" -ne 1 ]; then
+  red "⛔ الخدمة لم تستجب خلال 20 ثانية. آخر السجل:"
+  journalctl -u mathrah -n 25 --no-pager
+  exit 1
+fi
+green "✅ الخدمة تعمل وتستجيب على 127.0.0.1:8000"
+
+# ---------------------------------------------------------------------------
+step "٧ · الجدار الناري"
+# ---------------------------------------------------------------------------
+ufw --force reset >/dev/null 2>&1
+ufw default deny incoming  >/dev/null
+ufw default allow outgoing >/dev/null
+ufw allow 22/tcp           >/dev/null
+# واجهة الشبكة الخاصة موثوقة — لا منفذ عام يُفتح للتطبيق.
+ufw allow in on tailscale0 >/dev/null 2>&1 || true
+ufw --force enable         >/dev/null
+green "✅ الوارد مرفوض عدا SSH · لا منفذ عام للتطبيق"
+
+# ---------------------------------------------------------------------------
+step "٨ · الشبكة الخاصة"
+# ---------------------------------------------------------------------------
+if ! command -v tailscale >/dev/null 2>&1; then
+  curl -fsSL https://tailscale.com/install.sh | sh >/dev/null 2>&1 \
+    || die "تعذّر تثبيت Tailscale."
+fi
+green "✅ Tailscale مثبَّت"
+
+echo
+echo "════════════════════════════════════════════════════════"
+green "تمّت التهيئة."
+echo "════════════════════════════════════════════════════════"
+echo
+echo "بقيت خطوة واحدة تحتاج موافقتك بالمتصفّح — ربط الخادم بشبكتك الخاصة:"
+echo
+echo "    ssh -i ~/Desktop/Trading/.ssh-maather/maather_hetzner root@SERVER_IP"
+echo "    tailscale up --hostname=mathrah"
+echo "    tailscale serve --bg 8000"
+echo
+echo "سيطبع رابطاً افتحيه في المتصفّح لتأكيد انضمام الخادم."
+echo "وبعدها يصير عنوان الخادم:  https://mathrah.<شبكتك>.ts.net"
+echo
