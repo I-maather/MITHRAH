@@ -94,6 +94,7 @@ def build_order_intent(
         quantity=decision.quantity,
         limit_price=signal.entry_price,
         stop_price=signal.stop_price,
+        take_profit_price=signal.take_profit_price,
         expected_fill_price=signal.entry_price,
         max_slippage_abs=max_slippage_abs,
         strategy_name=signal.strategy_name,

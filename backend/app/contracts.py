@@ -312,6 +312,9 @@ class OrderIntent(Base):
     quantity: Decimal
     limit_price: Optional[Decimal]
     stop_price: Optional[Decimal]
+    #: هدف جني الأرباح. موجود في `Signal` ومطلوب في حمولة الوسيط، وكان
+    #: يضيع بينهما فلا يبقى إلا في نصّ `exit_plan_ar` النثري.
+    take_profit_price: Optional[Decimal] = None
     expected_fill_price: Decimal
     max_slippage_abs: Decimal
     strategy_name: str
