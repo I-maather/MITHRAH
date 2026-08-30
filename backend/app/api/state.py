@@ -23,6 +23,7 @@ from ..pipeline.runner import BlackoutCalendar, MacroAssessment, Pipeline, Pipel
 from ..risk.constitution import RiskLimits, RiskMode
 from ..risk.costs import IBKR_PRO_TIERED_US_STOCK, CostAssumptions
 from ..risk.engine import RiskEngine, SessionRiskState
+from ..risk.session_state import load_session_state
 from ..strategies.base import StrategyRegistry
 from ..strategies.registry import StrategyDefinitionRegistry
 from ..intelligence.providers import ProviderRegistry
@@ -142,12 +143,10 @@ def build_system(settings: Settings | None = None) -> SystemState:
         blackouts=blackouts, allow_live_submission=False,
     )
 
-    state = SessionRiskState(
-        baseline_equity=limits.baseline_equity, current_equity=limits.baseline_equity,
-        realized_pnl_today=Decimal("0"), realized_pnl_week=Decimal("0"),
-        unrealized_pnl=Decimal("0"), open_positions=0, entry_orders_today=0,
-        consecutive_losses=0,
-    )
+    # C1: حالة المخاطرة تُقرأ من جدول الصفقات، لا تُثبَّت على صفر.
+    # قبل هذا كانت realized_pnl_today/week صفراً دائماً، فحدود الخسارة
+    # اليومية والأسبوعية وحاجز التراجع **لا يمكن أن تُفعَّل**.
+    state = load_session_state(session, baseline_equity=limits.baseline_equity)
 
     audit.record(
         actor=Actor.SYSTEM, action=AuditAction.SYSTEM_START,
