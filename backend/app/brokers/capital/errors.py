@@ -45,3 +45,13 @@ class CapitalMarketClosed(CapitalError):
 
 class CapitalNotFound(CapitalError):
     pass
+
+
+class CapitalExecutionUncertain(CapitalError):
+    """
+    أُرسل الأمر ولم يُحسم مصيره.
+
+    **أخطر من الرفض.** الرفض يعني أن شيئاً لم يحدث؛ وهذه تعني أن مركزاً قد
+    يكون فُتح دون أن نعلم. لا تُعالَج بإعادة الإرسال أبداً — بل بالاستقصاء
+    (`resolve_unknown_execution`) وتفعيل قاطع الطوارئ وتدخّل بشري.
+    """

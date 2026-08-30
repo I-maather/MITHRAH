@@ -54,6 +54,8 @@ from .endpoints import (
     prices_path,
 )
 from .errors import (
+    CapitalExecutionUncertain,
+    CapitalMalformedResponse,
     CapitalMarketClosed,
     CapitalNotFound,
     CapitalSessionExpired,
@@ -70,7 +72,7 @@ from .models import (
     MarketSummary,
     mask_account_id,
 )
-from .safety import ExecutionLock, assert_environment_allowed
+from .safety import LIVE_API_ENABLED, LiveApiBlocked, ExecutionLock, assert_environment_allowed
 from .session import CapitalSession
 from .transport import Transport
 
@@ -97,6 +99,17 @@ ASSET_CLASS_BY_TYPE: dict[str, AssetClass] = {
     "COMMODITIES": AssetClass.CFD_COMMODITY,
     "INDICES": AssetClass.CFD_INDEX,
 }
+
+
+#: هل أُثبتت وحدة `stopDistance` لدى الوسيط؟
+#:
+#: `pip_size` يأتي من جدول **محلي** (`PIP_SIZES`) لا من الوسيط، فوجوده ليس
+#: دليلاً. والوسيط يصف `minStopOrProfitDistance` بوحدة "POINTS" بقيمة تُقرأ
+#: فرقَ سعر للذهب (1.00) وتستحيل للعملات (0.25 = 2500 نقطة).
+#:
+#: تُقلَب إلى True **فقط** بعد أمر تجريبي واحد على Demo يُقارَن فيه
+#: `stopLevel` العائد من الوسيط بالمتوقَّع. لا قبل ذلك.
+STOP_DISTANCE_UNIT_PROVEN = False
 
 
 class InstrumentNotAllowed(BrokerRejected):
@@ -160,6 +173,32 @@ class CapitalComAdapter(BrokerAdapter):
             self.session.tokens.touch(now_utc())
         body = response.json()
         return body if isinstance(body, dict) else {"items": body}
+
+    def _post(self, path: str, payload: dict) -> dict:
+        """
+        الإرسال الوحيد في هذا المحوّل.
+
+        يمرّ عبر `GuardedTransport` نفسه، فقفل التنفيذ يُفحص على مستوى الناقل
+        أيضاً لا هنا وحده. و**لا إعادة محاولة عند المهلة**: طلبٌ قد يكون وصل
+        لا يُعاد إرساله — تلك طريقة فتح مركزين بأمر واحد.
+        """
+        self.session.ensure_session()
+        response = self.transport.send(
+            "POST", self._url(path), headers=self.session.auth_headers(), json=payload
+        )
+        if response.status in (401, 403):
+            raise CapitalSessionExpired(
+                "رُفضت المصادقة أثناء الإرسال. لا تجديد ولا إعادة محاولة هنا: "
+                "الطلب قد يكون وصل، وإعادته تفتح مركزاً ثانياً."
+            )
+        if not response.ok:
+            raise CapitalTransportError(f"استجابة غير ناجحة {response.status} من {path}.")
+        if self.session.tokens is not None:
+            self.session.tokens.touch(now_utc())
+        body = response.json()
+        if not isinstance(body, dict):
+            raise CapitalMalformedResponse(f"استجابة {path} ليست كائناً.")
+        return body
 
     def _assert_discoverable(self, epic: str) -> None:
         if epic.upper() not in {e.upper() for e in self.discovery_allowlist}:
@@ -606,11 +645,142 @@ class CapitalComAdapter(BrokerAdapter):
 
     # --- ما يلي كله مقفل ------------------------------------------------
     def place_order(self, intent: OrderIntent) -> BrokerOrder:
+        """
+        إرسال أمر: بناء ⇐ إرسال ⇐ تأكيد ⇐ مطابقة.
+
+        **الاعتراف بالنجاح لا يأتي من استجابة الإرسال.** `POST /positions`
+        يعيد `dealReference` فقط — وهو إيصالُ استلام لا إثبات تنفيذ. الدليل
+        الوحيد هو `GET /confirms/{ref}` بحالة `ACCEPTED`، ثم مطابقة ما نُفِّذ
+        بما نويناه. أي اختلاف في الأداة أو الاتجاه أو الكمية يُرفَع خطأً ولا
+        يُقبَل بصمت.
+
+        القفل يُفحص هنا **وفي الناقل**، فطبقتان لا واحدة.
+        """
         self.execution_lock.assert_can_execute("POST /positions")
-        raise NotImplementedError(
-            "إرسال الأوامر مقفل. عند فتحه لاحقاً بموافقة موثقة، المسار هو: "
-            "build_position_payload → POST /positions → dealReference → "
-            "poll_confirmation → reconcile."
+
+        # دفاع في العمق: لا إرسال على بيئة حقيقية مهما قال القفل.
+        if self.is_live or LIVE_API_ENABLED:
+            raise LiveApiBlocked("إرسال أمر على البيئة الحقيقية مرفوض في هذا الإصدار.")
+
+        self._assert_executable(intent.symbol)
+        details = self.get_instrument_details(intent.symbol)
+
+        if details.market_status and details.market_status.upper() != "TRADEABLE":
+            raise CapitalMarketClosed(f"السوق ليس قابلاً للتداول: {details.market_status}")
+
+        if intent.stop_price is None:
+            raise BrokerRejected("لا أمر بلا وقف خسارة — ولا مسار لبنائه.")
+        if intent.quantity < details.min_quantity:
+            raise BrokerRejected(
+                f"الكمية {intent.quantity} دون حدّ الوسيط الأدنى {details.min_quantity}."
+            )
+
+        stop_price_distance = abs(intent.expected_fill_price - intent.stop_price)
+        if stop_price_distance <= 0:
+            raise BrokerRejected("مسافة الوقف صفر.")
+
+        # ---------------------------------------------------------------
+        # وحدة `stopDistance` غير مُثبَتة.
+        #
+        # الوسيط يقبل الحقل، ولم يُثبَت بعد أهو بالنقاط أم بفرق السعر الخام.
+        # وخطأٌ بمعامل 10000 هنا يعني وقفاً أبعد بعشرة آلاف ضعف — أي بلا وقف.
+        #
+        # هذه هي حالة `OVERNIGHT_RATE_UNIT_UNKNOWN` نفسها، والقاعدة نفسها
+        # تُطبَّق: **لا يُخمَّن، ويُرفَض حتى يُقاس.** يُثبت بأمر تجريبي واحد
+        # على Demo يُقارَن فيه `stopLevel` العائد بالمتوقَّع.
+        # ---------------------------------------------------------------
+        if not STOP_DISTANCE_UNIT_PROVEN:
+            raise BrokerRejected(
+                "وحدة مسافة الوقف غير مُثبَتة (STOP_DISTANCE_UNIT_UNKNOWN). "
+                "pip_size مصدره جدول محلي لا الوسيط، فوجوده ليس دليلاً. "
+                "تُثبَت بأمر تجريبي واحد على Demo يُقارَن فيه stopLevel العائد "
+                "بالمتوقَّع، ثم تُقلَب STOP_DISTANCE_UNIT_PROVEN."
+            )
+        if details.pip_size is None or details.min_stop_distance is None:
+            raise BrokerRejected(
+                f"بيانات الأداة ناقصة: pip_size={details.pip_size} · "
+                f"min_stop_distance={details.min_stop_distance}."
+            )
+
+        stop_distance = stop_price_distance / details.pip_size
+        if stop_distance < details.min_stop_distance:
+            raise BrokerRejected(
+                f"مسافة الوقف {stop_distance} دون حدّ الوسيط "
+                f"{details.min_stop_distance}. لا تُوسَّع تلقائياً — التوسيع "
+                "يغيّر المخاطرة التي وافقتِ عليها."
+            )
+
+        # `limit_price` سعر الدخول لا الهدف. الهدف حقلٌ مستقلّ، وغيابه رفض.
+        if intent.take_profit_price is None:
+            raise BrokerRejected("لا أمر بلا هدف: take_profit_price مفقود في النية.")
+        profit_price_distance = abs(intent.take_profit_price - intent.expected_fill_price)
+        if profit_price_distance <= 0:
+            raise BrokerRejected("مسافة الهدف صفر.")
+        payload = self.build_position_payload(
+            epic=intent.symbol,
+            direction=intent.side,
+            size=intent.quantity,
+            stop_distance=stop_distance,
+            profit_distance=profit_price_distance / details.pip_size,
+            guaranteed_stop=bool(intent.instrument_snapshot.get("guaranteed_stop", False)),
+        )
+
+        body = self._post(PATH_POSITIONS, payload)
+        deal_reference = body.get("dealReference")
+        if not deal_reference:
+            raise CapitalMalformedResponse(
+                "استجابة الإرسال بلا dealReference — لا يمكن إثبات ما حدث."
+            )
+
+        state, confirmation = self.poll_confirmation(str(deal_reference))
+        at = now_utc()
+
+        if state is ExecutionUncertainty.UNKNOWN or confirmation is None:
+            raise CapitalExecutionUncertain(
+                f"أُرسل الأمر ({deal_reference}) ولم يُحسم مصيره. "
+                "لا تُعيدي الإرسال: استقصي بـresolve_unknown_execution، "
+                "وفعّلي قاطع الطوارئ."
+            )
+
+        if state is ExecutionUncertainty.RESOLVED_REJECTED:
+            return BrokerOrder(
+                broker_order_id=confirmation.deal_id or "",
+                client_order_id=str(deal_reference),
+                symbol=intent.symbol,
+                side=intent.side,
+                order_type=intent.order_type,
+                quantity=intent.quantity,
+                filled_quantity=D("0"),
+                average_fill_price=None,
+                status=OrderStatus.REJECTED,
+                updated_at_utc=at,
+            )
+
+        # المطابقة: ما نُفِّذ يجب أن يكون ما نويناه، حرفاً بحرف.
+        if confirmation.epic and confirmation.epic.upper() != intent.symbol.upper():
+            raise BrokerRejected(
+                f"أداة مختلفة: نُفِّذ {confirmation.epic} ونويناه {intent.symbol}."
+            )
+        if confirmation.direction and confirmation.direction.upper() != intent.side.value:
+            raise BrokerRejected(
+                f"اتجاه مختلف: نُفِّذ {confirmation.direction} ونويناه {intent.side.value}."
+            )
+        if confirmation.size is not None and confirmation.size != intent.quantity:
+            raise BrokerRejected(
+                f"كمية مختلفة: نُفِّذت {confirmation.size} ونويناها {intent.quantity}."
+            )
+
+        return BrokerOrder(
+            broker_order_id=confirmation.deal_id or "",
+            client_order_id=str(deal_reference),
+            symbol=intent.symbol,
+            side=intent.side,
+            order_type=intent.order_type,
+            quantity=intent.quantity,
+            filled_quantity=confirmation.size or intent.quantity,
+            average_fill_price=confirmation.level,
+            status=OrderStatus.FILLED,
+            updated_at_utc=at,
         )
 
     def confirm_order(self, client_order_id: str) -> BrokerOrder:
