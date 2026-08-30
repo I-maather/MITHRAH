@@ -1,0 +1,679 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>مَثْراة — نموذج تفاعلي</title>
+<style>
+:root{
+  --bg:#0B0A12; --surf:#15141F; --surf2:#1D1B29; --bd:#262336;
+  --tx:#ECEAF4; --tx2:#A9A4BC; --tx3:#726C87;
+  --ac:#D9A441; --acInk:#1A1408; --pos:#3FBF7F; --neg:#E4566A;
+  --sh:0 1px 2px rgba(0,0,0,.05),0 8px 24px rgba(0,0,0,.06);
+  --r:20px;
+  --f:-apple-system,"SF Arabic","Geeza Pro","Segoe UI",system-ui,sans-serif;
+  --ease:cubic-bezier(.22,.9,.28,1);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{background:#0A0A0C;color:#E8E6EA;font-family:var(--f);font-size:15px;line-height:1.7;
+     -webkit-font-smoothing:antialiased;min-height:100vh}
+
+/* ══════════ لوح التحكّم ══════════ */
+.stage{max-width:1180px;margin:0 auto;padding:34px 20px 90px;
+       display:grid;grid-template-columns:1fr 400px;gap:44px;align-items:start}
+@media(max-width:960px){.stage{grid-template-columns:1fr;gap:30px}}
+
+.panel h1{font-size:clamp(24px,3.6vw,34px);margin:0 0 8px;line-height:1.3;letter-spacing:-.01em}
+.panel .sub{color:#8E8A96;margin:0 0 30px;max-width:52ch;font-size:14.5px}
+.ctl{margin-bottom:26px}
+.ctl>.lb{font-size:11px;letter-spacing:.18em;color:#7C7886;margin-bottom:11px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{border:1px solid #26242C;background:#141419;color:#B8B4C0;border-radius:11px;
+      padding:9px 14px;font-size:13.5px;font-family:inherit;cursor:pointer;
+      display:inline-flex;align-items:center;gap:8px;
+      transition:background .18s var(--ease),border-color .18s var(--ease),
+                 color .18s var(--ease),transform .12s var(--ease)}
+.chip:hover{border-color:#3A3844;color:#E8E6EA}
+.chip:active{transform:scale(.96)}
+.chip[aria-pressed="true"]{background:#232028;border-color:#4A4656;color:#FFF}
+.chip .sw{width:26px;height:15px;border-radius:5px;display:block;flex:0 0 26px;
+          border:1px solid rgba(255,255,255,.14);overflow:hidden;display:flex}
+.chip .sw i{flex:1;display:block}
+.hint{font-size:12.5px;color:#6E6A78;margin:26px 0 0;max-width:48ch;line-height:1.75}
+.hint b{color:#A5A1AE;font-weight:600}
+.hint+.hint{margin-top:12px}
+
+/* ══════════ الجوّال ══════════ */
+.deviceWrap{display:flex;justify-content:center;position:sticky;top:34px}
+@media(max-width:960px){.deviceWrap{position:static}}
+.device{width:352px;max-width:100%;border-radius:46px;padding:11px;background:#17171B;
+        border:1px solid #2A2A31;box-shadow:0 30px 70px rgba(0,0,0,.55)}
+.screen{border-radius:36px;overflow:hidden;background:var(--bg);color:var(--tx);
+        height:722px;display:flex;flex-direction:column;position:relative;
+        transition:background .38s var(--ease),color .38s var(--ease)}
+
+.statusbar{display:flex;justify-content:space-between;align-items:center;
+           padding:14px 24px 4px;font-size:11.5px;color:var(--tx2);
+           font-variant-numeric:tabular-nums}
+.statusbar .rt{display:flex;gap:4px;align-items:center}
+.statusbar .rt i{width:3px;border-radius:2px;background:currentColor;display:block}
+
+.appbar{display:flex;align-items:center;justify-content:space-between;padding:8px 20px 14px}
+.brand{font-size:19px;font-weight:700;letter-spacing:.01em}
+.brand small{display:block;font-size:9px;letter-spacing:.26em;color:var(--tx3);
+             font-weight:500;margin-top:-2px}
+.conn{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--tx2);
+      background:var(--surf);border:1px solid var(--bd);border-radius:999px;padding:5px 11px;
+      transition:background .3s var(--ease),border-color .3s var(--ease)}
+.conn .dot{width:7px;height:7px;border-radius:50%;background:var(--pos);display:block;
+           position:relative}
+.conn .dot::after{content:"";position:absolute;inset:-4px;border-radius:50%;
+                  border:1px solid var(--pos);opacity:.5;animation:ping 2.6s var(--ease) infinite}
+@keyframes ping{0%{transform:scale(.6);opacity:.7}70%,100%{transform:scale(1.5);opacity:0}}
+
+.view{flex:1;overflow-y:auto;padding:2px 16px 12px;scrollbar-width:none}
+.view::-webkit-scrollbar{display:none}
+
+.card{background:var(--surf);border:1px solid var(--bd);border-radius:var(--r);
+      padding:17px 18px;margin-bottom:11px;position:relative;overflow:hidden;
+      box-shadow:var(--sh);
+      transition:background .3s var(--ease),border-color .3s var(--ease),
+                 transform .16s var(--ease)}
+.card:active{transform:scale(.985)}
+.enter{animation:rise .5s var(--ease) both}
+@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+
+.klbl{font-size:10.5px;letter-spacing:.13em;color:var(--tx3);margin-bottom:9px;
+      display:flex;justify-content:space-between;align-items:center;gap:8px}
+
+/* البطاقة الرئيسة */
+.hero{padding:20px 18px 18px}
+.hero::before{content:"";position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(120% 90% at 85% -20%,color-mix(in srgb,var(--ac) 16%,transparent),transparent 62%)}
+.heroRow{display:flex;align-items:center;gap:18px;position:relative}
+.gauge{width:96px;height:96px;flex:0 0 96px;position:relative}
+.gauge svg{transform:rotate(-90deg);display:block}
+.gauge .trk{stroke:var(--surf2)}
+.gauge .val{stroke:var(--ac);stroke-linecap:round;
+            transition:stroke-dashoffset 1.1s var(--ease),stroke .3s var(--ease)}
+.gauge .mk{stroke:var(--tx);opacity:.45}
+.gaugeMid{position:absolute;inset:0;display:flex;flex-direction:column;
+          align-items:center;justify-content:center;gap:0}
+.gaugeMid b{font-size:14px;font-weight:700;line-height:1}
+.gaugeMid span{font-size:8.5px;color:var(--tx3);letter-spacing:.1em;margin-top:3px}
+.heroNum{font-size:40px;font-weight:700;line-height:1;direction:ltr;
+         font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.heroNum small{font-size:14px;font-weight:500;color:var(--tx3);margin-inline-start:6px}
+.heroSub{font-size:11.5px;color:var(--tx2);margin-top:7px}
+
+/* الصفوف */
+.row{display:flex;justify-content:space-between;align-items:center;gap:10px;
+     font-size:13.5px;padding:9px 0}
+.row+.row{border-top:1px solid var(--bd)}
+.row .v{color:var(--tx2);font-variant-numeric:tabular-nums;direction:ltr}
+.big2{font-size:19px;font-weight:650}
+
+.pill{font-size:10.5px;padding:3px 10px;border-radius:999px;border:1px solid var(--bd);
+      color:var(--tx2);background:var(--surf2)}
+.pill.warn{color:var(--ac);border-color:color-mix(in srgb,var(--ac) 45%,transparent);
+           background:color-mix(in srgb,var(--ac) 12%,transparent)}
+
+.dots{display:flex;gap:5px}
+.dots i{width:9px;height:9px;border-radius:50%;background:var(--surf2);
+        border:1px solid var(--bd);display:block;transition:background .3s var(--ease)}
+.dots i.on{background:var(--ac);border-color:var(--ac)}
+
+/* أثر اليوم */
+.trace{display:flex;gap:3px;align-items:flex-end;height:34px;margin-top:4px}
+.trace i{flex:1;background:var(--surf2);border-radius:2px;display:block;height:6px;
+         transition:height .5s var(--ease),background .3s var(--ease)}
+.trace i.now{background:color-mix(in srgb,var(--ac) 55%,var(--surf2))}
+
+/* القرار */
+.verdict{font-size:26px;font-weight:700;letter-spacing:-.01em;line-height:1.2;color:var(--ac)}
+.why{font-size:12.8px;color:var(--tx2);line-height:1.75;margin-top:8px}
+.gate{display:flex;align-items:center;gap:10px;font-size:12.5px;padding:9px 0}
+.gate+.gate{border-top:1px solid var(--bd)}
+.gate .ic{width:18px;height:18px;border-radius:6px;flex:0 0 18px;background:var(--surf2);
+          border:1px solid var(--bd);display:flex;align-items:center;justify-content:center;
+          font-size:10px;color:var(--tx3)}
+.gate .st{margin-inline-start:auto;font-size:11px;color:var(--tx3)}
+
+/* حالة فارغة */
+.empty{text-align:center;padding:22px 10px}
+.empty .m{font-size:26px;color:var(--tx3);margin-bottom:6px}
+.empty p{margin:0;font-size:12.5px;color:var(--tx2);line-height:1.7}
+
+/* الإعدادات */
+.seg{display:flex;gap:5px;background:var(--surf2);border-radius:12px;padding:4px}
+.seg button{flex:1;border:0;background:transparent;color:var(--tx2);font-family:inherit;
+            font-size:12px;padding:8px 4px;border-radius:9px;cursor:pointer;
+            transition:background .22s var(--ease),color .22s var(--ease),transform .12s}
+.seg button:active{transform:scale(.95)}
+.seg button[aria-pressed="true"]{background:var(--surf);color:var(--tx);
+                                 box-shadow:0 1px 3px rgba(0,0,0,.16)}
+.swatches{display:flex;gap:7px;flex-wrap:wrap}
+.swatch{width:38px;height:38px;border-radius:11px;border:2px solid transparent;cursor:pointer;
+        padding:0;overflow:hidden;display:flex;transition:transform .16s var(--ease),
+        border-color .2s var(--ease)}
+.swatch i{flex:1;display:block}
+.swatch:active{transform:scale(.92)}
+.swatch[aria-pressed="true"]{border-color:var(--tx)}
+.tgl{width:46px;height:27px;border-radius:999px;background:var(--surf2);border:1px solid var(--bd);
+     position:relative;cursor:pointer;padding:0;flex:0 0 46px;
+     transition:background .26s var(--ease)}
+.tgl b{position:absolute;top:2px;inset-inline-start:2px;width:21px;height:21px;border-radius:50%;
+       background:var(--tx3);transition:inset-inline-start .26s var(--ease),background .26s var(--ease)}
+.tgl[aria-pressed="true"]{background:color-mix(in srgb,var(--neg) 70%,transparent)}
+.tgl[aria-pressed="true"] b{inset-inline-start:21px;background:#fff}
+
+.stamp{text-align:center;font-size:9px;letter-spacing:.06em;color:var(--tx3);
+       padding:8px 0 4px;opacity:.85}
+
+/* التبويبات */
+.tabbar{display:flex;border-top:1px solid var(--bd);background:var(--surf);
+        padding:9px 6px 16px;position:relative;
+        transition:background .3s var(--ease),border-color .3s var(--ease)}
+.tabbar button{flex:1;border:0;background:transparent;color:var(--tx3);font-family:inherit;
+               font-size:10.5px;display:flex;flex-direction:column;align-items:center;gap:5px;
+               cursor:pointer;padding:4px 0;transition:color .22s var(--ease)}
+.tabbar button svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.7;
+                   stroke-linecap:round;stroke-linejoin:round;
+                   transition:transform .3s var(--ease)}
+.tabbar button[aria-selected="true"]{color:var(--ac)}
+.tabbar button[aria-selected="true"] svg{transform:translateY(-2px) scale(1.08)}
+
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;
+                       transition-duration:.01ms!important}
+}
+</style>
+</head>
+<body>
+<div class="stage">
+
+  <!-- ══════════ لوح التحكّم ══════════ -->
+  <div class="panel">
+    <h1 id="ptitle">جرّبيه بيدك بدل أن أصفه لك</h1>
+    <p class="sub" id="psub">
+      كل شيء هنا يعمل فعلاً: بدّلي السمة واللغة واللوحة وشوفي الفرق مباشرة.
+      اختاري باللمس لا بالسواتش — واللي يريحك عينك هو الصح.
+    </p>
+
+    <div class="ctl">
+      <div class="lb" id="lbTheme">المظهر</div>
+      <div class="chips" id="themeChips"></div>
+    </div>
+
+    <div class="ctl">
+      <div class="lb" id="lbLang">اللغة</div>
+      <div class="chips" id="langChips"></div>
+    </div>
+
+    <div class="ctl">
+      <div class="lb" id="lbPal">لوحة الألوان</div>
+      <div class="chips" id="palChips"></div>
+    </div>
+
+    <p class="hint" id="hint1">
+      <b>لا لافتة اتصال.</b> حالة الخادم صارت نقطة صغيرة في الترويسة، تنبض حين
+      يكون متّصلاً وتسكن رمادية حين ينقطع. جرّبي الزرّ تحت لتشوفي الحالتين.
+    </p>
+    <div class="chips" style="margin-top:12px">
+      <button class="chip" id="btnConn">اقطعي الاتصال</button>
+      <button class="chip" id="btnMotion">أعيدي الحركة</button>
+    </div>
+    <p class="hint" id="hint2">
+      <b>كل الأرقام في الشاشة غير حقيقية.</b> النظام لم يتداول ولن يتداول قبل
+      مزوّد بيانات واعتماد مكتوب — والشاشات هنا تعرض الحالة الصادقة: صفر صفقات،
+      وصفر من خمسة مزوّدات.
+    </p>
+  </div>
+
+  <!-- ══════════ الجهاز ══════════ -->
+  <div class="deviceWrap">
+   <div class="device"><div class="screen" id="screen">
+
+    <div class="statusbar">
+      <span id="clock">٩:٤١</span>
+      <span class="rt"><i style="height:5px"></i><i style="height:8px"></i>
+        <i style="height:11px"></i><i style="height:14px"></i></span>
+    </div>
+
+    <div class="appbar">
+      <div class="brand"><span id="brandName">مَثْراة</span><small id="brandSub">MATHRAH</small></div>
+      <div class="conn" id="conn"><span class="dot" id="connDot"></span>
+        <span id="connTxt">متّصل</span></div>
+    </div>
+
+    <div class="view" id="view"></div>
+
+    <div class="stamp" id="stamp">معاينة تصميم · أرقام غير حقيقية</div>
+
+    <nav class="tabbar" id="tabbar"></nav>
+   </div></div>
+  </div>
+</div>
+
+<script>
+/* ═════════════════ اللوحات ═════════════════ */
+const PALETTES = {
+  thurayya:{ ar:"الثُّرَيّا", en:"Pleiades",
+    dark :{bg:"#0B0A12",surf:"#15141F",surf2:"#1F1D2C",bd:"#282539",tx:"#ECEAF4",tx2:"#A9A4BC",tx3:"#726C87",ac:"#E0AC4E",acInk:"#1A1408",pos:"#4CC38A",neg:"#E4566A",sh:"none"},
+    light:{bg:"#F4F3F8",surf:"#FFFFFF",surf2:"#EEECF4",bd:"#E2DFEA",tx:"#171523",tx2:"#54506B",tx3:"#8B86A0",ac:"#9A6B14",acInk:"#FFF8E8",pos:"#12794B",neg:"#C22A44",sh:"0 1px 2px rgba(23,21,35,.04),0 10px 26px rgba(23,21,35,.06)"} },
+
+  jamr:{ ar:"الجَمْر", en:"Ember",
+    dark :{bg:"#0D0A08",surf:"#17120F",surf2:"#221B16",bd:"#2E251E",tx:"#F1EAE4",tx2:"#B2A498",tx3:"#7C6E63",ac:"#F0803C",acInk:"#2A1206",pos:"#4CC38A",neg:"#E4566A",sh:"none"},
+    light:{bg:"#FAF6F2",surf:"#FFFFFF",surf2:"#F4EDE6",bd:"#E8DFD5",tx:"#1A130E",tx2:"#5C4F45",tx3:"#8E7F73",ac:"#B84E17",acInk:"#FFF4EC",pos:"#12794B",neg:"#C22A44",sh:"0 1px 2px rgba(26,19,14,.04),0 10px 26px rgba(26,19,14,.07)"} },
+
+  qirtas:{ ar:"القِرْطاس", en:"Parchment",
+    dark :{bg:"#14110C",surf:"#1E1913",surf2:"#28221A",bd:"#352E23",tx:"#F3EDE1",tx2:"#ADA28E",tx3:"#7B7160",ac:"#D08348",acInk:"#231204",pos:"#4CC38A",neg:"#E4566A",sh:"none"},
+    light:{bg:"#F7F2EA",surf:"#FFFDF9",surf2:"#F1E9DC",bd:"#E4D9C7",tx:"#17140F",tx2:"#665C4E",tx3:"#948976",ac:"#9C5228",acInk:"#FFF6EE",pos:"#12794B",neg:"#B8283C",sh:"0 1px 2px rgba(23,20,15,.04),0 10px 26px rgba(23,20,15,.07)"} },
+
+  hadaa:{ ar:"الهَدْأة", en:"Calm",
+    dark :{bg:"#0A0A0C",surf:"#131317",surf2:"#1C1C22",bd:"#26262E",tx:"#EAEAEE",tx2:"#9E9EA9",tx3:"#6C6C77",ac:"#8AA4FF",acInk:"#0A0E22",pos:"#4CC38A",neg:"#E4566A",sh:"none"},
+    light:{bg:"#F5F5F7",surf:"#FFFFFF",surf2:"#EFEFF2",bd:"#E3E3E8",tx:"#141419",tx2:"#52525C",tx3:"#87878F",ac:"#3B54C4",acInk:"#F1F3FF",pos:"#12794B",neg:"#C22A44",sh:"0 1px 2px rgba(20,20,25,.04),0 10px 26px rgba(20,20,25,.06)"} },
+
+  nakheel:{ ar:"النَّخيل", en:"Palm",
+    dark :{bg:"#080D0A",surf:"#101711",surf2:"#182119",bd:"#212C22",tx:"#E7EFE8",tx2:"#9AAB9D",tx3:"#68786B",ac:"#C9A227",acInk:"#181302",pos:"#4CC38A",neg:"#E4566A",sh:"none"},
+    light:{bg:"#F4F6F2",surf:"#FFFFFF",surf2:"#EDF1EB",bd:"#DFE5DD",tx:"#111710",tx2:"#4E5A4F",tx3:"#818E83",ac:"#7A5D0A",acInk:"#FFFBEA",pos:"#12794B",neg:"#C22A44",sh:"0 1px 2px rgba(17,23,16,.04),0 10px 26px rgba(17,23,16,.06)"} }
+};
+
+/* ═════════════════ النصوص ═════════════════ */
+const T = {
+  ar:{
+    dir:"rtl", brand:"مَثْراة",
+    ptitle:"جرّبيه بيدك بدل أن أصفه لك",
+    psub:"كل شيء هنا يعمل فعلاً: بدّلي السمة واللغة واللوحة وشوفي الفرق مباشرة. اختاري باللمس لا بالسواتش — واللي يريحك عينك هو الصح.",
+    lbTheme:"المظهر", lbLang:"اللغة", lbPal:"لوحة الألوان",
+    dark:"داكن", light:"فاتح", system:"حسب النظام",
+    ar:"العربية", en:"English",
+    cut:"اقطعي الاتصال", restore:"أعيدي الاتصال", replay:"أعيدي الحركة",
+    hint1:"<b>لا لافتة اتصال.</b> حالة الخادم صارت نقطة صغيرة في الترويسة، تنبض حين يكون متّصلاً وتسكن رمادية حين ينقطع. جرّبي الزرّ تحت لتشوفي الحالتين.",
+    hint2:"<b>كل الأرقام في الشاشة غير حقيقية.</b> النظام لم يتداول ولن يتداول قبل مزوّد بيانات واعتماد مكتوب — والشاشات هنا تعرض الحالة الصادقة: صفر صفقات، وصفر من خمسة مزوّدات.",
+    clock:"٩:٤١", stamp:"معاينة تصميم · أرقام غير حقيقية",
+    connected:"متّصل", offline:"غير متّصل",
+    tabHome:"الرئيسية", tabDecision:"القرار", tabWallet:"المحفظة", tabSystem:"النظام",
+
+    riskLeft:"المتبقّي من مخاطرة اليوم", left:"متبقٍّ",
+    stopAt:"حدّ الإيقاف", barrier:"الحاجز", ofDay:"من حدّ اليوم",
+    todayState:"حالة اليوم", noTrade:"لا صفقة اليوم",
+    noTradeWhy:"النظام لا يرى السوق: صفر من خمسة مزوّدات مُهيّأة. الامتناع هنا سلوك صحيح لا عطل.",
+    completeness:"اكتمال البيانات", trace:"أثر اليوم", noActivity:"لا نشاط — لم يُفتح أي مركز",
+    lastUpdate:"آخر تحديث", profile:"الملف", conservative:"متحفّظ",
+
+    verdictTitle:"حكم اليوم", verdict:"لا تداول",
+    verdictWhy:"يمرّ الخط بمراحله ثم يقف عند بوّابة اعتماد الاستراتيجية، فيخرج «لا تداول» في كل مرة.",
+    gates:"البوّابات", g1:"بيانات سعرية", g2:"تقويم اقتصادي", g3:"أخبار", g4:"اعتماد الاستراتيجية",
+    unavail:"غير متاح", notyet:"لم يتمّ",
+    changes:"ما الذي يغيّر هذا",
+    changesBody:"مزوّد بيانات حقيقي واحد ← بيانات تاريخية ← اختبار خلفي ← تشغيل صامت ← موافقة مكتوبة. أسابيع لا ساعات.",
+
+    capital:"رأس المال", trades:"الصفقات", noTrades:"لا صفقات بعد",
+    perf:"الأداء منذ البداية",
+    noSample:"لا عيّنة كافية. لا تُعرض نسبة ربح من صفر صفقة — الرقم الفارغ أصدق من رقم مُلفَّق.",
+    openPos:"المراكز المفتوحة", none:"لا شيء",
+
+    appearance:"المظهر", language:"اللغة", paletteL:"لوحة الألوان",
+    killSwitch:"قاطع الطوارئ", killDesc:"يوقف كل تنفيذ فوراً ولا يُلغى إلا يدوياً",
+    liveTrading:"التنفيذ الحقيقي", off:"مُطفأ",
+    providers:"مزوّدات البيانات", zeroOf5:"0 من 5",
+    device:"الجهاز المقترن", oneActive:"جهاز واحد · نشط",
+    server:"الخادم", srv:"يعمل ٢٤/٧",
+    reduceNote:"يحترم إعداد «تقليل الحركة» في نظامك تلقائياً."
+  },
+  en:{
+    dir:"ltr", brand:"MATHRAH",
+    ptitle:"Try it, instead of me describing it",
+    psub:"Everything here actually works: switch theme, language and palette and watch it change live. Choose by feel, not by swatch — whatever rests your eyes is the right one.",
+    lbTheme:"Appearance", lbLang:"Language", lbPal:"Colour palette",
+    dark:"Dark", light:"Light", system:"System",
+    ar:"العربية", en:"English",
+    cut:"Go offline", restore:"Reconnect", replay:"Replay motion",
+    hint1:"<b>No connection banner.</b> Server state is a small dot in the header — it pulses when connected and goes quiet grey when it drops. Use the button below to see both.",
+    hint2:"<b>Every number on screen is fake.</b> The system has not traded and will not trade before a real data provider and written approval — so these screens show the honest state: zero trades, zero of five providers.",
+    clock:"9:41", stamp:"Design preview · numbers are not real",
+    connected:"Connected", offline:"Offline",
+    tabHome:"Home", tabDecision:"Decision", tabWallet:"Portfolio", tabSystem:"System",
+
+    riskLeft:"Risk budget left today", left:"left",
+    stopAt:"Stop limit", barrier:"Barrier", ofDay:"of today's limit",
+    todayState:"Today", noTrade:"No trade today",
+    noTradeWhy:"The system cannot see the market: 0 of 5 data providers configured. Abstaining here is correct behaviour, not a fault.",
+    completeness:"Data completeness", trace:"Today's activity", noActivity:"No activity — no position opened",
+    lastUpdate:"Last update", profile:"Profile", conservative:"Conservative",
+
+    verdictTitle:"Today's verdict", verdict:"NO TRADE",
+    verdictWhy:"The pipeline runs its stages, then stops at the strategy-approval gate, and returns NO TRADE every time.",
+    gates:"Gates", g1:"Price data", g2:"Economic calendar", g3:"News", g4:"Strategy approval",
+    unavail:"Unavailable", notyet:"Not done",
+    changes:"What would change this",
+    changesBody:"One real data provider → historical data → backtest → shadow mode → written approval. Weeks, not hours.",
+
+    capital:"Capital", trades:"Trades", noTrades:"No trades yet",
+    perf:"Performance since inception",
+    noSample:"Not enough sample. No win rate is shown from zero trades — an empty figure is more honest than a fabricated one.",
+    openPos:"Open positions", none:"None",
+
+    appearance:"Appearance", language:"Language", paletteL:"Colour palette",
+    killSwitch:"Kill switch", killDesc:"Halts all execution immediately; cleared only by hand",
+    liveTrading:"Live trading", off:"Off",
+    providers:"Data providers", zeroOf5:"0 of 5",
+    device:"Paired device", oneActive:"One device · active",
+    server:"Server", srv:"Running 24/7",
+    reduceNote:"Automatically respects your system's Reduce Motion setting."
+  }
+};
+
+/* ═════════════════ الحالة ═════════════════ */
+const S = { theme:"system", lang:"ar", pal:"thurayya", tab:"home", online:true };
+const mql = window.matchMedia("(prefers-color-scheme: dark)");
+const t = () => T[S.lang];
+
+function mode(){ return S.theme==="system" ? (mql.matches?"dark":"light") : S.theme; }
+
+function applyPalette(){
+  const p = PALETTES[S.pal][mode()];
+  const r = document.documentElement.style;
+  for (const k in p) r.setProperty("--"+k, p[k]);
+  document.getElementById("screen").style.colorScheme = mode();
+}
+
+function el(tag, cls, html){
+  const n=document.createElement(tag);
+  if(cls) n.className=cls;
+  if(html!=null) n.innerHTML=html;
+  return n;
+}
+
+/* ═════════════════ الشاشات ═════════════════ */
+const ICONS = {
+  home:'<path d="M3 10.5 12 3l9 7.5"/><path d="M5.5 9.5V21h13V9.5"/>',
+  decision:'<path d="M12 3v18"/><path d="M5 8h14"/><circle cx="12" cy="15" r="3.2"/>',
+  wallet:'<rect x="3" y="6" width="18" height="13" rx="3"/><path d="M16 12.5h2.5"/>',
+  system:'<circle cx="12" cy="12" r="3.2"/><path d="M12 2.6v3M12 18.4v3M2.6 12h3M18.4 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1"/>'
+};
+
+function gauge(pct){
+  const R=42, C=2*Math.PI*R, off=C*(1-pct);
+  return `<div class="gauge">
+    <svg viewBox="0 0 96 96" width="96" height="96">
+      <circle class="trk" cx="48" cy="48" r="${R}" fill="none" stroke-width="7"/>
+      <circle class="val" cx="48" cy="48" r="${R}" fill="none" stroke-width="7"
+              stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${C.toFixed(1)}"
+              data-off="${off.toFixed(1)}"/>
+    </svg>
+    <div class="gaugeMid"><b data-count="100">0</b><span>%</span></div>
+  </div>`;
+}
+
+function viewHome(){
+  const x=t();
+  const wrap=document.createDocumentFragment();
+
+  const hero=el("div","card hero enter");
+  hero.innerHTML = `<div class="klbl"><span>${x.riskLeft}</span>
+      <span class="pill">${x.conservative}</span></div>
+    <div class="heroRow">${gauge(1)}
+      <div>
+        <div class="heroNum" data-count="0.75" data-dec="2">0.00<small>USD</small></div>
+        <div class="heroSub">${x.stopAt} · 1.00 · ${x.barrier} 7.50</div>
+      </div>
+    </div>`;
+  wrap.appendChild(hero);
+
+  const st=el("div","card enter");
+  st.innerHTML = `<div class="klbl">${x.todayState}</div>
+    <div style="font-size:17px;font-weight:650">${x.noTrade}</div>
+    <div class="why">${x.noTradeWhy}</div>`;
+  wrap.appendChild(st);
+
+  const dc=el("div","card enter");
+  dc.innerHTML = `<div class="row" style="padding:0">
+      <span>${x.completeness}</span>
+      <span class="dots"><i></i><i></i><i></i><i></i><i></i></span>
+    </div>`;
+  wrap.appendChild(dc);
+
+  const tr=el("div","card enter");
+  let bars=""; for(let i=0;i<24;i++) bars+=`<i${i===9?' class="now"':''}></i>`;
+  tr.innerHTML = `<div class="klbl"><span>${x.trace}</span><span>${x.noActivity}</span></div>
+    <div class="trace">${bars}</div>`;
+  wrap.appendChild(tr);
+
+  const lu=el("div","card enter");
+  lu.innerHTML = `<div class="row" style="padding:0"><span>${x.lastUpdate}</span>
+    <span class="v">${S.lang==="ar"?"٩:٤٠ ص":"9:40 AM"}</span></div>`;
+  wrap.appendChild(lu);
+  return wrap;
+}
+
+function viewDecision(){
+  const x=t(); const wrap=document.createDocumentFragment();
+  const v=el("div","card enter");
+  v.innerHTML=`<div class="klbl">${x.verdictTitle}</div>
+    <div class="verdict">${x.verdict}</div>
+    <div class="why">${x.verdictWhy}</div>`;
+  wrap.appendChild(v);
+
+  const g=el("div","card enter");
+  const rows=[[x.g1,x.unavail],[x.g2,x.unavail],[x.g3,x.unavail],[x.g4,x.notyet]];
+  g.innerHTML=`<div class="klbl">${x.gates}</div>`+
+    rows.map(r=>`<div class="gate"><span class="ic">✕</span><span>${r[0]}</span>
+      <span class="st">${r[1]}</span></div>`).join("");
+  wrap.appendChild(g);
+
+  const c=el("div","card enter");
+  c.innerHTML=`<div class="klbl">${x.changes}</div><div class="why">${x.changesBody}</div>`;
+  wrap.appendChild(c);
+  return wrap;
+}
+
+function viewWallet(){
+  const x=t(); const wrap=document.createDocumentFragment();
+  const c=el("div","card enter");
+  c.innerHTML=`<div class="klbl">${x.capital}</div>
+    <div class="heroNum" data-count="150" data-dec="2" style="font-size:34px">0.00<small>USD</small></div>
+    <div class="row"><span>${x.barrier}</span><span class="v">7.50</span></div>
+    <div class="row"><span>${x.openPos}</span><span class="v">${x.none}</span></div>`;
+  wrap.appendChild(c);
+
+  const p=el("div","card enter");
+  p.innerHTML=`<div class="klbl">${x.perf}</div>
+    <div class="heroNum" style="font-size:30px;color:var(--tx3)">—</div>
+    <div class="why">${x.noSample}</div>`;
+  wrap.appendChild(p);
+
+  const tr=el("div","card enter");
+  tr.innerHTML=`<div class="klbl">${x.trades}</div>
+    <div class="empty"><div class="m">◍</div><p>${x.noTrades}</p></div>`;
+  wrap.appendChild(tr);
+  return wrap;
+}
+
+function viewSystem(){
+  const x=t(); const wrap=document.createDocumentFragment();
+
+  const ap=el("div","card enter");
+  ap.innerHTML=`<div class="klbl">${x.appearance}</div>
+    <div class="seg" id="segTheme">
+      <button data-th="dark">${x.dark}</button>
+      <button data-th="light">${x.light}</button>
+      <button data-th="system">${x.system}</button>
+    </div>
+    <div class="why" style="margin-top:9px">${x.reduceNote}</div>`;
+  wrap.appendChild(ap);
+
+  const lg=el("div","card enter");
+  lg.innerHTML=`<div class="klbl">${x.language}</div>
+    <div class="seg" id="segLang">
+      <button data-lg="ar">العربية</button><button data-lg="en">English</button>
+    </div>`;
+  wrap.appendChild(lg);
+
+  const pl=el("div","card enter");
+  pl.innerHTML=`<div class="klbl">${x.paletteL}</div><div class="swatches" id="palIn"></div>`;
+  wrap.appendChild(pl);
+
+  const ks=el("div","card enter");
+  ks.innerHTML=`<div class="row" style="padding:0;align-items:flex-start">
+      <span><b style="font-size:14.5px">${x.killSwitch}</b>
+        <div class="why" style="margin-top:4px">${x.killDesc}</div></span>
+      <button class="tgl" id="kill" aria-pressed="false"><b></b></button></div>`;
+  wrap.appendChild(ks);
+
+  const sys=el("div","card enter");
+  sys.innerHTML=`
+    <div class="row" style="padding-top:0"><span>${x.liveTrading}</span>
+      <span class="pill">${x.off}</span></div>
+    <div class="row"><span>${x.providers}</span><span class="pill warn">${x.zeroOf5}</span></div>
+    <div class="row"><span>${x.device}</span><span class="v">${x.oneActive}</span></div>
+    <div class="row" style="padding-bottom:0"><span>${x.server}</span>
+      <span class="v">${x.srv}</span></div>`;
+  wrap.appendChild(sys);
+  return wrap;
+}
+
+const VIEWS={home:viewHome,decision:viewDecision,wallet:viewWallet,system:viewSystem};
+
+/* ═════════════════ التصيير ═════════════════ */
+function animate(root){
+  root.querySelectorAll(".enter").forEach((n,i)=>n.style.animationDelay=(i*55)+"ms");
+  requestAnimationFrame(()=>{
+    root.querySelectorAll(".gauge .val").forEach(c=>{ c.style.strokeDashoffset=c.dataset.off; });
+    root.querySelectorAll("[data-count]").forEach(n=>countTo(n));
+  });
+}
+function countTo(node){
+  const target=parseFloat(node.dataset.count), dec=+(node.dataset.dec||0);
+  const suffix=node.querySelector("small")?node.querySelector("small").outerHTML:"";
+  const reduce=window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const dur=reduce?0:900, t0=performance.now();
+  function step(now){
+    const k=dur?Math.min(1,(now-t0)/dur):1;
+    const e=1-Math.pow(1-k,3);
+    node.innerHTML=(target*e).toFixed(dec)+suffix;
+    if(k<1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+function renderView(){
+  const v=document.getElementById("view");
+  v.innerHTML=""; v.appendChild(VIEWS[S.tab]());
+  v.scrollTop=0;
+  if(S.tab==="system") wireSystem();
+  animate(v);
+}
+
+function renderTabs(){
+  const x=t(), bar=document.getElementById("tabbar");
+  const defs=[["home",x.tabHome],["decision",x.tabDecision],
+              ["wallet",x.tabWallet],["system",x.tabSystem]];
+  bar.innerHTML="";
+  defs.forEach(([k,label])=>{
+    const b=el("button");
+    b.setAttribute("aria-selected", S.tab===k);
+    b.innerHTML=`<svg viewBox="0 0 24 24">${ICONS[k]}</svg><span>${label}</span>`;
+    b.onclick=()=>{ if(S.tab===k) return; S.tab=k; renderTabs(); renderView(); };
+    bar.appendChild(b);
+  });
+}
+
+function renderChrome(){
+  const x=t();
+  document.documentElement.lang=S.lang;
+  document.documentElement.dir=x.dir;
+  document.getElementById("ptitle").textContent=x.ptitle;
+  document.getElementById("psub").textContent=x.psub;
+  document.getElementById("lbTheme").textContent=x.lbTheme;
+  document.getElementById("lbLang").textContent=x.lbLang;
+  document.getElementById("lbPal").textContent=x.lbPal;
+  document.getElementById("hint1").innerHTML=x.hint1;
+  document.getElementById("hint2").innerHTML=x.hint2;
+  document.getElementById("btnConn").textContent=S.online?x.cut:x.restore;
+  document.getElementById("btnMotion").textContent=x.replay;
+  document.getElementById("brandName").textContent=x.brand;
+  document.getElementById("brandSub").textContent = S.lang==="ar" ? "MATHRAH" : "مَثْراة";
+  document.getElementById("clock").textContent=x.clock;
+  document.getElementById("stamp").textContent=x.stamp;
+  renderConn();
+
+  // شرائح لوح التحكّم
+  const th=document.getElementById("themeChips"); th.innerHTML="";
+  [["dark",x.dark],["light",x.light],["system",x.system]].forEach(([k,l])=>{
+    const b=el("button","chip",l); b.setAttribute("aria-pressed",S.theme===k);
+    b.onclick=()=>{ S.theme=k; applyPalette(); renderChrome(); if(S.tab==="system") renderView(); };
+    th.appendChild(b);
+  });
+  const lg=document.getElementById("langChips"); lg.innerHTML="";
+  [["ar","العربية"],["en","English"]].forEach(([k,l])=>{
+    const b=el("button","chip",l); b.setAttribute("aria-pressed",S.lang===k);
+    b.onclick=()=>{ S.lang=k; renderChrome(); renderTabs(); renderView(); };
+    lg.appendChild(b);
+  });
+  const pc=document.getElementById("palChips"); pc.innerHTML="";
+  for(const k in PALETTES){
+    const p=PALETTES[k], c=p[mode()];
+    const b=el("button","chip",
+      `<span class="sw"><i style="background:${c.bg}"></i>
+        <i style="background:${c.surf2}"></i><i style="background:${c.ac}"></i></span>
+       <span>${p[S.lang]||p.ar}</span>`);
+    b.setAttribute("aria-pressed",S.pal===k);
+    b.onclick=()=>{ S.pal=k; applyPalette(); renderChrome(); if(S.tab==="system") renderView(); };
+    pc.appendChild(b);
+  }
+}
+
+function renderConn(){
+  const x=t();
+  document.getElementById("connTxt").textContent=S.online?x.connected:x.offline;
+  const d=document.getElementById("connDot");
+  d.style.background=S.online?"var(--pos)":"var(--tx3)";
+  d.style.animationPlayState=S.online?"running":"paused";
+  d.style.setProperty("--_p",S.online?1:0);
+  d.className = S.online ? "dot" : "dot quiet";
+  document.getElementById("conn").style.opacity=S.online?"1":".72";
+}
+
+function wireSystem(){
+  const x=t();
+  document.querySelectorAll("#segTheme button").forEach(b=>{
+    b.setAttribute("aria-pressed", S.theme===b.dataset.th);
+    b.onclick=()=>{ S.theme=b.dataset.th; applyPalette(); renderChrome(); renderView(); };
+  });
+  document.querySelectorAll("#segLang button").forEach(b=>{
+    b.setAttribute("aria-pressed", S.lang===b.dataset.lg);
+    b.onclick=()=>{ S.lang=b.dataset.lg; renderChrome(); renderTabs(); renderView(); };
+  });
+  const host=document.getElementById("palIn"); host.innerHTML="";
+  for(const k in PALETTES){
+    const c=PALETTES[k][mode()];
+    const b=el("button","swatch",
+      `<i style="background:${c.bg}"></i><i style="background:${c.surf2}"></i>
+       <i style="background:${c.ac}"></i>`);
+    b.title=PALETTES[k][S.lang]||PALETTES[k].ar;
+    b.setAttribute("aria-pressed",S.pal===k);
+    b.onclick=()=>{ S.pal=k; applyPalette(); renderChrome(); renderView(); };
+    host.appendChild(b);
+  }
+  const kill=document.getElementById("kill");
+  kill.onclick=()=>{
+    const on=kill.getAttribute("aria-pressed")==="true";
+    kill.setAttribute("aria-pressed", String(!on));
+  };
+}
+
+/* ═════════════════ الإقلاع ═════════════════ */
+document.getElementById("btnConn").onclick=()=>{
+  S.online=!S.online; renderChrome();
+};
+document.getElementById("btnMotion").onclick=()=>renderView();
+mql.addEventListener("change",()=>{ if(S.theme==="system"){ applyPalette(); renderChrome();
+  if(S.tab==="system") renderView(); } });
+
+applyPalette(); renderChrome(); renderTabs(); renderView();
+</script>
+</body>
+</html>

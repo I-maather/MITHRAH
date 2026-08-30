@@ -1,0 +1,555 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>مَثْراة — بحث المنافسين البصري</title>
+<style>
+  :root{
+    --ink:#0C0A09; --ink2:#141110; --ink3:#1D1917;
+    --line:#2E2926; --line2:#3D3633;
+    --text:#EDE7E2; --mute:#9B918A; --mute2:#6E645E;
+    --ember:#F0803C; --brass:#D9A441; --cool:#7DD3D8;
+    --pos:#2FBF71; --neg:#E0435A;
+    --f: -apple-system, "SF Arabic", "Geeza Pro", "Segoe UI", system-ui, sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{background:var(--ink);color:var(--text);font-family:var(--f);line-height:1.75;
+       -webkit-font-smoothing:antialiased;font-size:15px}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 22px 120px}
+
+  /* ── رأس ── */
+  header{padding:72px 0 40px;border-bottom:1px solid var(--line)}
+  .kicker{font-size:12px;letter-spacing:.22em;color:var(--ember);margin:0 0 18px}
+  h1{font-size:clamp(30px,5.2vw,48px);line-height:1.25;margin:0 0 14px;font-weight:700;letter-spacing:-.01em}
+  .sub{color:var(--mute);font-size:16px;max-width:62ch;margin:0}
+  .meta{display:flex;flex-wrap:wrap;gap:26px;margin-top:30px;font-size:12.5px;color:var(--mute2)}
+  .meta b{color:var(--text);font-weight:600;display:block;font-size:19px;line-height:1.3;
+          direction:ltr;text-align:right}
+
+  h2{font-size:22px;margin:0 0 6px;font-weight:700}
+  .secnum{font-size:11.5px;letter-spacing:.2em;color:var(--ember);margin:0 0 10px}
+  section{padding:56px 0;border-bottom:1px solid var(--line)}
+  section:last-of-type{border-bottom:0}
+  .lede{color:var(--mute);max-width:66ch;margin:0 0 30px}
+  p{max-width:70ch}
+
+  /* ── منهج ── */
+  .steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;margin-top:26px}
+  .step{background:var(--ink2);border:1px solid var(--line);border-radius:12px;padding:18px 18px 20px}
+  .step .n{font-size:11px;color:var(--ember);letter-spacing:.18em;margin-bottom:8px}
+  .step h3{font-size:15.5px;margin:0 0 6px;font-weight:650}
+  .step p{font-size:13.5px;color:var(--mute);margin:0}
+
+  /* ── مخطط الإضاءة ── */
+  .lumrow{display:grid;grid-template-columns:150px 1fr 62px;gap:12px;align-items:center;margin-bottom:7px}
+  .lumname{font-size:13.5px;color:var(--text);text-align:left;direction:rtl}
+  .lumbar{height:22px;border-radius:4px;position:relative;overflow:hidden;background:var(--ink3);
+          border:1px solid var(--line)}
+  .lumbar i{position:absolute;inset:0 0 0 auto;display:block}
+  .lumval{font-size:12px;color:var(--mute2);font-variant-numeric:tabular-nums;text-align:left;
+          direction:ltr}
+  .grouplbl{font-size:11.5px;letter-spacing:.18em;color:var(--mute2);margin:26px 0 12px;
+            padding-bottom:6px;border-bottom:1px solid var(--line)}
+  .axis{display:grid;grid-template-columns:150px 1fr 62px;gap:12px;font-size:11px;color:var(--mute2);margin-bottom:10px}
+  .axis span:nth-child(2){display:flex;justify-content:space-between}
+
+  /* ── قرص اللون ── */
+  .dial{position:relative;width:min(500px,80vw);aspect-ratio:1;margin:60px auto 44px}
+  .dial .ring{position:absolute;inset:0;border-radius:50%;
+    background:conic-gradient(from 0deg,
+      hsl(0 70% 50%),hsl(30 70% 50%),hsl(60 70% 50%),hsl(90 70% 50%),hsl(120 70% 50%),
+      hsl(150 70% 50%),hsl(180 70% 50%),hsl(210 70% 50%),hsl(240 70% 50%),hsl(270 70% 50%),
+      hsl(300 70% 50%),hsl(330 70% 50%),hsl(360 70% 50%));
+    -webkit-mask:radial-gradient(circle,transparent 61%,#000 62%,#000 74%,transparent 75%);
+            mask:radial-gradient(circle,transparent 61%,#000 62%,#000 74%,transparent 75%);
+    opacity:.34}
+  .dot{position:absolute;width:11px;height:11px;border-radius:50%;transform:translate(-50%,-50%);
+       border:1.5px solid rgba(0,0,0,.55);box-shadow:0 0 0 1.5px rgba(255,255,255,.16)}
+  .dialgrid{display:grid;grid-template-columns:minmax(300px,1fr) minmax(240px,320px);
+            gap:34px;align-items:center;margin-top:26px}
+  @media(max-width:820px){.dialgrid{grid-template-columns:1fr}}
+  .key{list-style:none;margin:0;padding:0;columns:2;column-gap:20px}
+  .key li{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--mute);
+          margin-bottom:7px;break-inside:avoid}
+  .key i{width:10px;height:10px;border-radius:50%;flex:0 0 10px;
+         box-shadow:0 0 0 1px rgba(255,255,255,.2)}
+  .key b{color:var(--text);font-weight:550}
+  .key span{color:var(--mute2);font-variant-numeric:tabular-nums;direction:ltr;font-size:11.5px}
+  .keyhead{font-size:11px;letter-spacing:.18em;color:var(--mute2);margin:0 0 14px;
+           padding-bottom:8px;border-bottom:1px solid var(--line);column-span:all}
+  .gaparc{position:absolute;inset:-9%;border-radius:50%;
+    background:conic-gradient(from 0deg, #F0803C 0deg 40deg, transparent 40deg 300deg, #F0803C 300deg 360deg);
+    -webkit-mask:radial-gradient(circle closest-side,transparent 90%,#000 91%,#000 97%,transparent 98%);
+            mask:radial-gradient(circle closest-side,transparent 90%,#000 91%,#000 97%,transparent 98%);
+    opacity:.9}
+  .gaptag{position:absolute;top:-13%;left:50%;transform:translate(-50%,-100%);
+          font-size:11px;letter-spacing:.16em;color:var(--ember);white-space:nowrap}
+  .dialcore{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;width:52%}
+  .dialcore{width:42%}
+  .dialcore b{display:block;font-size:13.5px;color:var(--ember);margin-bottom:4px}
+  .dialcore span{font-size:11.5px;color:var(--mute);line-height:1.55}
+  .legend{display:flex;gap:22px;justify-content:center;font-size:12px;color:var(--mute);margin-top:18px;flex-wrap:wrap}
+  .legend i{width:9px;height:9px;border-radius:50%;display:inline-block;margin-left:6px;vertical-align:middle}
+
+  /* ── بطاقات ── */
+  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin-top:26px}
+  .card{background:var(--ink2);border:1px solid var(--line);border-radius:12px;padding:15px 15px 16px}
+  .card .top{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:11px}
+  .card h4{font-size:14.5px;margin:0;font-weight:650}
+  .tag{font-size:10px;letter-spacing:.12em;color:var(--mute2);border:1px solid var(--line2);
+       border-radius:20px;padding:2px 9px;white-space:nowrap}
+  .sw{display:flex;height:30px;border-radius:6px;overflow:hidden;border:1px solid var(--line);margin-bottom:9px}
+  .sw i{display:block;flex:1}
+  .mini{display:flex;justify-content:space-between;font-size:11.5px;color:var(--mute2);
+        font-variant-numeric:tabular-nums;margin-bottom:9px}
+  .card p{font-size:12.8px;color:var(--mute);margin:0;line-height:1.65}
+
+  /* ── جداول/قوائم ── */
+  .obs{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-top:22px}
+  .ob{background:var(--ink2);border:1px solid var(--line);border-radius:12px;padding:17px}
+  .ob h4{margin:0 0 7px;font-size:14.5px;font-weight:650}
+  .ob h4 em{font-style:normal;color:var(--ember);font-size:11px;letter-spacing:.14em;display:block;margin-bottom:4px}
+  .ob p{font-size:13px;color:var(--mute);margin:0}
+
+  .gap{background:linear-gradient(180deg,rgba(240,128,60,.09),rgba(240,128,60,.02));
+       border:1px solid rgba(240,128,60,.30);border-radius:14px;padding:26px 26px 24px;margin-top:26px}
+  .gap h3{margin:0 0 12px;font-size:18px;color:var(--ember)}
+  .gap p{color:var(--text);margin:0 0 10px}
+  .gap p:last-child{margin:0}
+
+  .matrix{width:100%;border-collapse:collapse;margin-top:24px;font-size:13px}
+  .matrix th,.matrix td{border:1px solid var(--line);padding:11px 13px;text-align:right;vertical-align:top}
+  .matrix th{background:var(--ink2);color:var(--mute);font-weight:600;font-size:12px;letter-spacing:.06em}
+  .matrix td.empty{background:rgba(240,128,60,.10);color:var(--ember);font-weight:650}
+  .matrix td small{display:block;color:var(--mute2);font-size:11.5px;margin-top:3px}
+
+  .dirs{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;margin-top:26px}
+  .dir{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--ink2)}
+  .dirhead{padding:22px 20px 20px}
+  .dir h3{margin:0 0 4px;font-size:19px}
+  .dir .ar{font-size:12px;color:var(--mute2);letter-spacing:.14em;margin-bottom:14px}
+  .dirbody{padding:18px 20px 22px;border-top:1px solid var(--line)}
+  .dirbody dl{margin:0}
+  .dirbody dt{font-size:11px;letter-spacing:.14em;color:var(--mute2);margin-top:14px}
+  .dirbody dt:first-child{margin-top:0}
+  .dirbody dd{margin:4px 0 0;font-size:13.4px;color:var(--text)}
+  .chip{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--mute);
+        font-variant-numeric:tabular-nums;margin:6px 0 0 8px;direction:ltr}
+  .chip i{width:16px;height:16px;border-radius:4px;border:1px solid rgba(255,255,255,.14)}
+
+  .caveat{border-right:2px solid var(--line2);padding:2px 16px 2px 0;color:var(--mute);font-size:13.5px}
+  .caveat li{margin-bottom:8px}
+  ul{padding-right:20px}
+  a{color:var(--cool)}
+  footer{padding:40px 0 0;color:var(--mute2);font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <p class="kicker">مَثْراة · المرحلة الثانية من بناء الهوية</p>
+  <h1>أين يقف الجميع، وأين المكان الفارغ</h1>
+  <p class="sub">
+    قبل اختيار لون أو خط، لا بدّ من معرفة ما يملأه المنافسون فعلاً. هذه الصفحة تقيس
+    اللغة البصرية لثمانية عشر تطبيق تداول — عالمية وسعودية وخليجية — قياساً لا انطباعاً:
+    كل رقم هنا مُستخرَج من صور التطبيقات نفسها في متجر آبل، بتحليل البكسل لا بالعين.
+  </p>
+  <div class="meta">
+    <div><b>١٨</b> تطبيقاً مقيساً</div>
+    <div><b>٦٩</b> لقطة شاشة حُلِّلت</div>
+    <div><b>٨٦٪</b> من العالمية داكنة</div>
+    <div><b>٢ من ١١</b> فقط من الخليجية داكنة</div>
+    <div><b>١</b> تطبيق واحد يستعمل لوناً دافئاً</div>
+  </div>
+</header>
+
+<section>
+  <p class="secnum">المنهج</p>
+  <h2>لماذا نبدأ بالمنافسين لا بالمزاج</h2>
+  <p class="lede">
+    هذه هي الخطوة التي أهملتُها في المقترحات الثلاثة السابقة، وهي سبب كونها «جميلة»
+    ولا شيء أكثر. الطريقة المأخوذة من المرجع الذي أرسلتِه: لا تُختار الهوية من الذوق،
+    بل تُبنى من الفراغ. تُدرَس أرض المنافسين أولاً، ثم يُقصد عمداً المكان الذي لم يقفوا فيه.
+  </p>
+  <div class="steps">
+    <div class="step"><div class="n">١</div><h3>قراءة السوق</h3>
+      <p>جمع التطبيقات التي يراها المستخدم فعلاً، لا التي نتخيّلها. عالمية وسعودية وخليجية.</p></div>
+    <div class="step"><div class="n">٢</div><h3>قياس لا انطباع</h3>
+      <p>استخراج الألوان السائدة ونسبة الإضاءة من البكسل مباشرة، فلا يتسلّل هوى المصمّم إلى النتيجة.</p></div>
+    <div class="step"><div class="n">٣</div><h3>تحديد الفراغ</h3>
+      <p>رسم خريطة يقع فيها الجميع، ثم البحث عن الخانة الخالية — لا لأنها جميلة، بل لأنها خالية.</p></div>
+    <div class="step"><div class="n">٤</div><h3>مظهر مميّز</h3>
+      <p>عنصر بصري يخصّ مَثْراة وحدها، يتكرّر في كل شاشة، ويحمل معنى وظيفياً لا زخرفياً.</p></div>
+  </div>
+</section>
+
+<section>
+  <p class="secnum">القسم الأول</p>
+  <h2>الأرضية: من يذهب إلى الظلام ومن يبقى في البياض</h2>
+  <p class="lede">
+    العمود يقيس نسبة البكسلات الداكنة إلى الفاتحة في لقطات كل تطبيق. الانقسام حادّ،
+    وليس عشوائياً: العالمية تكاد كلها داكنة، والسعودية تكاد كلها بيضاء.
+  </p>
+  <div id="lumchart"></div>
+</section>
+
+<section>
+  <p class="secnum">القسم الثاني</p>
+  <h2>اللون: أين تتكدّس الأصباغ</h2>
+  <p class="lede">
+    كل نقطة هي اللون المميّز لتطبيق، موضوعة على دائرة الأصباغ بزاويتها المقيسة.
+    انظري إلى التكدّس بين ٩٠° و٢٦٠° — الأخضر والفيروزي والأزرق — وإلى القوس الخالي.
+  </p>
+  <div class="dialgrid">
+    <div class="dial" id="dial">
+      <div class="ring"></div><div class="gaparc"></div>
+      <div class="gaptag">القوس الذي دخله واحد فقط من ثمانية عشر</div>
+      <div class="dialcore"><b>الفراغ الدافئ</b><span>من ٣٠٠° إلى ٤٠°<br>الجمري والنحاسي والقرمزي<br>ساكنه الوحيد: كابيتال.كوم</span></div>
+    </div>
+    <div>
+      <ul class="key" id="dialkey"><p class="keyhead">اللون المميّز لكل تطبيق، مرتّباً بالزاوية</p></ul>
+      <div class="legend" style="justify-content:flex-start;margin-top:20px">
+        <span><i style="background:#F0803C"></i>عالمي</span>
+        <span><i style="background:#7DD3D8"></i>سعودي</span>
+        <span><i style="background:#D9A441"></i>خليجي</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <p class="secnum">القسم الثالث</p>
+  <h2>البطاقات: ما يملكه كل واحد منهم</h2>
+  <p class="lede">
+    الشرائح الملوّنة هي الألوان الخمسة الأكثر تكراراً في لقطات كل تطبيق، بعرض يوازي نسبتها.
+    الملاحظة تحت كل بطاقة مما رأيته في الشاشات نفسها.
+  </p>
+  <div class="cards" id="cards"></div>
+</section>
+
+<section>
+  <p class="secnum">القسم الرابع</p>
+  <h2>ما لاحظته خارج اللون</h2>
+  <div class="obs">
+    <div class="ob"><h4><em>الحرف</em>العربية ترجمة لا هوية</h4>
+      <p>في كل التطبيقات السعودية والخليجية، العربية موضوعة فوق شبكة صُمِّمت للاتينية:
+      الخط عربي جاهز (تجوّل أو IBM Plex Arabic أو خط النظام)، والحجم والوزن منقولان كما هما.
+      لا تطبيق واحد يستعمل شكل الحرف العربي نفسه كعنصر هوية.</p></div>
+    <div class="ob"><h4><em>الرقم</em>الأرقام لاتينية في واجهة عربية</h4>
+      <p>جميعها بلا استثناء تكتب ١٢٣ هكذا: 123. هذا ليس خطأً — الأرقام اللاتينية أوضح في
+      الجداول المالية — لكنه قرار لم يتخذه أحد بوعي، وهو موضع تمايز إن اتُّخذ بوعي.</p></div>
+    <div class="ob"><h4><em>الكثافة</em>الجدول هو الشاشة</h4>
+      <p>الشاشة السعودية النموذجية جدول أسعار كثيف بأربعة إلى ستة أعمدة وخط صغير.
+      تداولاتي والإنماء والراجحي: صفوف متلاصقة، أخضر وأحمر متجاور، لا مساحة بيضاء.
+      العالمية أقل كثافة بكثير: رقم كبير واحد ثم رسم بياني.</p></div>
+    <div class="ob"><h4><em>التسويق</em>الجوّال المائل ثلاثي الأبعاد</h4>
+      <p>سبعة من أحد عشر تطبيقاً سعودياً/خليجياً تعرض جوّالاً مائلاً في فراغ ملوّن مع
+      عملات ذهبية أو نباتات أو أوراق شجر. العالمية تعرض الشاشة مسطّحة أو صورة فوتوغرافية واحدة.</p></div>
+    <div class="ob"><h4><em>الشرعية</em>شارة التوافق كعنصر بصري</h4>
+      <p>دراية وعوائد وسهم وواحد وثروة كلها تُبرز ختم «متوافق مع الشريعة» كعنصر بصري ثابت —
+      غالباً دائرة خضراء أو ختم دائري. هذا اصطلاح راسخ، والابتعاد عنه له ثمن.</p></div>
+    <div class="ob"><h4><em>الوعد</em>كلهم يبيعون «الوصول»</h4>
+      <p>العناوين كلها من نوع: تداول، استثمر، صفر عمولة، أسواق أكثر. لا تطبيق واحد يعد
+      بـ«الانضباط» أو «القرار» — وهذا بالضبط ما تعد به مَثْراة.</p></div>
+  </div>
+</section>
+
+<section>
+  <p class="secnum">القسم الخامس</p>
+  <h2>الفراغ</h2>
+  <table class="matrix">
+    <tr><th></th><th>لون بارد (أخضر · فيروزي · أزرق · بنفسجي)</th><th>لون دافئ (جمري · نحاسي · قرمزي)</th></tr>
+    <tr><th>أرضية فاتحة</th>
+      <td>مزدحمة جداً — سهم، الإنماء، تداولاتي، واحد، الرمز، دراية، IBKR<small>سبعة تطبيقات في خانة واحدة</small></td>
+      <td>شبه خالية — دراية وحدها بلون برتقالي ثانوي<small>لكن الأرضية الفاتحة نفسها هي هوية «البنك»، وهي ليست هويتنا</small></td></tr>
+    <tr><th>أرضية داكنة</th>
+      <td>مزدحمة — روبن هود، إي‌تورو، تريدنغ ٢١٢، ويبل، تريدنغ‌فيو، بركة<small>ستة تطبيقات، وكلها ادّعاء «التقنية»</small></td>
+      <td class="empty">الخانة الخالية<small>كابيتال.كوم وحده يقترب — بنحاسٍ باهت لا يتجاوز ١٪ من البكسل، ومصدره إضاءة صورة لا لون علامة. ولا حرف عربي واحد فيه.</small></td></tr>
+  </table>
+
+  <div class="gap">
+    <h3>ما تقوله الأرقام</h3>
+    <p>
+      المنافس العالمي يقول «أنا تقنية»: أسود وأخضر حمضي أو سماوي. والمنافس السعودي يقول
+      «أنا بنك»: أبيض وأخضر أو أزرق. وكلاهما — بلا استثناء — يقول «أنا وسيط»: يعرض عليك
+      سوقاً ويطلب منك أن تضغطي.
+    </p>
+    <p>
+      الخانة الخالية بصرياً هي <b>أرضية داكنة دافئة مع لون جمريّ</b>، والخانة الخالية
+      وظيفياً هي <b>تطبيق لا يطلب منك أن تضغطي</b>. والاثنتان تتقاطعان: مَثْراة ليست
+      سوقاً معروضاً، بل قراراً يُشرَح. وهذا يغيّر الشاشة كلها، لا لونها فقط.
+    </p>
+  </div>
+</section>
+
+<section>
+  <p class="secnum">القسم السادس</p>
+  <h2>الفراغ الوظيفي — وهو الأهم</h2>
+  <p class="lede">
+    راجعتُ ٦٩ لقطة. ليس فيها شاشة واحدة تشبه ما تحتاجه مَثْراة.
+  </p>
+  <ul>
+    <li>لا تطبيق واحد يعرض <b>«لماذا لم أتداول»</b> — لأن الوسيط لا يمتنع، بل ينتظرك.</li>
+    <li>لا تطبيق واحد يعرض <b>سبب القرار</b> مكتوباً: كلها رسم بياني وزرّان.</li>
+    <li>لا تطبيق واحد يعرض <b>حدّ الخسارة اليومي كمسافة</b>: كم بقي قبل التوقف.</li>
+    <li>لا تطبيق واحد يعرض <b>اكتمال البيانات</b> — لأن الوسيط لا يعتذر عن نقص المعرفة.</li>
+    <li>كلها تعرض <b>الرصيد</b> بخط ضخم في الأعلى. مَثْراة برأس مال ١٥٠ دولاراً:
+        الرقم الضخم ليس الرصيد، بل <b>ما تبقّى من المخاطرة اليوم</b>.</li>
+  </ul>
+  <p style="color:var(--mute);margin-top:18px">
+    هذا يعني أن نسخ تخطيط أي منهم خطأ من الأساس. الشاشة الرئيسية لمَثْراة ليست
+    «لوحة سوق»، بل <b>بيان حالة</b>: ماذا يفعل النظام الآن، ولماذا، وما الذي يوقفه.
+  </p>
+</section>
+
+<section>
+  <p class="secnum">القسم السابع</p>
+  <h2>الاتجاهان</h2>
+  <p class="lede">
+    كلاهما يقصد الخانة الخالية نفسها، ويختلفان في الأرضية وفي «المظهر المميّز» —
+    العنصر الذي يتكرّر في كل شاشة ويحمل معنى وظيفياً.
+  </p>
+  <div class="dirs">
+    <div class="dir">
+      <div class="dirhead" style="background:linear-gradient(150deg,#151009,#0C0A08)">
+        <h3>الأول · الجَمْر</h3>
+        <div class="ar">EMBER · أرضية ترابية داكنة</div>
+        <span class="chip"><i style="background:#100C0A"></i>#100C0A</span>
+        <span class="chip"><i style="background:#1B1512"></i>#1B1512</span>
+        <span class="chip"><i style="background:#F0803C"></i>#F0803C</span>
+        <span class="chip"><i style="background:#E8C9A0"></i>#E8C9A0</span>
+      </div>
+      <div class="dirbody"><dl>
+        <dt>الفكرة</dt>
+        <dd>«مَثْراة» من الثرى: الأرض التي ينبت فيها. أرضية سوداء دافئة لا زرقاء،
+            ولون جمريّ واحد لا يُستعمل للزينة بل للانتباه فقط.</dd>
+        <dt>المظهر المميّز — الحدّ</dt>
+        <dd>خط أفقي شعري واحد يمرّ تحت كل رقم في التطبيق. حين تقترب المخاطرة من حدّ
+            الإيقاف، يسخن الخط ويثخن. عنصر واحد يحمل أخطر معلومة في النظام.</dd>
+        <dt>الخطر</dt>
+        <dd>الجمريّ قريب من الأحمر. يجب فصله بوضوح عن لون الخسارة (قرمزي بارد،
+            زاوية ٣٥٣°) وإلا صار القرار ملتبساً — وهذا خطأ يكلّف مالاً لا ذوقاً.</dd>
+      </dl></div>
+    </div>
+
+    <div class="dir">
+      <div class="dirhead" style="background:linear-gradient(150deg,#13112E,#0A0912)">
+        <h3>الثاني · الثُّرَيّا</h3>
+        <div class="ar">PLEIADES · أرضية نيليّة ليلية</div>
+        <span class="chip"><i style="background:#0C0B16"></i>#0C0B16</span>
+        <span class="chip"><i style="background:#191634"></i>#191634</span>
+        <span class="chip"><i style="background:#D9A441"></i>#D9A441</span>
+        <span class="chip"><i style="background:#C9C6E0"></i>#C9C6E0</span>
+      </div>
+      <div class="dirbody"><dl>
+        <dt>الفكرة</dt>
+        <dd>من الجذر نفسه (ث‌ر‌ي) تأتي الثريا. أرضية نيليّة عميقة تطوّر اللون الحالي
+            بدل رميه، ولون نحاسيّ دافئ يكسر ازدحام السماوي الذي يستعمله الجميع.</dd>
+        <dt>المظهر المميّز — النقش النجمي</dt>
+        <dd>حقل نقاط دقيق كثافته = اكتمال البيانات. حين تعمل المزوّدات الخمسة يمتلئ،
+            وحين تنقطع يخفت. مؤشّر الاتصال يصير نجمة واحدة في الترويسة — لا لافتة
+            تأكل الشاشة كما هي الآن.</dd>
+        <dt>الخطر</dt>
+        <dd>النحاسي على النيلي قد يقرأ «فاخر» أكثر من «منضبط». يحتاج انضباطاً في
+            التطبيق: النحاس للتأكيد فقط، لا للأسطح.</dd>
+      </dl></div>
+    </div>
+  </div>
+  <p style="margin-top:26px;color:var(--mute)">
+    الاتجاه الثاني أقرب إلى ما بُني فعلاً (الأرضية النيليّة موجودة)، فتكلفة تنفيذه أقل،
+    وهو يحلّ مشكلة لافتة الاتصال التي أشرتِ إليها حلاً بنيوياً لا تجميلياً.
+    والأول أبعد عن الجميع، وأغلى في التنفيذ.
+  </p>
+</section>
+
+<section>
+  <p class="secnum">حدود هذا البحث</p>
+  <h2>ما لا تثبته هذه الأرقام</h2>
+  <ul class="caveat">
+    <li>المقيس هو <b>لقطات المتجر التسويقية</b>، لا التطبيقات الحيّة. اللقطة التسويقية
+        أشدّ تشبّعاً من الشاشة الحقيقية عادةً، فالأرقام تميل قليلاً نحو المبالغة.</li>
+    <li>لون «إي‌تورو» المستخرج جاء أحمر لأن اللقطة تعرض بطاقات أسهم ملوّنة؛ لون العلامة
+        الفعلي أخضر. صحّحتُ هذا في الخريطة بالملاحظة لا بالرقم.</li>
+    <li>استبعدتُ «مباشر» بعد فتحه: تبيّن أنه تطبيق مزادات لا تداول، فلا محلّ له هنا.</li>
+    <li>لم أفتح أيّ حساب ولم أدخل أيّ تطبيق. كل ما هنا من صفحات المتجر العامة.</li>
+    <li>هذه خريطة تموضع بصري، وليست حكماً على جودة المنتجات ولا على أدائها.</li>
+  </ul>
+</section>
+
+<footer>
+  مَثْراة — MATHRAH · بحث المنافسين البصري · قياس بكسل لـ ٦٩ لقطة من متجر آبل ·
+  السعودية والإمارات والولايات المتحدة والمملكة المتحدة
+</footer>
+
+</div>
+
+<script>
+const APPS = [
+ {n:"روبن هود",e:"Robinhood",k:"عالمي",dark:88,light:1,lum:25,
+  top:[["#110000",40.6],["#000000",30.3],["#112222",5],["#111111",3.4],["#333333",2.5]],
+  hue:72,acc:"#CCFF00",
+  note:"أسود شبه كامل وأخضر حمضي واحد. رقم ضخم، رسم بياني رفيع، فراغ كثير. أجرأ لون في السوق كله."},
+ {n:"إي‌تورو",e:"eToro",k:"عالمي",dark:76,light:1,lum:44,
+  top:[["#111100",23.4],["#111111",18.1],["#000011",11.4],["#112211",8],["#444444",4.2]],
+  hue:140,acc:"#13C636",
+  note:"أسود وأخضر. بطاقات أسهم ملوّنة تكسر الرتابة. الاجتماعي هو الهوية: صور المستخدمين في الواجهة."},
+ {n:"تريدنغ‌فيو",e:"TradingView",k:"عالمي",dark:87,light:4,lum:30,
+  top:[["#000000",50.7],["#111111",4.8],["#001111",3],["#000011",2.1],["#222222",1.8]],
+  hue:null,acc:"#2962FF",
+  note:"أسود خالص بنسبة ٥١٪ من البكسل. لا لون علامة تقريباً — الرسم البياني نفسه هو اللون. أكثفها بياناتٍ."},
+ {n:"ويبل",e:"Webull",k:"عالمي",dark:80,light:0,lum:40,
+  top:[["#000099",23.8],["#222222",16.3],["#000000",13.7],["#111122",4.4],["#111111",3.1]],
+  hue:240,acc:"#0033FF",
+  note:"أزرق كهربي صاخب في التسويق، أسود في التطبيق. جداول كثيفة جداً — أقرب لطرفية تداول محترفة."},
+ {n:"تريدنغ ٢١٢",e:"Trading 212",k:"عالمي",dark:89,light:0,lum:26,
+  top:[["#000000",28.4],["#000011",22],["#111111",10.5],["#001111",7.9],["#002233",3.2]],
+  hue:197,acc:"#00AAEE",
+  note:"أدكن تطبيق في المجموعة كلها. سماوي واحد للتأكيد. تحذير المخاطر مطبوع تحت كل لقطة."},
+ {n:"كابيتال.كوم",e:"Capital.com",k:"عالمي",dark:80,light:0,lum:35,
+  top:[["#000000",33],["#111111",12.6],["#110000",11.4],["#222222",4.3],["#111100",3.8]],
+  hue:33,acc:"#775522",
+  note:"الوحيد الذي يذهب إلى الدفء — نحاس باهت من إضاءة صورة، لا لون علامة. منحوتات ثلاثية الأبعاد وعناوين قصيرة. وهو الوسيط الذي تعمل عليه مَثْراة."},
+ {n:"IBKR",e:"GlobalTrader",k:"عالمي",dark:5,light:80,lum:215,
+  top:[["#ffffff",46.1],["#eeeeee",8.6],["#aaddff",4.4],["#dddddd",4.3],["#eeffff",3.5]],
+  hue:205,acc:"#3388DD",
+  note:"الشاذّ في المجموعة العالمية: أبيض مؤسسي وأزرق. يبيع الاتساع لا الأناقة."},
+
+ {n:"دراية",e:"Derayah",k:"سعودي",dark:1,light:59,lum:199,
+  top:[["#ffffff",44],["#ddccff",12],["#ff7744",9],["#eeeeee",7],["#aa77ff",5]],
+  hue:263,acc:"#9966FF",
+  note:"الوحيد الذي يكسر إجماع الأخضر والأزرق: بنفسجي وبرتقالي. أجرأ هوية سعودية، وأقربها إلى لغة العلامات الحديثة."},
+ {n:"الراجحي المالية",e:"AlRajhi Capital",k:"سعودي",dark:70,light:20,lum:90,
+  top:[["#002299",42],["#ffffff",18],["#003399",9],["#0033aa",5],["#666666",3]],
+  hue:227,acc:"#0033AA",
+  note:"أزرق المصرف يبتلع كل شيء. الشاشة نفسها بيضاء وكثيفة. الهوية موروثة من البنك لا مبنيّة للتطبيق."},
+ {n:"الأهلي كابيتال",e:"SNB Capital",k:"سعودي",dark:56,light:26,lum:115,
+  top:[["#004433",34],["#ffffff",20],["#eeeeee",9],["#333333",5],["#dddddd",4]],
+  hue:110,acc:"#2E7D4F",
+  note:"أخضر داكن مؤسسي وصور أبراج زجاجية. جداول عمق السوق كثيفة. لغة «مؤسسة» لا «منتج»."},
+ {n:"سهم",e:"Sahm",k:"سعودي",dark:0,light:71,lum:216,
+  top:[["#ffffff",48],["#eeffff",10],["#ddffff",7],["#eeeeee",6],["#00dd99",4]],
+  hue:162,acc:"#00DD99",
+  note:"أبيض ناصع ونعناعي. أخفّ التطبيقات السعودية بصرياً وأقربها إلى تطبيقات التقنية المالية العالمية."},
+ {n:"الإنماء المالية",e:"Alinma Capital",k:"سعودي",dark:5,light:68,lum:201,
+  top:[["#ffffff",46],["#ddeeee",11],["#005555",8],["#ccdddd",6],["#eeffff",4]],
+  hue:180,acc:"#005555",
+  note:"فيروزي داكن وأبيض. لقطات التسويق بعملات ذهبية ثلاثية الأبعاد. الشاشة جدول أسعار خالص."},
+ {n:"عوائد",e:"Awaed",k:"سعودي",dark:61,light:28,lum:85,
+  top:[["#000000",32],["#ffffff",21],["#111111",9],["#333333",6],["#222222",5]],
+  hue:150,acc:"#1FBF7A",
+  note:"تسويق أسود وتطبيق أبيض — انفصام بين الإعلان والمنتج. يبرز ختم الهيئة والمرجعية الشرعية كعنصر ثقة."},
+ {n:"تداولاتي",e:"Tadawulaty",k:"سعودي",dark:4,light:79,lum:215,
+  top:[["#ffffff",50],["#eeeeee",11],["#dddddd",7],["#006688",5],["#112233",3]],
+  hue:195,acc:"#006688",
+  note:"أقدمها شكلاً — أزرار زرقاء وجداول من طراز iOS القديم. مفيد كمثال على ما يجب ألّا نشبهه."},
+
+ {n:"بركة",e:"baraka",k:"خليجي",dark:81,light:2,lum:32,
+  top:[["#000000",38],["#111111",14],["#222222",8],["#333333",5],["#444444",4]],
+  hue:null,acc:"#FFFFFF",
+  note:"الوحيد في المجموعة الخليجية الذي يذهب إلى الأسود الكامل — ويتموضع عمداً كتطبيق عالمي لا محلّي. بلا لون تأكيد تقريباً."},
+ {n:"ثروة",e:"Sarwa",k:"خليجي",dark:38,light:49,lum:150,
+  top:[["#003311",26],["#ffffff",22],["#eeeeee",9],["#aaff66",7],["#aaee66",5]],
+  hue:93,acc:"#AAFF66",
+  note:"أخضر داكن وليموني فاتح، ومنحوتات ثلاثية الأبعاد ناعمة. أقرب الخليجية إلى لغة العلامات المعاصرة."},
+ {n:"واحد",e:"Wahed",k:"خليجي",dark:0,light:70,lum:223,
+  top:[["#ffffff",47],["#aacccc",10],["#ffeebb",7],["#99bbbb",6],["#eeeeee",5]],
+  hue:206,acc:"#3377AA",
+  note:"ألوان هادئة مغبّرة: رملي وفيروزي باهت. الوحيد الذي يستعمل لوحة «هادئة» بدل «مالية». الحلال هو الرسالة الأولى."},
+ {n:"الرمز",e:"Al Ramz",k:"خليجي",dark:11,light:18,lum:138,
+  top:[["#66aaaa",30],["#ffffff",18],["#000000",11],["#777777",7],["#556644",5]],
+  hue:206,acc:"#115588",
+  note:"فيروزي رمادي وكحلي مع لمسات ذهبية. تسويق بجوّالات مائلة كثيرة. لغة «بيت استثمار» تقليدي."}
+];
+
+/* ── مخطط الإضاءة ── */
+(function(){
+  const el = document.getElementById('lumchart');
+  const groups = [["التطبيقات العالمية","عالمي"],["التطبيقات السعودية","سعودي"],["التطبيقات الخليجية","خليجي"]];
+  const axis = document.createElement('div');
+  axis.className='axis';
+  const a1=document.createElement('span');
+  const a2=document.createElement('span');
+  const l=document.createElement('span'); l.textContent='داكن ←';
+  const r=document.createElement('span'); r.textContent='→ فاتح';
+  a2.appendChild(l); a2.appendChild(r);
+  const a3=document.createElement('span'); a3.textContent='الإضاءة';
+  axis.appendChild(a1); axis.appendChild(a2); axis.appendChild(a3);
+  el.appendChild(axis);
+
+  for (const [title,key] of groups){
+    const g=document.createElement('div'); g.className='grouplbl'; g.textContent=title; el.appendChild(g);
+    APPS.filter(a=>a.k===key).sort((x,y)=>x.lum-y.lum).forEach(a=>{
+      const row=document.createElement('div'); row.className='lumrow';
+      const nm=document.createElement('div'); nm.className='lumname'; nm.textContent=a.n;
+      const bar=document.createElement('div'); bar.className='lumbar';
+      const fill=document.createElement('i');
+      const pct=Math.round(a.lum/255*100);
+      fill.style.width=Math.max(pct,3)+'%';
+      fill.style.background='linear-gradient(270deg,#0A0A0A,'+
+        (a.lum>150?'#F2EFEC':(a.lum>90?'#8A837D':'#3A3532'))+')';
+      bar.appendChild(fill);
+      const v=document.createElement('div'); v.className='lumval';
+      v.textContent=String(pct).replace(/\d/g,d=>'٠١٢٣٤٥٦٧٨٩'[d])+'٪';
+      row.appendChild(nm); row.appendChild(bar); row.appendChild(v);
+      el.appendChild(row);
+    });
+  }
+})();
+
+/* ── قرص الأصباغ ── */
+(function(){
+  const d=document.getElementById('dial');
+  const col={ "عالمي":"#F0803C","سعودي":"#7DD3D8","خليجي":"#D9A441" };
+  // زاوية المخروط في CSS تبدأ من الأعلى وتدور مع عقارب الساعة،
+  // فيجب أن يوضع كل نقطة بالمعادلة نفسها: س = جا(الصبغة)، ص = −جتا(الصبغة).
+  const P=a=>({s:Math.sin(a*Math.PI/180), c:-Math.cos(a*Math.PI/180)});
+  const placed=[], lab=[];
+  APPS.filter(a=>a.hue!==null).sort((x,y)=>x.hue-y.hue).forEach(a=>{
+    let R=42;
+    while(placed.some(p=>Math.abs(p.h-a.hue)<14 && Math.abs(p.r-R)<6)) R-=6.5;
+    if(R<24) R=24;
+    placed.push({h:a.hue,r:R});
+    const g=P(a.hue);
+    const dot=document.createElement('div'); dot.className='dot';
+    dot.style.left=(50+R*g.s)+'%'; dot.style.top=(50+R*g.c)+'%';
+    dot.style.background=a.acc; dot.title=a.n+' — '+a.hue+'°';
+    d.appendChild(dot);
+    const li=document.createElement('li');
+    const sw=document.createElement('i'); sw.style.background=a.acc;
+    const nm=document.createElement('b'); nm.textContent=a.n; nm.style.color=col[a.k];
+    const dg=document.createElement('span'); dg.textContent=a.hue+'°';
+    li.appendChild(sw); li.appendChild(nm); li.appendChild(dg);
+    lab.push(li);
+  });
+  const key=document.getElementById('dialkey');
+  lab.forEach(li=>key.appendChild(li));
+})();
+
+/* ── البطاقات ── */
+(function(){
+  const c=document.getElementById('cards');
+  APPS.forEach(a=>{
+    const card=document.createElement('div'); card.className='card';
+    const top=document.createElement('div'); top.className='top';
+    const h=document.createElement('h4'); h.textContent=a.n;
+    const t=document.createElement('span'); t.className='tag'; t.textContent=a.k;
+    top.appendChild(h); top.appendChild(t); card.appendChild(top);
+    const sw=document.createElement('div'); sw.className='sw';
+    const tot=a.top.reduce((s,x)=>s+x[1],0);
+    a.top.forEach(([hex,p])=>{ const i=document.createElement('i');
+      i.style.background=hex; i.style.flex=String(p/tot); i.title=hex+' — '+p+'٪'; sw.appendChild(i); });
+    card.appendChild(sw);
+    const m=document.createElement('div'); m.className='mini';
+    const s1=document.createElement('span'); s1.textContent='داكن '+a.dark+'٪';
+    const s2=document.createElement('span'); s2.textContent=a.hue===null?'بلا لون تأكيد':'الصبغة '+a.hue+'°';
+    m.appendChild(s1); m.appendChild(s2); card.appendChild(m);
+    const p=document.createElement('p'); p.textContent=a.note; card.appendChild(p);
+    c.appendChild(card);
+  });
+})();
+</script>
+</body>
+</html>

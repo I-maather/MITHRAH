@@ -1,0 +1,602 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>مَثْراة — اتجاهان فاتحان</title>
+<style>
+  :root{
+    --ink:#0C0A09; --ink2:#141110; --ink3:#1D1917;
+    --line:#2E2926; --line2:#3D3633;
+    --text:#EDE7E2; --mute:#9B918A; --mute2:#6E645E;
+    --ember:#F0803C; --brass:#D9A441;
+    --f:-apple-system,"SF Arabic","Geeza Pro","Segoe UI",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{background:var(--ink);color:var(--text);font-family:var(--f);line-height:1.75;
+       -webkit-font-smoothing:antialiased;font-size:15px}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 22px 120px}
+
+  header{padding:72px 0 40px;border-bottom:1px solid var(--line)}
+  .kicker{font-size:12px;letter-spacing:.22em;color:var(--ember);margin:0 0 18px}
+  h1{font-size:clamp(30px,5.2vw,48px);line-height:1.25;margin:0 0 14px;font-weight:700;letter-spacing:-.01em}
+  .sub{color:var(--mute);font-size:16px;max-width:64ch;margin:0}
+  h2{font-size:22px;margin:0 0 6px;font-weight:700}
+  .secnum{font-size:11.5px;letter-spacing:.2em;color:var(--ember);margin:0 0 10px}
+  section{padding:56px 0;border-bottom:1px solid var(--line)}
+  section:last-of-type{border-bottom:0}
+  .lede{color:var(--mute);max-width:66ch;margin:0 0 28px}
+  p{max-width:70ch}
+  ul{padding-right:20px}
+
+  .warn{background:linear-gradient(180deg,rgba(240,128,60,.10),rgba(240,128,60,.02));
+        border:1px solid rgba(240,128,60,.32);border-radius:14px;padding:24px 26px;margin-top:28px}
+  .warn h3{margin:0 0 10px;font-size:17px;color:var(--ember)}
+  .warn p{margin:0 0 10px}
+  .warn p:last-child{margin:0}
+
+  /* شريط الأدلّة */
+  .ev{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;margin-top:24px}
+  .evb{background:var(--ink2);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .evb h4{margin:0 0 10px;font-size:13.5px;font-weight:650}
+  .evb .strip{display:flex;height:26px;border-radius:5px;overflow:hidden;border:1px solid var(--line);margin-bottom:9px}
+  .evb .strip i{flex:1}
+  .evb p{font-size:12.5px;color:var(--mute);margin:0}
+
+  /* بطاقة اتجاه */
+  .dir{border:1px solid var(--line);border-radius:18px;overflow:hidden;margin-top:30px}
+  .dirtop{padding:30px 28px 26px}
+  .dirtop .no{font-size:11px;letter-spacing:.2em;opacity:.75;margin-bottom:8px}
+  .dirtop h3{margin:0 0 4px;font-size:27px;letter-spacing:-.01em}
+  .dirtop .en{font-size:12px;letter-spacing:.2em;opacity:.7}
+  .dirtop .one{margin:16px 0 0;font-size:15px;max-width:56ch;opacity:.92}
+
+  .pal{display:flex;flex-wrap:wrap;gap:8px;margin-top:22px}
+  .pc{border-radius:8px;overflow:hidden;border:1px solid rgba(0,0,0,.18);min-width:112px;flex:1}
+  .pc .sw{height:46px}
+  .pc .lb{padding:6px 9px 8px;font-size:10.5px;line-height:1.5}
+  .pc .lb b{display:block;font-weight:600;font-size:11.5px}
+  .pc .lb code{font-family:ui-monospace,Menlo,monospace;font-size:10.5px;opacity:.7;direction:ltr;display:block}
+
+  .dirbody{background:var(--ink2);border-top:1px solid var(--line);padding:28px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:26px}
+  @media(max-width:860px){.grid2{grid-template-columns:1fr}}
+  .blk{margin-bottom:24px}
+  .blk:last-child{margin-bottom:0}
+  .blk .t{font-size:11px;letter-spacing:.16em;color:var(--ember);margin-bottom:7px}
+  .blk h4{margin:0 0 7px;font-size:16px;font-weight:650}
+  .blk p{margin:0;font-size:13.8px;color:var(--mute);line-height:1.7}
+  .blk p+p{margin-top:9px}
+  .risk .t{color:#E0736A}
+
+  /* عرض المظهر المميّز */
+  .demo{background:var(--ink3);border:1px solid var(--line);border-radius:12px;padding:20px;margin-top:14px}
+  .demo .cap{font-size:11px;color:var(--mute2);margin-top:12px}
+
+  /* الحاشية */
+  .hashiya{display:flex;gap:14px;background:#F7F2EA;border-radius:8px;padding:14px;min-height:132px}
+  .rail{width:13px;border-radius:20px;background:#E4D9C7;position:relative;flex:0 0 13px}
+  .rail i{position:absolute;inset:auto 0 0 0;background:#A85B2E;border-radius:20px;display:block}
+  .rail u{position:absolute;left:-5px;right:-5px;height:3px;background:#17140F;border-radius:2px}
+  .hashiya .txt{flex:1;color:#17140F}
+  .hashiya .txt b{display:block;font-size:12.5px;margin-bottom:2px}
+  .hashiya .txt span{font-size:11.5px;color:#6B6153;line-height:1.6;display:block}
+
+  /* الأفق */
+  .horizon{border-radius:8px;overflow:hidden;min-height:132px}
+  .hz-n{background:#12131A;color:#EDEBF2;padding:14px 16px 16px}
+  .hz-line{height:2px;background:linear-gradient(90deg,transparent,#E08A3C,transparent)}
+  .hz-d{background:#F4F1EC;color:#191713;padding:14px 16px 16px}
+  .horizon b{display:block;font-size:12.5px;margin-bottom:2px}
+  .horizon span{font-size:11.5px;opacity:.72;line-height:1.6;display:block}
+
+  /* الهواتف */
+  .phones{display:flex;gap:18px;flex-wrap:wrap;justify-content:center;margin-top:8px}
+  .ph{width:216px;border-radius:28px;padding:8px;border:1px solid var(--line2);
+      background:#0A0908;flex:0 0 216px}
+  .ph .scr{border-radius:22px;overflow:hidden;height:466px;display:flex;flex-direction:column;
+           position:relative}
+  .phcap{text-align:center;font-size:11px;color:var(--mute2);margin-top:9px;max-width:216px}
+  .stamp{text-align:center;font-size:8px;letter-spacing:.05em;opacity:.5;
+         padding:6px 0 2px;flex:0 0 auto}
+
+  .sb{display:flex;justify-content:space-between;padding:9px 15px 3px;font-size:9.5px;opacity:.6}
+  .hd{display:flex;align-items:center;justify-content:space-between;padding:6px 15px 12px}
+  .wm{font-size:14.5px;font-weight:700;letter-spacing:.02em}
+  .conn{display:flex;align-items:center;gap:5px;font-size:9px;opacity:.75}
+  .conn i{width:6px;height:6px;border-radius:50%;display:block}
+  .body{flex:1;padding:0 13px;overflow:hidden;display:flex;flex-direction:column}
+  .cardp{border-radius:11px;padding:12px 13px;margin-bottom:9px}
+  .lbl{font-size:9px;letter-spacing:.1em;opacity:.6;margin-bottom:5px}
+  .big{font-size:29px;font-weight:700;line-height:1.1;direction:ltr;text-align:right;
+       font-variant-numeric:tabular-nums}
+  .big small{font-size:12px;font-weight:500;opacity:.6;margin-inline-start:5px}
+  .thr{height:5px;border-radius:20px;margin-top:11px;position:relative;overflow:hidden}
+  .thr i{position:absolute;inset:0 0 0 auto;border-radius:20px}
+  .thr u{position:absolute;top:-2px;bottom:-2px;width:2px}
+  .rowp{display:flex;justify-content:space-between;align-items:center;font-size:10.5px;
+        padding:7px 0}
+  .dots5{display:flex;gap:4px}
+  .dots5 i{width:7px;height:7px;border-radius:50%;display:block}
+  .verdict{font-size:19px;font-weight:700;margin-bottom:5px}
+  .why{font-size:10.8px;line-height:1.65;opacity:.78}
+  .gate{display:flex;align-items:center;gap:7px;font-size:10px;padding:6px 0}
+  .gate i{width:5px;height:5px;border-radius:50%;flex:0 0 5px}
+  .tabs{display:flex;justify-content:space-around;padding:9px 0 13px;font-size:9px}
+  .tabs span{opacity:.45}
+  .tabs span.on{opacity:1;font-weight:650}
+
+  /* سمة القرطاس */
+  .t-paper{background:#F7F2EA;color:#17140F}
+  .t-paper .cardp{background:#FFFDF9;border:1px solid #E7DCC9}
+  .t-paper .conn i{background:#A85B2E}
+  .t-paper .thr{background:#E7DCC9}
+  .t-paper .thr i{background:#A85B2E;width:100%}
+  .t-paper .thr u{background:#17140F;opacity:.5;left:26%}
+  .t-paper .dots5 i{background:#E0D3BC}
+  .t-paper .tabs{border-top:1px solid #E7DCC9}
+  .t-paper .gate i{background:#C9BBA3}
+  .t-paper .verdict{color:#A85B2E}
+
+  /* سمة الأفق — الوجه الليلي */
+  .t-night{background:#12131A;color:#EDEBF2}
+  .t-night .cardp{background:#1B1D27;border:1px solid #262936}
+  .t-night .conn i{background:#E08A3C}
+  .t-night .thr{background:#262936}
+  .t-night .thr i{background:#E08A3C;width:100%}
+  .t-night .thr u{background:#EDEBF2;opacity:.55;left:26%}
+  .t-night .dots5 i{background:#2C3040}
+  .t-night .tabs{border-top:1px solid #262936}
+  .t-night .gate i{background:#3A3F52}
+  .t-night .verdict{color:#E08A3C}
+  /* الوجه النهاري داخل الشاشة نفسها */
+  .dayhalf{background:#F4F1EC;color:#191713;margin:4px -13px 0;padding:13px 13px 6px;
+           border-top:2px solid #E08A3C;flex:1}
+  .t-night .stamp{background:#F4F1EC;color:rgba(25,23,19,.5);opacity:1}
+  .dayhalf .cardp{background:#FFFFFF;border:1px solid #E4E0D8}
+  .dayhalf .lbl{opacity:.55}
+
+  .cmp{width:100%;border-collapse:collapse;margin-top:24px;font-size:13px}
+  .cmp th,.cmp td{border:1px solid var(--line);padding:11px 13px;text-align:right;vertical-align:top}
+  .cmp th{background:var(--ink2);color:var(--mute);font-weight:600;font-size:12px}
+  .cmp td b{color:var(--text)}
+  .cmp small{display:block;color:var(--mute2);font-size:11.5px;margin-top:3px}
+
+  footer{padding:40px 0 0;color:var(--mute2);font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <p class="kicker">مَثْراة · اتجاهان إضافيان — الفاتح والمدمج</p>
+  <h1>الضوء ليس هو الفراغ. الدفء هو الفراغ.</h1>
+  <p class="sub">
+    طلبتِ اتجاهين بألوان فاتحة أو بدمج بين الفاتح والداكن. هذان هما — لكن
+    مبنيّين على القياس نفسه، لا على تفضيل. وقبلهما تحفّظ واحد لا يصحّ أن أخفيه.
+  </p>
+</header>
+
+<section>
+  <p class="secnum">التحفّظ</p>
+  <h2>الخانة الفاتحة هي أزحم خانة في السوق السعودي</h2>
+  <div class="warn">
+    <h3>ما قالته الأرقام قبل ثلاث ساعات</h3>
+    <p>
+      تسعة من أحد عشر تطبيقاً سعودياً وخليجياً <b>فاتحة</b>. وكلها بلا استثناء
+      تجمع الأبيض البارد مع لون بارد: نعناعي، فيروزي، أزرق. الذهاب إلى الفاتح
+      بلا تمييز آخر معناه الدخول إلى الغرفة المزدحمة نفسها والوقوف في وسطها.
+    </p>
+    <p>
+      لذلك لا يقوم التمييز هنا على الإضاءة، بل على <b>ثلاثة أشياء أخرى قِيست
+      وكانت خالية</b>: أرضية فاتحة <b>دافئة</b> لا بيضاء باردة، وحرف عربي
+      يُستعمل كهوية لا كترجمة، ومظهر مميّز يحمل بيانات لا زخرفاً.
+    </p>
+    <p style="color:var(--mute)">
+      بعبارة أخرى: الفاتح ممكن — بشرط ألّا يكون أبيض.
+    </p>
+  </div>
+
+  <div class="ev">
+    <div class="evb">
+      <h4>الأرضيات الفاتحة عند المنافسين — مقيسة</h4>
+      <div class="strip">
+        <i style="background:#ffffff"></i><i style="background:#eeffff"></i>
+        <i style="background:#ddffff"></i><i style="background:#eeeeee"></i>
+        <i style="background:#ddeeee"></i><i style="background:#ccdddd"></i>
+        <i style="background:#eeffff"></i>
+      </div>
+      <p>سهم · الإنماء · تداولاتي · واحد · الرمز · دراية · IBKR — كلها بيضاء أو
+      مائلة إلى الأزرق. لا أرضية دافئة واحدة سائدة.</p>
+    </div>
+    <div class="evb">
+      <h4>الأرضية المقترحة هنا</h4>
+      <div class="strip">
+        <i style="background:#FFFDF9"></i><i style="background:#F7F2EA"></i>
+        <i style="background:#EFE6D8"></i><i style="background:#E7DCC9"></i>
+        <i style="background:#D8C9AF"></i>
+      </div>
+      <p>قرطاس دافئ — الزاوية 34° بدل 180°–206°. الخانة نفسها من حيث الإضاءة،
+      والطرف المقابل تماماً من حيث الصبغة.</p>
+    </div>
+    <div class="evb">
+      <h4>واحد فقط اقترب — ولم يُكمل</h4>
+      <div class="strip">
+        <i style="background:#ffffff;flex:3"></i><i style="background:#ffeebb"></i>
+        <i style="background:#aacccc;flex:2"></i><i style="background:#3377aa"></i>
+      </div>
+      <p>«واحد Wahed» يستعمل رملياً دافئاً — لكنه ٧٪ فقط من البكسل، ومقرون
+      بفيروزي بارد يقود اللوحة. فالدفء عنده لمسة، لا أرضية.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ الاتجاه ج ═══════════ -->
+<section>
+  <p class="secnum">الاتجاه الثالث</p>
+  <h2>القِرْطاس</h2>
+
+  <div class="dir">
+    <div class="dirtop" style="background:linear-gradient(160deg,#FFFDF9,#EFE6D8);color:#17140F">
+      <div class="no">اتجاه ج · فاتح بالكامل</div>
+      <h3>القِرْطاس</h3>
+      <div class="en">PARCHMENT</div>
+      <p class="one">
+        ورقٌ دافئ وحبرٌ أسود ونحاسٌ واحد. تطبيق يبدو كـ<b>سجلّ</b> يُقرأ،
+        لا كطرفية تداول تُراقَب. مَثْراة تكتب ما فعلته ولماذا — والورق هو
+        الاستعارة الصادقة لذلك.
+      </p>
+      <div class="pal">
+        <div class="pc"><div class="sw" style="background:#F7F2EA"></div>
+          <div class="lb" style="background:#FFFDF9;color:#17140F"><b>القِرْطاس</b><code>#F7F2EA</code>الأرضية</div></div>
+        <div class="pc"><div class="sw" style="background:#FFFDF9"></div>
+          <div class="lb" style="background:#FFFDF9;color:#17140F"><b>الصحيفة</b><code>#FFFDF9</code>البطاقات</div></div>
+        <div class="pc"><div class="sw" style="background:#17140F"></div>
+          <div class="lb" style="background:#FFFDF9;color:#17140F"><b>الحِبْر</b><code>#17140F</code>النص</div></div>
+        <div class="pc"><div class="sw" style="background:#A85B2E"></div>
+          <div class="lb" style="background:#FFFDF9;color:#17140F"><b>النُّحاس</b><code>#A85B2E</code>التأكيد · 27°</div></div>
+        <div class="pc"><div class="sw" style="background:#1E7A4C"></div>
+          <div class="lb" style="background:#FFFDF9;color:#17140F"><b>ربح</b><code>#1E7A4C</code>اصطلاح</div></div>
+        <div class="pc"><div class="sw" style="background:#BE2F3F"></div>
+          <div class="lb" style="background:#FFFDF9;color:#17140F"><b>خسارة</b><code>#BE2F3F</code>353°</div></div>
+      </div>
+    </div>
+
+    <div class="dirbody">
+      <div class="grid2">
+        <div>
+          <div class="blk">
+            <div class="t">المظهر المميّز</div>
+            <h4>الحاشية</h4>
+            <p>
+              شريط رأسي رفيع على حافة كل شاشة — مأخوذ من حاشية المخطوط العربي،
+              حيث كان الهامش موضع التعليق لا الزينة. عندنا يحمل الهامش
+              <b>ما تبقّى من مخاطرة اليوم</b>: يمتلئ من الأسفل، وعليه علامة
+              سوداء واحدة هي حدّ الإيقاف. حين يقترب الامتلاء من العلامة، يُقرأ
+              الخطر بلا رقم وبلا لافتة.
+            </p>
+            <div class="demo">
+              <div class="hashiya">
+                <div class="rail"><i style="height:64%"></i><u style="bottom:82%"></u></div>
+                <div class="txt">
+                  <b>الهامش يقول ما لا يقوله الرقم</b>
+                  <span>الممتلئ: المخاطرة المستهلكة اليوم.<br>
+                  العلامة السوداء: حدّ الإيقاف.<br>
+                  الفراغ بينهما: ما تبقّى — وهو الرقم الوحيد الذي يهمّ برأس مال 150 دولاراً.</span>
+                </div>
+              </div>
+              <div class="cap">عنصر واحد، حاضر في كل شاشة، يحمل أخطر معلومة في النظام.</div>
+            </div>
+          </div>
+
+          <div class="blk">
+            <div class="t">الحرف</div>
+            <h4>نَسْخ للعناوين، ومحايد للبيانات</h4>
+            <p>
+              عنوان بخط نسخيّ عربي (Amiri أو ما يشبهه) — لا يستعمله أيٌّ من
+              الثمانية عشر — مع خط واجهة محايد للجداول والأرقام. التباين بين
+              النبرتين هو ما يجعل الشاشة تُقرأ كصفحة لا كلوحة قيادة.
+            </p>
+          </div>
+
+          <div class="blk risk">
+            <div class="t">الخطر</div>
+            <h4>ثلاثة أشياء تكسره</h4>
+            <p>
+              <b>١ ·</b> النحاس ٢٧° والخسارة ٣٥٣° — بينهما ٣٤ درجة فقط. لا بدّ
+              أن تختلفا في التشبّع والوزن لا في الصبغة وحدها، وإلا التُبس التأكيد
+              بالخسارة.<br>
+              <b>٢ ·</b> الورق يعني ضوءاً في وجهك ليلاً، ونصف تداولك ليلي.<br>
+              <b>٣ ·</b> الفاتح يُظهر كل عيب في المحاذاة والتباعد؛ لا يسامح كما يسامح الداكن.
+            </p>
+          </div>
+        </div>
+
+        <div>
+          <div class="phones">
+            <div>
+              <div class="ph"><div class="scr t-paper">
+                <div class="sb"><span>9:41 ص</span><span>▪ ▪ ▪</span></div>
+                <div class="hd">
+                  <div class="wm">مَثْراة</div>
+                  <div class="conn"><i></i><span>متّصل</span></div>
+                </div>
+                <div class="body">
+                  <div class="cardp">
+                    <div class="lbl">المتبقّي من مخاطرة اليوم</div>
+                    <div class="big">0.75<small>USD</small></div>
+                    <div class="thr"><i style="width:100%"></i><u></u></div>
+                    <div class="rowp" style="opacity:.7"><span>حدّ الإيقاف</span><span>1.00</span></div>
+                  </div>
+                  <div class="cardp">
+                    <div class="lbl">حالة اليوم</div>
+                    <div class="verdict" style="font-size:16px">لا صفقة</div>
+                    <div class="why">النظام لا يرى السوق: صفر من خمسة مزوّدات مُهيّأة.</div>
+                  </div>
+                  <div class="cardp">
+                    <div class="rowp" style="padding:0">
+                      <span>اكتمال البيانات</span><span style="opacity:.6">0/5</span>
+                      <span class="dots5"><i></i><i></i><i></i><i></i><i></i></span>
+                    </div>
+                  </div>
+                  <div class="rowp" style="opacity:.55;font-size:9.5px">
+                    <span>آخر تحديث</span><span>٩:٤٠ ص</span></div>
+                </div>
+                <div class="stamp" style="color:#17140F">معاينة تصميم · أرقام غير حقيقية</div>
+                <div class="tabs"><span class="on">الرئيسية</span><span>القرار</span><span>المحفظة</span><span>النظام</span></div>
+              </div></div>
+              <div class="phcap">الرئيسية — لا رصيد ضخم، بل ما تبقّى</div>
+            </div>
+
+            <div>
+              <div class="ph"><div class="scr t-paper">
+                <div class="sb"><span>9:41 ص</span><span>▪ ▪ ▪</span></div>
+                <div class="hd"><div class="wm" style="font-size:13px">القرار</div>
+                  <div class="conn"><i></i><span>متّصل</span></div></div>
+                <div class="body">
+                  <div class="cardp">
+                    <div class="lbl">حكم اليوم</div>
+                    <div class="verdict">لا تداول</div>
+                    <div class="why">الخط يقف عند بوّابة الاعتماد فيخرج «لا
+                      تداول» — سلوك صحيح لا عطل.</div>
+                  </div>
+                  <div class="cardp">
+                    <div class="lbl">البوّابات</div>
+                    <div class="gate"><i></i><span>بيانات سعرية — غير متاحة</span></div>
+                    <div class="gate"><i></i><span>تقويم اقتصادي — غير متاح</span></div>
+                    <div class="gate"><i></i><span>اعتماد الاستراتيجية — لم يتمّ</span></div>
+                  </div>
+                  <div class="rowp" style="opacity:.6;font-size:9.5px;padding:2px 0">
+                    <span>يتغيّر بـ</span><span>مزوّد بيانات حقيقي واحد</span></div>
+                </div>
+                <div class="stamp" style="color:#17140F">معاينة تصميم · أرقام غير حقيقية</div>
+                <div class="tabs"><span>الرئيسية</span><span class="on">القرار</span><span>المحفظة</span><span>النظام</span></div>
+              </div></div>
+              <div class="phcap">القرار — السبب مكتوب، لا مستنتَج</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ الاتجاه د ═══════════ -->
+<section>
+  <p class="secnum">الاتجاه الرابع</p>
+  <h2>الأُفُق</h2>
+
+  <div class="dir">
+    <div class="dirtop" style="background:#12131A;color:#EDEBF2;padding-bottom:34px">
+      <div class="no">اتجاه د · مدمج</div>
+      <h3>الأُفُق</h3>
+      <div class="en">HORIZON</div>
+      <p class="one">
+        الداكن لما يحدث <b>الآن</b>. ليس سمتين يختار المستخدم بينهما، بل معنى
+        واحد: فوق الأفق قرارٌ حيّ.
+      </p>
+    </div>
+    <div style="height:3px;background:linear-gradient(90deg,rgba(224,138,60,.15),#E08A3C 35%,#E08A3C 65%,rgba(224,138,60,.15))"></div>
+    <div class="dirtop" style="background:#F4F1EC;color:#191713;padding-top:26px">
+      <p class="one" style="margin-top:0">
+        والفاتح لما <b>حدث وسُجِّل</b>: تحت الأفق سجلٌّ هادئ. والخط الجمريّ
+        بينهما هو الحدّ — ووجوده مضيئاً أو باهتاً هو نفسه مؤشّر الاتصال.
+      </p>
+      <div class="pal">
+        <div class="pc"><div class="sw" style="background:#12131A"></div>
+          <div class="lb" style="background:#fff;color:#191713"><b>الليل</b><code>#12131A</code>فوق الأفق</div></div>
+        <div class="pc"><div class="sw" style="background:#1B1D27"></div>
+          <div class="lb" style="background:#fff;color:#191713"><b>سطح ليلي</b><code>#1B1D27</code>البطاقات</div></div>
+        <div class="pc"><div class="sw" style="background:#E08A3C"></div>
+          <div class="lb" style="background:#fff;color:#191713"><b>الشَّفَق</b><code>#E08A3C</code>الحدّ · 30°</div></div>
+        <div class="pc"><div class="sw" style="background:#F4F1EC"></div>
+          <div class="lb" style="background:#fff;color:#191713"><b>النهار</b><code>#F4F1EC</code>تحت الأفق</div></div>
+        <div class="pc"><div class="sw" style="background:#191713"></div>
+          <div class="lb" style="background:#fff;color:#191713"><b>الحِبْر</b><code>#191713</code>النص النهاري</div></div>
+        <div class="pc"><div class="sw" style="background:#8FA0C0"></div>
+          <div class="lb" style="background:#fff;color:#191713"><b>ثانوي بارد</b><code>#8FA0C0</code>نص ليلي خافت</div></div>
+      </div>
+    </div>
+
+    <div class="dirbody">
+      <div class="grid2">
+        <div>
+          <div class="blk">
+            <div class="t">المظهر المميّز</div>
+            <h4>الأُفُق نفسه</h4>
+            <p>
+              خطّ واحد يفصل وجهين، ويعمل على ثلاثة مستويات:
+              <b>داخل الشاشة</b> — أعلى الرئيسية داكن (القرار والمخاطرة والاتصال)
+              وأسفلها فاتح (الصفقات والأداء).
+              <b>بين التبويبات</b> — «الرئيسية» و«القرار» داكنان، و«المحفظة»
+              و«النظام» فاتحان.
+              <b>عبر الجلسة</b> — يهبط الأفق حين يُغلق السوق، فتصير الشاشة كلها
+              نهاراً: لا شيء حيّ الآن، فلا داعي لسواد التأهّب.
+            </p>
+            <div class="demo">
+              <div class="horizon">
+                <div class="hz-n">
+                  <b>فوق الأفق — الآن</b>
+                  <span>القرار · المخاطرة المتبقّية · حالة الاتصال · ما يمنع التداول</span>
+                </div>
+                <div class="hz-line"></div>
+                <div class="hz-d">
+                  <b>تحت الأفق — ما مضى</b>
+                  <span>الصفقات · الأداء · السجلّ · الإعدادات</span>
+                </div>
+              </div>
+              <div class="cap">الحدّ ليس زخرفاً: هو الجواب على «هل يحدث شيء الآن؟» قبل قراءة كلمة.</div>
+            </div>
+          </div>
+
+          <div class="blk">
+            <div class="t">الاتصال</div>
+            <h4>نهاية لافتة «لا اتصال بالخادم»</h4>
+            <p>
+              في هذا الاتجاه يصير الاتصال خاصيةً من خصائص الأفق نفسه: الخط
+              الجمريّ متّصلٌ ومضيء حين الاتصال قائم، ومتقطّعٌ باهت حين ينقطع.
+              معلومة في مكان واحد، بلا لافتة تأكل الشاشة، وبلا تكرارها مرّتين.
+            </p>
+          </div>
+
+          <div class="blk risk">
+            <div class="t">الخطر</div>
+            <h4>أصعب الأربعة تنفيذاً</h4>
+            <p>
+              <b>١ ·</b> سمتان في تطبيق واحد تعنيان ضبط تباين مرّتين لكل مكوّن،
+              واختبارات لقطة مضاعفة. تكلفة حقيقية في الكود لا في الرسم.<br>
+              <b>٢ ·</b> إن تغيّرت الأرضية من تلقائها قد تُقرأ كعطل. الحلّ: لا
+              تتغيّر إلا عند فتح السوق وإغلاقه، مع سطر يشرح، ومع إمكان تثبيتها.<br>
+              <b>٣ ·</b> إن نُفِّذ بغير دقّة بدا التطبيق «نصفه لم يكتمل».
+            </p>
+          </div>
+        </div>
+
+        <div>
+          <div class="phones">
+            <div>
+              <div class="ph"><div class="scr t-night">
+                <div class="sb"><span>9:41 ص</span><span>▪ ▪ ▪</span></div>
+                <div class="hd">
+                  <div class="wm">مَثْراة</div>
+                  <div class="conn"><i></i><span>متّصل</span></div>
+                </div>
+                <div class="body">
+                  <div class="cardp">
+                    <div class="lbl">المتبقّي من مخاطرة اليوم</div>
+                    <div class="big">0.75<small>USD</small></div>
+                    <div class="thr"><i style="width:100%"></i><u></u></div>
+                  </div>
+                  <div class="cardp">
+                    <div class="lbl">حالة اليوم</div>
+                    <div class="verdict" style="font-size:16px">لا صفقة</div>
+                    <div class="why">صفر من خمسة مزوّدات مُهيّأة.</div>
+                  </div>
+                  <div class="dayhalf">
+                    <div class="lbl">تحت الأفق — السجلّ</div>
+                    <div class="cardp">
+                      <div class="rowp" style="padding:0"><span>صفقات اليوم</span><span>0</span></div>
+                      <div class="rowp" style="padding:4px 0 0"><span>آخر صفقة</span><span>—</span></div>
+                    </div>
+                  </div>
+                </div>
+                <div class="stamp" style="color:#191713">معاينة تصميم · أرقام غير حقيقية</div>
+                <div class="tabs" style="background:#F4F1EC;color:#191713;border-top:1px solid #E4E0D8">
+                  <span class="on">الرئيسية</span><span>القرار</span><span>المحفظة</span><span>النظام</span></div>
+              </div></div>
+              <div class="phcap">الرئيسية — الأفق داخل الشاشة الواحدة</div>
+            </div>
+
+            <div>
+              <div class="ph"><div class="scr" style="background:#F4F1EC;color:#191713">
+                <div class="sb"><span>9:41 م</span><span>▪ ▪ ▪</span></div>
+                <div class="hd"><div class="wm" style="font-size:13px">المحفظة</div>
+                  <div class="conn" style="opacity:.6"><i style="background:#9AA0A6"></i><span>السوق مُغلق</span></div></div>
+                <div class="body">
+                  <div class="cardp" style="background:#fff;border:1px solid #E4E0D8">
+                    <div class="lbl" style="opacity:.55">الأداء — منذ البداية</div>
+                    <div class="big">—</div>
+                    <div class="why" style="opacity:.6">لا عيّنة كافية. لا تُعرض نسبة من صفر صفقة.</div>
+                  </div>
+                  <div class="cardp" style="background:#fff;border:1px solid #E4E0D8">
+                    <div class="lbl" style="opacity:.55">الصفقات</div>
+                    <div class="why" style="opacity:.65">لا صفقات بعد.</div>
+                  </div>
+                  <div class="cardp" style="background:#fff;border:1px solid #E4E0D8">
+                    <div class="rowp" style="padding:0"><span>رأس المال</span><span>150.00</span></div>
+                    <div class="rowp" style="padding:4px 0 0"><span>الحاجز</span><span>7.50</span></div>
+                  </div>
+                </div>
+                <div class="stamp" style="color:#191713">معاينة تصميم · أرقام غير حقيقية</div>
+                <div class="tabs" style="border-top:1px solid #E4E0D8">
+                  <span>الرئيسية</span><span>القرار</span><span class="on">المحفظة</span><span>النظام</span></div>
+              </div></div>
+              <div class="phcap">المحفظة — تحت الأفق، والسوق مُغلق</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <p class="secnum">المقارنة</p>
+  <h2>الأربعة معاً</h2>
+  <table class="cmp">
+    <tr><th></th><th>الجَمْر</th><th>الثُّرَيّا</th><th>القِرْطاس</th><th>الأُفُق</th></tr>
+    <tr><th>الأرضية</th>
+      <td>ترابية داكنة<small>#100C0A</small></td>
+      <td>نيليّة ليلية<small>#0C0B16</small></td>
+      <td><b>قرطاس دافئ</b><small>#F7F2EA</small></td>
+      <td><b>الاثنتان</b><small>#12131A + #F4F1EC</small></td></tr>
+    <tr><th>اللون · الزاوية</th>
+      <td>جمريّ 30°</td><td>نحاسي 40°</td><td>نحاس 27°</td><td>شفق 30°</td></tr>
+    <tr><th>المظهر المميّز</th>
+      <td>الحدّ<small>خط تحت كل رقم يسخن</small></td>
+      <td>النقش النجمي<small>كثافة = اكتمال البيانات</small></td>
+      <td>الحاشية<small>هامش يحمل المتبقّي</small></td>
+      <td>الأفق<small>حدّ يفصل الآن عمّا مضى</small></td></tr>
+    <tr><th>مسافته عن المنافسين</th>
+      <td>أبعدها</td><td>بعيد</td><td>بعيد داخل خانة مزدحمة</td><td>لا نظير له — ولا سابقة</td></tr>
+    <tr><th>القراءة ليلاً</th>
+      <td>ممتازة</td><td>ممتازة</td><td><b>ضعيفة</b></td><td>ممتازة فوق الأفق</td></tr>
+    <tr><th>تكلفة التنفيذ</th>
+      <td>عالية</td><td><b>الأقل</b><small>الأرضية مبنيّة أصلاً</small></td>
+      <td>متوسطة</td><td><b>الأعلى</b><small>سمتان · اختبارات مضاعفة</small></td></tr>
+    <tr><th>يحلّ مشكلة اللافتة</th>
+      <td>جزئياً</td><td>نعم — نجمة</td><td>نعم — نقطة على الحاشية</td><td>نعم — الخط نفسه</td></tr>
+  </table>
+  <p style="margin-top:24px;color:var(--mute)">
+    لا واحد منها «الأصحّ». الجَمْر والثُّرَيّا يشتريان تمايزاً بثمن الظلام،
+    والقِرْطاس يشتري هدوءاً وقابليةً للقراءة بثمن الوقوع في الخانة المزدحمة،
+    والأُفُق يشتري فكرةً لا نظير لها بثمن أعلى تكلفة تنفيذ في الأربعة.
+  </p>
+</section>
+
+<section>
+  <p class="secnum">ما يلزم لاتخاذ القرار</p>
+  <h2>سؤالان فقط</h2>
+  <ul>
+    <li><b>متى تفتحين التطبيق أكثر؟</b> إن كان أغلبه ليلاً وفي غرفة مظلمة،
+      فالقِرْطاس يخسر قبل أن يبدأ. وإن كنتِ تفتحينه نهاراً لتقرأي ماذا جرى،
+      فهو الأصلح.</li>
+    <li><b>ما الذي تريدينه أن يقوله التطبيق عنكِ؟</b> «أنا منضبطة» ⇐ القِرْطاس
+      أو الأُفُق. «أنا أبني شيئاً تقنياً» ⇐ الجَمْر أو الثُّرَيّا.</li>
+  </ul>
+  <p style="margin-top:20px;color:var(--mute)">
+    اختاري واحداً وأمضي به إلى النهاية: شعار أبيض وأسود ← خط ← ألوان ←
+    المظهر المميّز ← أيقونات ← دليل هوية ← <b>رموز تصميم في الكود</b>
+    (لا ألوان متناثرة في الملفات كما هي الآن).
+  </p>
+</section>
+
+<footer>
+  مَثْراة — MATHRAH · الاتجاهان الثالث والرابع · مبنيّان على قياس ٦٩ لقطة
+  لثمانية عشر تطبيقاً · كل الأرقام في الشاشات <b>غير حقيقية</b> وللمعاينة فقط
+</footer>
+
+</div>
+</body>
+</html>
