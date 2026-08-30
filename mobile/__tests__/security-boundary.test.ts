@@ -69,6 +69,20 @@ const sourceFiles = (): string[] =>
 const readAll = (): Array<{ file: string; text: string }> =>
   sourceFiles().map((file) => ({ file: relative(ROOT, file), text: readFileSync(file, 'utf8') }));
 
+/**
+ * الملفات **المتتبَّعة في git**.
+ *
+ * الخاصية التي تحمي فعلاً ليست «لا يُذكر عنوان»، بل «لا يُودَع عنوان في
+ * المستودع». ملف محلي متجاهَل لا يغادر الجهاز؛ وملف متتبَّع يغادره إلى الأبد.
+ */
+const trackedFiles = (): Set<string> =>
+  new Set(
+    execFileSync('git', ['-C', ROOT, 'ls-files'], { encoding: 'utf8' })
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean),
+  );
+
 describe('لا مضيف وسيط في مصدر الجوال', () => {
   /**
    * أسماء المضيفين مُركَّبة من أجزاء عمداً، كي لا يوجد المضيف نفسه حرفياً في
@@ -126,11 +140,10 @@ describe('لا سرّ على الجهاز', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('لا ملف .env حقيقي — فقط .env.example بقيم نائبة', () => {
-    const envFiles = sourceFiles()
-      .map((file) => relative(ROOT, file))
-      .filter((file) => file.startsWith('.env'));
-    expect(envFiles).toEqual(['.env.example']);
+  it('لا ملف .env متتبَّع في git — فقط .env.example بقيم نائبة', () => {
+    // ملف `.env` محلي أمرٌ طبيعي على جهاز التطوير، والخطر أن **يُتتبَّع**.
+    const trackedEnv = [...trackedFiles()].filter((file) => file.startsWith('.env')).sort();
+    expect(trackedEnv).toEqual(['.env.example']);
 
     const example = readFileSync(join(ROOT, '.env.example'), 'utf8');
     expect(example).toContain('127.0.0.1');
@@ -146,10 +159,31 @@ describe('لا سرّ على الجهاز', () => {
 });
 
 describe('لا ذكر لقناة نفق عامة', () => {
-  it('لا يظهر اسم خدمة النفق ولا مضيف عام افتراضي', () => {
-    const forbidden = ['tailscale', 'funnel', 'ts.net', 'ngrok'];
+  /**
+   * تفريق مقصود بين نوعين من الأنفاق:
+   *
+   *   * `ngrok` و`funnel` و`trycloudflare` وأمثالها **أنفاق عامة**: تفتح جهازك
+   *     للإنترنت كلّه. ممنوعة في أي ملف، متتبَّعاً كان أو محلياً.
+   *   * عنوان Tailscale (`.ts.net`) داخل **شبكة خاصة** لا يصل إليها أحد من
+   *     خارجها. والخادم انتقل إليها فعلاً في 0.7.1، فمنعه من `.env` المحلي
+   *     يمنع المعمارية القائمة لا يحميها.
+   *
+   * فالمنع الباقي: ألّا يُودَع أي عنوان خاص **في المستودع**.
+   */
+  const PUBLIC_TUNNELS = ['ngrok', 'funnel', 'trycloudflare', 'localtunnel', 'serveo'];
+
+  it('لا نفق عام في أي ملف', () => {
     const offenders = readAll()
-      .filter(({ text }) => forbidden.some((needle) => text.toLowerCase().includes(needle)))
+      .filter(({ text }) => PUBLIC_TUNNELS.some((needle) => text.toLowerCase().includes(needle)))
+      .map(({ file }) => file);
+    expect(offenders).toEqual([]);
+  });
+
+  it('لا عنوان شبكة خاصة داخل ملف متتبَّع في git', () => {
+    const tracked = trackedFiles();
+    const offenders = readAll()
+      .filter(({ file }) => tracked.has(file.split('\\').join('/')))
+      .filter(({ text }) => text.toLowerCase().includes('ts.net'))
       .map(({ file }) => file);
     expect(offenders).toEqual([]);
   });

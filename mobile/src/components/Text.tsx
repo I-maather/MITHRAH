@@ -2,6 +2,7 @@ import React from 'react';
 import { Text as RNText, type StyleProp, type TextStyle } from 'react-native';
 
 import { useTheme } from '@/theme';
+import { fonts } from '@/theme/tokens';
 import type { TypographyKey } from '@/theme/tokens';
 import { textStart } from '@/i18n/rtl';
 
@@ -100,6 +101,12 @@ export function Text({
           writingDirection: 'rtl',
         },
         tabular ? { fontVariant: ['tabular-nums'] } : null,
+        // الأرقام تأخذ خطها الخاص: كل ما هو `tabular` أو من مقاسات `numeric`.
+        tabular || variant === 'numeric' || variant === 'numericLarge'
+          ? { fontFamily: fonts.numeric }
+          : fonts.arabic
+            ? { fontFamily: fonts.arabic }
+            : null,
         style,
       ]}
     >
