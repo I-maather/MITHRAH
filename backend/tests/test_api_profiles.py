@@ -130,16 +130,24 @@ def test_selecting_a_profile_never_enables_live_trading():
 
 def test_intelligence_endpoint_names_every_missing_provider_exactly():
     data = client.get("/api/intelligence").json()
-    missing = data["providers"]["missing"]
-    for name in (
-        "EconomicCalendarProvider",
-        "MacroDataProvider",
-        "VerifiedNewsProvider",
-        "MarketDataProvider",
-        "FundamentalContextProvider",
-    ):
+    p = data["providers"]
+    missing = p["missing"]
+    # `kind` هو المعرّف الثابت؛ و`name` نصٌّ للعرض يتغيّر بحال المزوّد.
+    reported = {s["kind"]: s["configured"] for s in p["providers"]}
+
+    # الثابت ليس **أيّ** مزوّد ناقص — ذلك يتغيّر كلما وُصل واحد — بل أن
+    # القائمة **تطابق** ما تقوله حالة كل مزوّد. قائمةٌ تخالف الحالات تعني
+    # شاشةً تعرض نقصاً غير موجود أو تُخفي نقصاً موجوداً.
+    assert set(missing) == {n for n, ok in reported.items() if not ok}
+
+    # والإلزاميون الناقصون جزءٌ من الناقصين، والأهلية نفيُ وجودهم.
+    assert set(p["missing_mandatory"]) <= set(missing)
+    assert p["live_eligible_by_providers"] is (len(p["missing_mandatory"]) == 0)
+
+    # وفي بيئة الاختبار: لا مفاتيح، فالتقويم والأخبار وبيانات السوق ناقصة.
+    # (الكلّي يُوصَل بـECB وهو عام بلا مفتاح، فلا يُنتظر في الناقصين.)
+    for name in ("EconomicCalendarProvider", "VerifiedNewsProvider", "MarketDataProvider"):
         assert name in missing
-    assert data["providers"]["live_eligible_by_providers"] is False
 
 
 def test_intelligence_endpoint_lists_all_seventeen_stages_even_before_a_run():

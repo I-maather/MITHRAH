@@ -3,6 +3,7 @@ Runtime state container. One process, one system — تُبنى مرة عند ا
 """
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
@@ -39,6 +40,9 @@ from ..risk.capital_costs import PROVISIONAL_EURUSD, CapitalComCostModel
 from ..scheduling import SafeScheduler
 from ..secretstore.provider import REQUIRED_CAPITAL_SECRETS, build_secret_provider
 from ..secretstore.redaction import install_redacting_filter
+
+logger = logging.getLogger(__name__)
+
 
 
 @dataclass
@@ -184,8 +188,74 @@ def build_system(settings: Settings | None = None) -> SystemState:
         profiles=ProfileManager(DEFAULT_PROFILE),
         db_session=session,
         strategy_definitions=StrategyDefinitionRegistry(),
-        # لا مزوّد مُعدّ بعد: التقويم والأخبار والكلي وبيانات السوق كلها ناقصة،
-        # وهذا يظهر باسمه الدقيق في `/api/intelligence` ويمنع الأهلية الحقيقية.
-        providers=ProviderRegistry(),
+        # يُبنى من المفاتيح المتاحة. مفتاحٌ غائب ⇒ مزوّدٌ غير مُعدّ يظهر
+        # باسمه في «ما هو ناقص» — لا مزوّدٌ يُخفق بصمت عند أول نداء.
+        providers=build_provider_registry(secret_provider, broker),
         locally_paused=True,
+    )
+
+
+# ---------------------------------------------------------------------------
+# بناء سجلّ المزوّدين من الأسرار
+# ---------------------------------------------------------------------------
+
+
+def build_provider_registry(secrets, broker=None) -> ProviderRegistry:
+    """
+    يبني سجلّ المزوّدين من المفاتيح المتاحة.
+
+    ## لماذا لم يكن موجوداً
+
+    المزوّدون الأربعة مكتوبون ومُختبَرون منذ أشهر، ولم يكن في المشروع كلّه
+    سطرٌ واحد يبنيهم: `build_system` كانت تُمرّر `ProviderRegistry()` فارغاً،
+    فيقول النظام «اكتمال البيانات ٠٪» — **وهو صادق**: لا مزوّد مُعدّ.
+    وحدةٌ سليمة وغير موصولة، ولا اختبار يكشف الفرق. نفس درس ركوب مسارات
+    الجوال في ٠٫٥٫٦.
+
+    ## القاعدة هنا
+
+    **مفتاحٌ غائب ⇒ مزوّدٌ غير مُعدّ، لا مزوّدٌ يُخفق بصمت.** لا يُبنى مزوّد
+    بمفتاح فارغ ليفشل عند أول نداء؛ يُترك موضعه فارغاً فيتولّاه البديل
+    `Unconfigured…`، ويظهر باسمه في «ما هو ناقص» أمام المالكة.
+
+    والبيانات الكلّية لها مساران: FRED إن وُجد مفتاحه، وإلا ECB — وهو **عام
+    بلا مفتاح**، فلا يبقى هذا المزوّد ناقصاً لمجرّد غياب مفتاح أمريكي.
+
+    وبيانات السوق تأتي من الوسيط نفسه لا من طرف ثالث: هو مصدر السعر الذي
+    سنُنفّذ عليه، فقياسٌ من مصدرٍ آخر يُدخل فرقاً لا يُفسَّر.
+    """
+    from ..live_readonly.market_data import LiveReadOnlyMarketDataProvider
+    from ..providers.ecb_macro import EcbMacroDataProvider
+    from ..providers.finnhub_news import FinnhubForexNewsProvider
+    from ..providers.fmp_calendar import FmpEconomicCalendarProvider
+    from ..providers.fred_macro import FredMacroDataProvider
+
+    def key(name: str) -> Optional[str]:
+        try:
+            value = secrets.get_optional(name)
+        except Exception:  # noqa: BLE001
+            return None
+        return value or None
+
+    fmp = key("FMP_API_KEY")
+    finnhub = key("FINNHUB_API_KEY")
+    fred = key("FRED_API_KEY")
+
+    calendar = FmpEconomicCalendarProvider(api_key=fmp) if fmp else None
+    news = FinnhubForexNewsProvider(api_key=finnhub) if finnhub else None
+    macro = FredMacroDataProvider(api_key=fred) if fred else EcbMacroDataProvider()
+
+    market_data = None
+    session = getattr(broker, "session", None)
+    if session is not None:
+        try:
+            market_data = LiveReadOnlyMarketDataProvider(session)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("تعذّر بناء مزوّد بيانات السوق: %s", type(exc).__name__)
+
+    return ProviderRegistry(
+        calendar=calendar,
+        macro=macro,
+        news=news,
+        market_data=market_data,
     )
