@@ -127,3 +127,83 @@ def trading_week_bounds_utc(at: datetime | None = None) -> tuple[datetime, datet
     monday = ny.date() - timedelta(days=ny.weekday())
     start = datetime.combine(monday, time(0, 0), tzinfo=NEW_YORK)
     return start.astimezone(UTC), (start + timedelta(days=7)).astimezone(UTC)
+
+
+# ---------------------------------------------------------------------------
+# سوق الفوركس
+# ---------------------------------------------------------------------------
+#
+# `us_market_status` يصف سوق الأسهم الأمريكية: ٩:٣٠–١٦:٠٠ بتوقيت نيويورك.
+# وكان مستعملاً لحراسة تداول **الفوركس** — فكان النظام يظنّ السوق مغلقاً
+# طوال ساعات هو فيها مفتوح، ويعرض «خارج الجلسة الأساسية» في الثانية ظهراً
+# بتوقيت الرياض والفوركس يعمل.
+#
+# ولم تُحذف تلك الدالة: ستلزم حين يُضاف تداول الأسهم.
+#
+# ## أسبوع الفوركس
+#
+# يفتح **الأحد ١٧:٠٠ بتوقيت نيويورك** (بدء جلسة سيدني/ويلينغتون) ويغلق
+# **الجمعة ١٧:٠٠ بتوقيت نيويورك**. وبينهما مفتوحٌ متّصلاً — لا إغلاق يومي.
+#
+# ونيويورك هي المرجع لا UTC، لأن الحدّ يتبع التوقيت الصيفي الأمريكي: فرقُه
+# عن UTC يتغيّر مرّتين في السنة، ومن يثبّته على UTC يخطئ ساعةً نصفَ العام.
+
+#: لحظة الفتح والإغلاق الأسبوعيين، بتوقيت نيويورك.
+FOREX_WEEK_OPEN = time(17, 0)    # الأحد
+FOREX_WEEK_CLOSE = time(17, 0)   # الجمعة
+
+
+def _forex_week_bounds_utc(ny_now: datetime) -> tuple[datetime, datetime]:
+    """حدّا الأسبوع الجاري (أو القادم إن كنّا في العطلة) بتوقيت UTC."""
+    d = ny_now.date()
+    # الأحد=6 في weekday()؛ نرجع إلى أحد هذا الأسبوع.
+    days_since_sunday = (d.weekday() + 1) % 7
+    sunday = d - timedelta(days=days_since_sunday)
+    open_ny = datetime.combine(sunday, FOREX_WEEK_OPEN, tzinfo=NEW_YORK)
+    close_ny = datetime.combine(sunday + timedelta(days=5), FOREX_WEEK_CLOSE, tzinfo=NEW_YORK)
+    if ny_now < open_ny:
+        open_ny -= timedelta(days=7)
+        close_ny -= timedelta(days=7)
+    return open_ny.astimezone(UTC), close_ny.astimezone(UTC)
+
+
+def forex_market_status(
+    at: datetime | None = None, holidays: set[date] | None = None
+) -> MarketStatus:
+    """
+    حالة سوق الفوركس.
+
+    مفتوحٌ متّصلاً من الأحد ١٧:٠٠ نيويورك إلى الجمعة ١٧:٠٠ نيويورك.
+    والعطلات الرسمية **لا تُغلقه**: تُرقّق سيولته فقط، وذلك أمر يعالجه
+    تقويم الأحداث لا هذا التقويم. فمن أغلق الفوركس في عطلة أمريكية منع
+    النظام عن سوق كان يعمل.
+    """
+    at = ensure_utc(at or now_utc())
+    ny = at.astimezone(NEW_YORK)
+    open_utc, close_utc = _forex_week_bounds_utc(ny)
+    is_open = open_utc <= at < close_utc
+
+    if not is_open:
+        # قبل فتح الأحد أو بعد إغلاق الجمعة — الفتحة التالية بعد أسبوع.
+        next_open = open_utc + timedelta(days=7) if at >= close_utc else open_utc
+        return MarketStatus(
+            is_open=False,
+            is_holiday=False,
+            is_weekend=True,
+            session_open_utc=next_open,
+            session_close_utc=next_open + timedelta(days=5),
+            minutes_since_open=None,
+            minutes_to_close=None,
+            reason_ar="السوق مغلق — عطلة نهاية الأسبوع",
+        )
+
+    return MarketStatus(
+        is_open=True,
+        is_holiday=False,
+        is_weekend=False,
+        session_open_utc=open_utc,
+        session_close_utc=close_utc,
+        minutes_since_open=int((at - open_utc).total_seconds() // 60),
+        minutes_to_close=int((close_utc - at).total_seconds() // 60),
+        reason_ar="سوق الفوركس مفتوح",
+    )

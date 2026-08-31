@@ -34,7 +34,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Any
 
-from ..clock import now_utc, us_market_status
+from ..clock import now_utc, forex_market_status
 
 
 def _money(value: Decimal | None) -> str | None:
@@ -51,7 +51,7 @@ def _iso(value: Any) -> str | None:
 # ---------------------------------------------------------------------------
 
 def _status(sys: Any) -> dict[str, Any]:
-    market = us_market_status()
+    market = forex_market_status()
     health = sys.health()
     kill = sys.kill_switch
     event = kill.state.current_event

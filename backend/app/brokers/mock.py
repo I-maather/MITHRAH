@@ -13,7 +13,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Sequence
 
-from ..clock import now_utc, us_market_status
+from ..clock import now_utc, forex_market_status
 from ..contracts import (
     AccountKind,
     AssetClass,
@@ -153,7 +153,7 @@ class MockBrokerAdapter(BrokerAdapter):
         )
 
     def get_market_status(self) -> MarketStatusSnapshot:
-        s = us_market_status()
+        s = forex_market_status()
         return MarketStatusSnapshot(is_open=s.is_open, reason_ar=s.reason_ar)
 
     # --- orders ------------------------------------------------------------

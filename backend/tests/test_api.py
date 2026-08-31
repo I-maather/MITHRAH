@@ -11,6 +11,16 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path/'t.db'}")
     monkeypatch.setenv("BROKER_MODE", "MOCK")
     monkeypatch.setenv("LIVE_TRADING", "false")
+    # **رأس مال مثبَّت لهذا الاختبار.**
+    #
+    # كل الحدود تُشتقّ من `BASELINE_EQUITY_USD`، والتأكيدات أدناه أرقامٌ
+    # دقيقة محسوبة على ١٥٠. ولمّا صُحّح رأس المال الحقيقي إلى ١٤٠ سقطت ستة
+    # تأكيدات — لا لخلل بل لأنها كانت تقرأ إعداداً يتغيّر بتمويل المالكة.
+    #
+    # فيُثبَّت هنا: يبقى الاختبار حسابياً دقيقاً، ولا يسقط في كل مرة يتغيّر
+    # فيها التمويل. وفحص الانحراف الحقيقي موضعه `check_baseline_against_broker`
+    # لا هذا الملف.
+    monkeypatch.setenv("BASELINE_EQUITY_USD", "150.00")
     import app.config as config
     import app.db.session as dbs
     import app.main as main

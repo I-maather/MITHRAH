@@ -51,7 +51,16 @@ class Settings(BaseSettings):
     display_timezone: str = "Asia/Riyadh"
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
 
-    baseline_equity_usd: str = Field(default="150.00", alias="BASELINE_EQUITY_USD")
+    #: رأس المال المرجعي — **ثابتٌ مُعلَن، لا رصيدٌ حيّ**.
+    #:
+    #: كل الحدود تُشتقّ منه: مخاطرة الصفقة، وسقف الخسارة اليومي والأسبوعي،
+    #: وحاجز التراجع. ولا يُقرأ من الوسيط عمداً — لو تتبّع الرصيد الحيّ لصار
+    #: التراجع صفراً أبداً: يهبط الرصيد فيهبط المرجع معه فلا يُقاس هبوط.
+    #:
+    #: وكان ١٥٠٫٠٠ افتراضاً، والرصيد المقيس ١٤٠٫٠٠ — فكان النظام يخاطر بنسبة
+    #: من مالٍ غير موجود. صُحّح في ٣١ أغسطس بتأكيد المالكة، ويُراقَب بعدها
+    #: بفحص انحراف عند الإقلاع (`assert_baseline_matches_broker`).
+    baseline_equity_usd: str = Field(default="140.00", alias="BASELINE_EQUITY_USD")
     risk_mode: Literal[
         "VALIDATION", "LIVE_COMMISSIONING", "CONSERVATIVE_LIVE", "LOCKED_REVIEW"
     ] = Field(

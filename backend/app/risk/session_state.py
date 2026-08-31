@@ -12,6 +12,7 @@
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from typing import Optional
@@ -108,3 +109,75 @@ def load_session_state(
 
 
 __all__ = ["load_session_state"]
+
+
+# ---------------------------------------------------------------------------
+# انحراف رأس المال المرجعي عن الرصيد الفعلي
+# ---------------------------------------------------------------------------
+
+#: نسبة الانحراف المقبولة قبل التحذير. الخسائر والأرباح تُبعد الرصيد عن
+#: المرجع بطبيعتها، فالتحذير عند فارقٍ لا يفسّره تداولٌ عادي.
+BASELINE_DRIFT_TOLERANCE = D("0.10")   # ١٠٪
+
+
+@dataclass(frozen=True)
+class BaselineDrift:
+    """نتيجة مقارنة المرجع بالرصيد. `broker_equity=None` يعني تعذّرت القراءة."""
+
+    baseline: Decimal
+    broker_equity: Optional[Decimal]
+    diverged: bool
+    reason_ar: str
+
+    def as_dict(self) -> dict:
+        return {
+            "baseline": str(self.baseline),
+            "broker_equity": None if self.broker_equity is None else str(self.broker_equity),
+            "diverged": self.diverged,
+            "reason_ar": self.reason_ar,
+        }
+
+
+def check_baseline_against_broker(broker, baseline: Decimal) -> BaselineDrift:
+    """
+    يقارن رأس المال المرجعي بالرصيد الفعلي لدى الوسيط.
+
+    **لا يصحّح ولا يوقف.** المرجع قرارٌ للمالكة لا قيمةٌ تُستنتج؛ ومهمّة هذا
+    الفحص أن يجعل الانحراف **مرئياً** بدل أن يبقى صامتاً — كما بقي ١٥٠ مقابل
+    ١٤٠ حتى انكشف بالمصادفة عند أول اتصال حقيقي.
+
+    وفشل القراءة ليس انحرافاً: وسيطٌ مفصول لا يُثبت شيئاً عن الرصيد، فتُعاد
+    `diverged=False` مع سبب صريح — ولا يُختلق رقم.
+    """
+    try:
+        snapshot = broker.get_account_snapshot()
+        equity = D(str(getattr(snapshot, "settled_cash", None)
+                       or getattr(snapshot, "equity", 0)))
+    except Exception as exc:  # noqa: BLE001
+        return BaselineDrift(
+            baseline=baseline,
+            broker_equity=None,
+            diverged=False,
+            reason_ar=f"تعذّرت قراءة الرصيد من الوسيط ({type(exc).__name__}) — لا حكم.",
+        )
+
+    if equity <= 0:
+        return BaselineDrift(
+            baseline=baseline, broker_equity=equity, diverged=False,
+            reason_ar="الوسيط أعاد رصيداً غير موجب — لا حكم.",
+        )
+
+    gap = abs(equity - baseline) / baseline
+    if gap <= BASELINE_DRIFT_TOLERANCE:
+        return BaselineDrift(
+            baseline=baseline, broker_equity=equity, diverged=False,
+            reason_ar=f"المرجع {baseline} والرصيد {equity} — ضمن المدى.",
+        )
+    return BaselineDrift(
+        baseline=baseline, broker_equity=equity, diverged=True,
+        reason_ar=(
+            f"⚠️ رأس المال المرجعي {baseline} والرصيد الفعلي {equity} — "
+            f"انحراف {gap:.0%}. كل الحدود تُحسب من المرجع، فراجعيه: "
+            f"BASELINE_EQUITY_USD في بيئة الخادم."
+        ),
+    )

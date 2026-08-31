@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 
 from .audit.log import Actor, AuditAction, verify_chain
 from .api.state import SystemState, build_system
-from .clock import format_riyadh, now_utc, us_market_status
+from .clock import format_riyadh, now_utc, forex_market_status
 from .config import get_settings
 from .eligibility.allowlist import ALLOWLIST, EXPLICIT_DENYLIST
 from .killswitch.engine import TRIGGER_LABELS_AR, KillSwitchTrigger
@@ -165,7 +165,7 @@ def health(sys: SystemState = Depends(system)):
 
 @app.get("/api/today")
 def today(sys: SystemState = Depends(system)):
-    market = us_market_status()
+    market = forex_market_status()
     st = sys.session_state
     limits = sys.limits
     ks_event = sys.kill_switch.state.current_event

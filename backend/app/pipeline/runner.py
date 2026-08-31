@@ -27,7 +27,7 @@ from typing import Optional, Sequence
 
 from ..audit.log import Actor, AuditAction, AuditLog
 from ..brokers.base import BrokerAdapter, BrokerNotConnected
-from ..clock import now_utc, us_market_status
+from ..clock import now_utc, forex_market_status
 from ..contracts import Bar, Decision, RiskDecision, Signal
 from ..eligibility.allowlist import check_eligibility
 from ..execution.orders import (
@@ -188,7 +188,7 @@ class Pipeline:
         except Exception as exc:  # noqa: BLE001
             return self._no_trade("broker", "BROKER_ERROR", f"خطأ من الوسيط: {exc}", now)
 
-        market = us_market_status(now)
+        market = forex_market_status(now)
 
         # 2) Macro veto
         if macro.blocks_trading:

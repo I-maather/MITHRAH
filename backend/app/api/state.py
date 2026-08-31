@@ -12,7 +12,7 @@ from ..audit.log import Actor, AuditAction, AuditLog, verify_chain
 from ..audit.sqlstore import SqlAuditStore
 from ..brokers.base import BrokerAdapter
 from ..brokers.factory import build_broker
-from ..clock import now_utc, us_market_status
+from ..clock import now_utc, forex_market_status
 from ..config import REPO_ROOT, Settings, get_settings
 from ..contracts import HealthReport
 from ..db.session import get_session, init_db
@@ -99,7 +99,7 @@ class SystemState:
             chain_ok = False
             details.append(f"سجل التدقيق: {exc}")
 
-        market = us_market_status()
+        market = forex_market_status()
         details.append(f"حالة السوق: {market.reason_ar}")
 
         return HealthReport(

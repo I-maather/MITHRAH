@@ -140,7 +140,7 @@ EURUSD_ONLY: frozenset[str] = frozenset({"EURUSD"})
 
 MODE_SPECS: dict[RiskMode, ModeSpec] = {
     RiskMode.VALIDATION: ModeSpec(
-        hard_total_loss_pct=D("0.05"),          # 7.50
+        hard_total_loss_pct=D("0.05"),          # ٥٪ من رأس المال المرجعي
         daily_loss_pct=D("0.01"),               # 1.50
         weekly_loss_pct=D("0.03"),              # 4.50
         target_risk_pct=D("0.0025"),            # 0.375 → تُعرض 0.38
@@ -178,7 +178,7 @@ MODE_SPECS: dict[RiskMode, ModeSpec] = {
         purpose_ar="التحقق الهندسي على بيانات تجريبية. لا مال حقيقي ولا إرسال أوامر.",
     ),
     RiskMode.LIVE_COMMISSIONING: ModeSpec(
-        hard_total_loss_pct=D("0.05"),          # 7.50
+        hard_total_loss_pct=D("0.05"),          # ٥٪ من رأس المال المرجعي
         daily_loss_pct=D("0.01"),               # 1.50
         weekly_loss_pct=D("0.03"),              # 4.50
         target_risk_pct=D("0.005"),             # يُتجاوَز بالقيمة الدولارية أدناه
@@ -223,7 +223,7 @@ MODE_SPECS: dict[RiskMode, ModeSpec] = {
         ),
     ),
     RiskMode.CONSERVATIVE_LIVE: ModeSpec(
-        hard_total_loss_pct=D("0.05"),          # 7.50 — حاجز مطلق
+        hard_total_loss_pct=D("0.05"),          # حاجز مطلق — ٥٪ من المرجع
         daily_loss_pct=D("0.01"),               # 1.50
         weekly_loss_pct=D("0.02"),              # 3.00
         target_risk_pct=D("0.01"),              # 1.50 all-in

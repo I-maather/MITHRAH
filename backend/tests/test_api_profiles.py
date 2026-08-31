@@ -5,9 +5,12 @@
 """
 from __future__ import annotations
 
+import os
+
 import pytest
 from fastapi.testclient import TestClient
 
+from app.config import get_settings
 from app.main import app
 from app.profiles import (
     GLOBAL_ABSOLUTE_LOSS_BOUNDARY_USD,
@@ -15,6 +18,11 @@ from app.profiles import (
     PROFILE_UPGRADE_COOLING_HOURS,
     TradingProfile,
 )
+
+# رأس مال مثبَّت: الحدود المنشورة نِسَبٌ منه، والتأكيدات أدناه محسوبة على ١٥٠.
+# (انظر الشرح في tests/test_api.py)
+os.environ.setdefault("BASELINE_EQUITY_USD", "150.00")
+get_settings.cache_clear()
 
 client = TestClient(app)
 
