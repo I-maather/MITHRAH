@@ -6,13 +6,14 @@ import {
   Banner,
   Card,
   Divider,
-  EmptyState,
   ErrorState,
   Field,
+  Hadd,
   LoadingState,
   Screen,
   StatusPill,
   Text,
+  Vacancy,
 } from '@/components';
 import { fixtures, isPreviewMode, previewOr } from '@/fixtures';
 import { formatInstant, t } from '@/i18n';
@@ -49,6 +50,16 @@ export default function ProvidersScreen(): React.JSX.Element {
     );
   }
 
+  /**
+   * الإلزاميون الجاهزون من جملتهم.
+   *
+   * الأهلية اليوم سطرٌ يقول «مستوفاة» أو «غير مستوفاة» — ولا يقول **كم بقي**.
+   * وهذا هو الفرق بين حاجزٍ مبهم وبين مسافةٍ تُرى. والعدد مشتقّ من القائمة
+   * نفسها لا من حقلٍ جديد: لا يُخترع رقم لا يملكه الخادم.
+   */
+  const mandatory = data.providers.filter((p) => p.mandatory);
+  const ready = mandatory.filter((p) => p.configured && p.healthy !== false).length;
+
   return (
     <Screen
       testID="providers-screen"
@@ -67,6 +78,17 @@ export default function ProvidersScreen(): React.JSX.Element {
       ) : null}
 
       <Card testID="eligibility-card">
+        {mandatory.length > 0 ? (
+          <Hadd
+            testID="providers-hadd"
+            value={ready}
+            max={mandatory.length}
+            label={t.providers.mandatoryReady}
+            readout={`${ready} / ${mandatory.length}`}
+            thresholds={[{ at: mandatory.length, tone: 'positive' }]}
+            style={{ marginBottom: theme.spacing.sm }}
+          />
+        ) : null}
         <Field
           label={t.providers.eligibility}
           value={data.live_eligible_by_providers ? 'مستوفاة' : 'غير مستوفاة'}
@@ -76,7 +98,12 @@ export default function ProvidersScreen(): React.JSX.Element {
 
       <Card testID="providers-card" title="المزوّدون">
         {data.providers.length === 0 ? (
-          <EmptyState message={t.common.notComputed} />
+          <Vacancy
+            testID="providers-empty"
+            tone="fault"
+            what={t.providers.emptyWhat}
+            why={t.providers.emptyWhy}
+          />
         ) : (
           data.providers.map((provider, index) => {
             const presented = presentProvider(provider.configured, provider.healthy);

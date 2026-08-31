@@ -6,18 +6,19 @@ import {
   Banner,
   Card,
   Divider,
-  EmptyState,
   ErrorState,
   Field,
+  Hadd,
   LoadingState,
   Metric,
   Screen,
   Text,
+  Vacancy,
 } from '@/components';
 import { fixtures, isPreviewMode, previewOr } from '@/fixtures';
 import { formatInstant, t } from '@/i18n';
 import { useTheme } from '@/theme';
-import { presentPnlTone } from '@/utils/present';
+import { presentPnlTone, toNumber } from '@/utils/present';
 
 /**
  * المركز الحالي — **عرض فقط**.
@@ -49,6 +50,26 @@ export default function PositionScreen(): React.JSX.Element {
     );
   }
 
+  /**
+   * موضع السعر بين الوقف والهدف — «الحدّ» في أصدق مواضعه.
+   *
+   * المدى يُبنى من الطرفين لا من الاتجاه: في البيع يكون الوقف فوق الهدف،
+   * فلو ثُبِّت الوقف بداية المدى لانقلب المقياس. والعتبتان تُلوَّنان بحسب
+   * أيّهما الوقف فعلاً، لا بحسب موضعهما على الخط.
+   *
+   * وأيّ سعرٍ لا يُقرأ رقماً يُلغي العنصر كلّه — لا يُرسم مقياسٌ بطرفٍ مخمَّن.
+   */
+  const span = ((): {
+    now: number; min: number; max: number; stop: number; target: number;
+  } | null => {
+    const now = toNumber(data.current_price);
+    const stop = toNumber(data.stop_price);
+    const target = toNumber(data.take_profit_price);
+    if (now === null || stop === null || target === null) return null;
+    if (stop === target) return null;
+    return { now, min: Math.min(stop, target), max: Math.max(stop, target), stop, target };
+  })();
+
   return (
     <Screen
       testID="position-screen"
@@ -58,7 +79,12 @@ export default function PositionScreen(): React.JSX.Element {
       refreshing={loading}
     >
       {!data.has_position ? (
-        <EmptyState testID="position-empty" message={t.position.none} />
+        <Vacancy
+          testID="position-empty"
+          what={t.position.none}
+          why={t.position.noneWhy}
+          next={t.position.noneNext}
+        />
       ) : (
         <>
           <Card testID="position-summary-card" title={data.instrument_ar ?? data.instrument ?? '—'}>
@@ -85,6 +111,30 @@ export default function PositionScreen(): React.JSX.Element {
             <Field label={t.position.size} value={data.size_display} />
             <Field label={t.position.notional} value={data.notional_display} />
             <Field label={t.position.riskAtStop} value={data.risk_at_stop} tone="caution" />
+            {span !== null ? (
+              <>
+                <Divider />
+                <Hadd
+                  testID="position-hadd"
+                  value={span.now}
+                  min={span.min}
+                  max={span.max}
+                  showFill={false}
+                  label={t.position.span}
+                  readout={data.current_price ?? '—'}
+                  thresholds={[
+                    { at: span.stop, tone: 'negative' },
+                    { at: span.target, tone: 'positive' },
+                  ]}
+                  accessibilityLabel={`${t.position.span}. ${t.position.stop} ${
+                    data.stop_price ?? '—'
+                  }، ${t.position.current} ${data.current_price ?? '—'}، ${
+                    t.position.target
+                  } ${data.take_profit_price ?? '—'}.`}
+                  style={{ marginTop: theme.spacing.xs }}
+                />
+              </>
+            ) : null}
           </Card>
 
           {data.notes_ar.length > 0 ? (

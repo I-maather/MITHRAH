@@ -114,6 +114,7 @@ export const t = {
     noTrade: 'سبب الامتناع',
     noPosition: 'لا مركز مفتوح.',
     noEvent: 'لا حدث مُعلَن ضمن النافذة.',
+    noPositionWhy: 'لا أدخل إلا حين تكتمل شروطي كلها.',
     openDetail: 'التفاصيل',
   },
 
@@ -132,6 +133,10 @@ export const t = {
     optional: 'اختيارية',
     passed: 'اجتازت',
     failed: 'أخفقت',
+    unavailableWhy: 'القراءة تُبنى عند كل دورة تقييم ولا تُخزَّن بينها.',
+    unavailableNext: 'تظهر عند أوّل تقييم بعد اكتمال البيانات.',
+    stagesEmptyWhat: 'لم تُقيَّم المراحل بعد.',
+    stagesEmptyWhy: 'التقييم يبدأ حين تكتمل بيانات الشمعة الأخيرة.',
     pending: 'لم تُقيَّم',
     blocksTrading: 'يمنع التداول',
   },
@@ -139,6 +144,9 @@ export const t = {
   decision: {
     title: 'تفصيل القرار',
     finalDecision: 'القرار النهائي',
+    noBlockingWhat: 'لا أسباب منع مسجّلة.',
+    noBlockingWhy: 'لم يسقط شرطٌ واحد في هذا القرار.',
+    scoreSpan: 'النتيجة على مداها',
     reasonCode: 'رمز السبب',
     blocking: 'أسباب المنع',
     stages: 'المراحل',
@@ -179,6 +187,9 @@ export const t = {
     strategy: 'الاستراتيجية',
     protection:
       'الوقف والهدف محفوظان لدى الوسيط لا في هذا التطبيق. لو صمت الهاتف تبقى الحماية قائمة.',
+    noneWhy: 'لا أدخل إلا حين تكتمل شروطي كلها — واكتمالها هو الاستثناء لا القاعدة.',
+    noneNext: 'حين يُفتح مركز يظهر هنا سعرُه ووقفُه وهدفُه وموضعُه بينهما.',
+    span: 'الموضع بين الوقف والهدف',
     cannotModify: 'لا يمكن تعديل هذا المركز ولا إغلاقه من الهاتف.',
   },
 
@@ -188,6 +199,8 @@ export const t = {
     opened: 'الفتح',
     closed: 'الإغلاق',
     result: 'النتيجة',
+    emptyWhy: 'لم يُرسَل أمرٌ واحد بعد — لا على الحقيقي ولا على التجريبي.',
+    emptyNext: 'أوّل صفقة تُسجَّل هنا كاملةً: الدخول والخروج وسببه.',
     exitReason: 'سبب الخروج',
   },
 
@@ -206,6 +219,9 @@ export const t = {
     predicted: 'المتوقَّع',
     observed: 'المُلاحَظ',
     bucketSample: 'العيّنة',
+    calibrationEmptyWhat: 'لا معايرة بعد.',
+    calibrationEmptyWhy: 'المعايرة تقارن ما توقّعتُه بما وقع، ولم يقع شيء بعد.',
+    observedVsPredicted: 'المُلاحَظ مقابل المتوقَّع',
     period: 'الفترة',
   },
 
@@ -219,6 +235,9 @@ export const t = {
     mandatory: 'إلزامي',
     lastSuccess: 'آخر نجاح',
     missingMandatory: 'مزوّدون إلزاميون ناقصون',
+    emptyWhat: 'لا مزوّد مسجَّل.',
+    emptyWhy: 'هذه ليست حالة فراغ — نظامٌ مُعدّ يسجّل مزوّديه دائماً.',
+    mandatoryReady: 'الإلزاميون الجاهزون',
     eligibility: 'الأهلية بحسب المزوّدين',
   },
 
@@ -231,6 +250,8 @@ export const t = {
     advisoryTitle: 'الإشعار استشاري',
     advisoryBody:
       'لا شيء في سلامة النظام يعتمد على وصول الإشعار. الوقف والهدف لدى الوسيط.',
+    emptyWhy: 'لا أُشعرك إلا بما يغيّر قراراً: صفقة، أو قاطع، أو انقطاع.',
+    emptyNext: 'الصمت هنا حالة سليمة.',
     read: 'مقروء',
     unread: 'جديد',
   },
@@ -241,6 +262,7 @@ export const t = {
     action: 'الإجراء',
     device: 'الجهاز',
     outcome: 'النتيجة',
+    emptyWhy: 'خط التدقيق يسجّل كل فعلٍ له أثر، ولم يقع فعلٌ بعد.',
     success: 'نجح',
     failure: 'أخفق',
   },

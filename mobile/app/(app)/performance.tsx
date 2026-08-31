@@ -6,13 +6,14 @@ import {
   Banner,
   Card,
   Divider,
-  EmptyState,
+  Hadd,
   ErrorState,
   Field,
   LoadingState,
   Metric,
   Screen,
   Text,
+  Vacancy,
 } from '@/components';
 import { fixtures, isPreviewMode, previewOr } from '@/fixtures';
 import { formatInstant, formatRatio, t } from '@/i18n';
@@ -107,7 +108,11 @@ export default function PerformanceScreen(): React.JSX.Element {
         subtitle="المتوقَّع مقابل المُلاحَظ"
       >
         {data.calibration.length === 0 ? (
-          <EmptyState message={t.common.notComputed} />
+          <Vacancy
+            testID="calibration-empty"
+            what={t.performance.calibrationEmptyWhat}
+            why={t.performance.calibrationEmptyWhy}
+          />
         ) : (
           data.calibration.map((bucket, index) => (
             <View key={bucket.band_ar} style={{ gap: theme.spacing.xs }}>
@@ -120,6 +125,31 @@ export default function PerformanceScreen(): React.JSX.Element {
                 hint={bucket.sufficient ? undefined : 'العيّنة أصغر من أن تُقرأ.'}
               />
               <Field label={t.performance.bucketSample} value={bucket.sample_size} />
+              {/*
+                المعايرة سؤالٌ واحد: هل وقع ما توقّعتُه؟ فالعلامة الجمرية هي
+                المُلاحَظ، والعتبة الباهتة هي المتوقَّع، والمسافة بينهما هي
+                الجواب — تُقرأ بلمحة بدل مقارنة رقمين.
+
+                ولا تُرسم إلا حين تكفي عيّنة الشريحة: مقياسٌ من ثلاث صفقات
+                يبدو معرفةً وهو ضجيج، وهذه قاعدة الشاشة كلها.
+              */}
+              {/* `sufficient` لا يضمن وجود القيمة — العقد يسمح بـ`null` معها. */}
+              {bucket.sufficient && bucket.observed !== null ? (
+                <Hadd
+                  testID={`calibration-hadd-${index}`}
+                  value={bucket.observed}
+                  max={1}
+                  showFill={false}
+                  label={t.performance.observedVsPredicted}
+                  readout={`${formatRatio(bucket.observed)} · ${formatRatio(
+                    bucket.predicted,
+                  )}`}
+                  thresholds={[{ at: bucket.predicted, tone: 'neutral' }]}
+                  accessibilityLabel={`${bucket.band_ar}. ${t.performance.observed} ${formatRatio(
+                    bucket.observed,
+                  )}، ${t.performance.predicted} ${formatRatio(bucket.predicted)}.`}
+                />
+              ) : null}
             </View>
           ))
         )}

@@ -6,7 +6,7 @@ import {
   Banner,
   Card,
   Divider,
-  EmptyState,
+  Vacancy,
   ErrorState,
   LoadingState,
   Screen,
@@ -75,7 +75,12 @@ export default function NotificationsScreen(): React.JSX.Element {
 
       <Card testID="notifications-card">
         {data.notifications.length === 0 ? (
-          <EmptyState testID="notifications-empty" message={t.notifications.empty} />
+          <Vacancy
+            testID="notifications-empty"
+            what={t.notifications.empty}
+            why={t.notifications.emptyWhy}
+            next={t.notifications.emptyNext}
+          />
         ) : (
           data.notifications.map((notification, index) => {
             const presented = presentNotification(notification.type);

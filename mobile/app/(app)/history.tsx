@@ -5,7 +5,7 @@ import { useEndpoint } from '@/api/useEndpoint';
 import {
   Card,
   Divider,
-  EmptyState,
+  Vacancy,
   ErrorState,
   Field,
   LoadingState,
@@ -57,7 +57,12 @@ export default function HistoryScreen(): React.JSX.Element {
       refreshing={loading}
     >
       {data.trades.length === 0 ? (
-        <EmptyState testID="history-empty" message={t.history.empty} />
+        <Vacancy
+          testID="history-empty"
+          what={t.history.empty}
+          why={t.history.emptyWhy}
+          next={t.history.emptyNext}
+        />
       ) : (
         data.trades.map((trade) => (
           <Card key={trade.id} testID={`trade-${trade.id}`}>

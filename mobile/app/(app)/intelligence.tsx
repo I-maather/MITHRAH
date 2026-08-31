@@ -5,7 +5,7 @@ import { useEndpoint } from '@/api/useEndpoint';
 import {
   Card,
   Divider,
-  EmptyState,
+  Vacancy,
   ErrorState,
   Field,
   LoadingState,
@@ -50,9 +50,12 @@ export default function IntelligenceScreen(): React.JSX.Element {
   if (!data.available) {
     return (
       <Screen title={t.intelligence.title} preview={preview} onRefresh={refresh}>
-        <EmptyState
+        <Vacancy
           testID="intelligence-unavailable"
-          message={data.reason_ar ?? t.intelligence.unavailable}
+          tone="waiting"
+          what={data.reason_ar ?? t.intelligence.unavailable}
+          why={t.intelligence.unavailableWhy}
+          next={t.intelligence.unavailableNext}
         />
       </Screen>
     );
@@ -98,7 +101,11 @@ export default function IntelligenceScreen(): React.JSX.Element {
 
       <Card testID="stages-card" title={t.intelligence.stages}>
         {data.stages.length === 0 ? (
-          <EmptyState message={t.common.notComputed} />
+          <Vacancy
+            testID="intelligence-stages-empty"
+            what={t.intelligence.stagesEmptyWhat}
+            why={t.intelligence.stagesEmptyWhy}
+          />
         ) : (
           data.stages.map((stage, index) => (
             <View key={stage.stage} style={{ gap: theme.spacing.sm }}>

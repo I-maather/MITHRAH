@@ -5,7 +5,7 @@ import { useEndpoint } from '@/api/useEndpoint';
 import {
   Card,
   Divider,
-  EmptyState,
+  Vacancy,
   ErrorState,
   Field,
   LoadingState,
@@ -58,7 +58,7 @@ export default function AuditScreen(): React.JSX.Element {
     >
       <Card testID="audit-card">
         {data.entries.length === 0 ? (
-          <EmptyState testID="audit-empty" message={t.audit.empty} />
+          <Vacancy testID="audit-empty" what={t.audit.empty} why={t.audit.emptyWhy} />
         ) : (
           [...data.entries].reverse().map((entry, index) => (
             <View key={`${entry.at_utc}-${entry.action}-${index}`} style={{ gap: theme.spacing.xs }}>

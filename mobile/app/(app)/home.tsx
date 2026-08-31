@@ -224,8 +224,8 @@ export default function HomeScreen(): React.JSX.Element {
       {pos !== null && pos.has_position === false ? (
         <Vacancy
           testID="no-position-empty"
-          what="لا مركز مفتوح."
-          why="لا أدخل إلا حين تكتمل شروطي كلها."
+          what={t.home.noPosition}
+          why={t.home.noPositionWhy}
           next={
             s !== null && !s.market.is_open
               ? `السوق مغلق — ${s.market.reason_ar}`

@@ -6,14 +6,15 @@ import {
   Banner,
   Card,
   Divider,
-  EmptyState,
   ErrorState,
   Field,
+  Hadd,
   LoadingState,
   Metric,
   Screen,
   StatusPill,
   Text,
+  Vacancy,
 } from '@/components';
 import { fixtures, isPreviewMode, previewOr } from '@/fixtures';
 import { formatInstant, t } from '@/i18n';
@@ -74,6 +75,16 @@ export default function DecisionScreen(): React.JSX.Element {
             caption={data.score === null ? undefined : `من ${data.score.max}`}
           />
         </View>
+        {data.score !== null && data.score.max > 0 ? (
+          <Hadd
+            testID="decision-score-hadd"
+            value={data.score.total}
+            max={data.score.max}
+            label={t.decision.scoreSpan}
+            readout={`${data.score.total} / ${data.score.max}`}
+            style={{ marginTop: theme.spacing.xs }}
+          />
+        ) : null}
         <Divider />
         <Field label={t.decision.reasonCode} value={data.reason_code} />
         <Field label={t.decision.snapshot} value={data.snapshot_id} />
@@ -88,7 +99,11 @@ export default function DecisionScreen(): React.JSX.Element {
 
       <Card testID="blocking-card" title={t.decision.blocking}>
         {data.blocking_reasons_ar.length === 0 ? (
-          <EmptyState message="لا أسباب منع مسجّلة." />
+          <Vacancy
+            testID="no-blocking-empty"
+            what={t.decision.noBlockingWhat}
+            why={t.decision.noBlockingWhy}
+          />
         ) : (
           data.blocking_reasons_ar.map((reason, index) => (
             <View
@@ -111,7 +126,11 @@ export default function DecisionScreen(): React.JSX.Element {
 
       <Card testID="decision-stages-card" title={t.decision.stages}>
         {data.stages.length === 0 ? (
-          <EmptyState message={t.common.notComputed} />
+          <Vacancy
+            testID="decision-stages-empty"
+            what={t.intelligence.stagesEmptyWhat}
+            why={t.intelligence.stagesEmptyWhy}
+          />
         ) : (
           data.stages.map((stage, index) => (
             <View key={stage.stage} style={{ gap: theme.spacing.xs }}>

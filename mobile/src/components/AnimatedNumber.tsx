@@ -113,7 +113,9 @@ export function AnimatedNumber({
         useNativeDriver: true,
       }).start();
     }
-  }, [target, missing, reduceMotion, anim, flash, motion.base, motion.slow]);
+  // `motion` ثابتٌ مستورَد من الرموز لا حالةٌ تتغيّر، فذكرُه في المصفوفة
+  // لا يضيف إعادة تشغيل — ويجعل القاعدة تشكو بحقّ.
+  }, [target, missing, reduceMotion, anim, flash]);
 
   if (missing) {
     return (

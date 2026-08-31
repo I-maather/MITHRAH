@@ -148,3 +148,25 @@ export function presentProvider(configured: boolean, healthy: boolean | null): P
   }
   return { labelAr: 'غير معروف', tone: 'neutral' };
 }
+
+/**
+ * نصٌّ من الخادم ⇒ رقم، أو `null`.
+ *
+ * الأرقام تصل نصوصاً منسَّقة — بفواصل آلاف، وبعلامة موجب صريحة، وبسالبٍ
+ * يونيكودي (−) لا هو ناقص ASCII. و`Number('١٫٥')` يعطي `NaN`، و`Number('')`
+ * يعطي **صفراً** — وهذا أخطرهما: صفرٌ مُختلَق يُرسم على مقياس فيبدو معلومة.
+ *
+ * فالقاعدة هنا: ما لا يُقرأ رقماً يُعاد `null`، والمكوّن يغيب بدل أن يكذب.
+ */
+export function toNumber(text: string | null | undefined): number | null {
+  if (text === null || text === undefined) return null;
+  const cleaned = text
+    .replace(/[\u0660-\u0669]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+    .replace(/[\u06f0-\u06f9]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
+    .replace(/\u066b/g, '.')          // الفاصلة العشرية العربية
+    .replace(/[\u066c,\s\u066a+]/g, '')  // فاصل الآلاف والمسافات والنسبة والموجب
+    .replace(/[\u2212\u2013\u2014]/g, '-');
+  if (cleaned === '' || cleaned === '-') return null;
+  const value = Number(cleaned);
+  return Number.isFinite(value) ? value : null;
+}
