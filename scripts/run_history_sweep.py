@@ -69,6 +69,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 import time
 from datetime import datetime, timedelta, timezone
@@ -94,8 +95,27 @@ PRICED_EPICS = ("EURUSD",)
 #: `CapitalTransportError` على ثلاث دقّات — الوسيط يحدّ المعدّل.
 PAGE_PAUSE_SECONDS = 0.6
 
-#: حدّ التعادل المحسوب عند R:R صافٍ 1.75 — مصدره §5 في `PROJECT-TRUTH`.
-BREAKEVEN_WIN_RATE = 0.364
+#: حدّ التعادل **يُحسَب من الإعداد المُختبَر**، لا يُنقَل ثابتاً.
+#:
+#: كان هنا `0.364` منقولاً من §5 في `PROJECT-TRUTH` — وهو محسوب لعائدٍ إلى
+#: مخاطرة صافٍ 1.75. والمسح يُشغَّل بوقف 30 وهدف 60، وصافيهما بعد التكلفة
+#: أقلّ من ذلك. فكنّا نقيس معدّل فوز إعدادٍ ونقارنه بحدّ تعادل إعدادٍ آخر.
+#:
+#: والصحيح أن الحدّ = 1 ÷ (1 + العائد إلى المخاطرة الصافي)، ويُؤخذ الصافي
+#: من نموذج التكلفة نفسه للإعداد الجاري. قياسٌ من المصدر لا نقلٌ من وثيقة.
+def breakeven_win_rate(cost_model, config, reference_price) -> float:
+    economics = cost_model.estimate(
+        size=config.size,
+        entry_price=reference_price,
+        stop_distance_pips=config.stop_distance_pips,
+        take_profit_distance_pips=config.take_profit_distance_pips,
+        stop_kind=config.stop_kind,
+        nights_held=0,
+    )
+    net_rr = float(economics.net_reward_risk_ratio)
+    if net_rr <= 0:
+        return 1.0          # عائدٌ غير موجب: لا معدّل فوز ينقذه
+    return 1.0 / (1.0 + net_rr)
 
 OK, BAD, WARN, DIM, END = "\033[32m", "\033[31m", "\033[33m", "\033[2m", "\033[0m"
 
@@ -158,22 +178,59 @@ def sweep(adapter, epic: str, resolution: str) -> list:
     return out
 
 
-def verdict(result, minimum: int) -> tuple[str, str]:
-    """(الرمز، الحكم) — ثلاث حالات لا اثنتان: **غير حاسم ليس فشلاً**."""
+#: أدنى عدد أخطاء معيارية بين معدّل الفوز وحدّ التعادل ليُقال «فوق».
+#:
+#: **لماذا هذا الحارس موجود.** أوّل تشغيل ناجح أعطى 37.8٪ و36.6٪ و36.7٪
+#: و38.5٪ مقابل حدّ تعادل 36.4٪ — وطبعت الأداة «✅ فوق حدّ التعادل» أربع
+#: مرّات. والفارق 0.2 إلى 2.1 نقطة مئوية على 39–111 صفقة، والخطأ المعياري
+#: عند هذه الأعداد **4.6 إلى 7.8 نقطة**. أي أن الفارق كلّه داخل الضجيج.
+#:
+#: فكانت الأداة تقول «حافّة» عن أرقام لا تفرّق بين وجود الحافّة وعدمها —
+#: وهو نفس صنف العطل الذي بُنيت لتكشفه، واقعاً فيها للمرّة الثالثة.
+#:
+#: 1.645 = حدّ 95٪ من طرف واحد. أقلّ منه: «لم يُرجَّح ولم يُستبعَد».
+MIN_Z_FOR_EDGE = 1.645
+
+
+def win_rate_z(wins: int, trades: int, breakeven: float) -> float:
+    """كم خطأً معيارياً يفصل معدّل الفوز عن حدّ التعادل."""
+    if trades <= 0:
+        return 0.0
+    p = wins / trades
+    variance = p * (1.0 - p) / trades
+    if variance <= 0:
+        return 0.0
+    return (p - breakeven) / math.sqrt(variance)
+
+
+def verdict(result, minimum: int, breakeven: float) -> tuple[str, str]:
+    """
+    (الرمز، الحكم) — أربع حالات.
+
+    و**«لم يُحسم» ليس فشلاً ولا نجاحاً**: هو أن العيّنة لا تفرّق. وخلطُه
+    بأيّ منهما يُنتج قراراً على ضجيج.
+    """
     if result.trade_count < minimum:
         return "INCONCLUSIVE", (
             f"{result.trade_count} صفقة أقلّ من {minimum} — لا يُستنتج منها شيء."
         )
     if result.win_rate is None:
         return "INCONCLUSIVE", "لا معدّل فوز محسوب."
-    if float(result.win_rate) > BREAKEVEN_WIN_RATE:
-        return "ABOVE_BREAKEVEN", (
-            f"{float(result.win_rate) * 100:.1f}٪ فوق حدّ التعادل "
-            f"{BREAKEVEN_WIN_RATE * 100:.1f}٪ — إشارة أوّلية لا اعتماد."
-        )
-    return "BELOW_BREAKEVEN", (
-        f"{float(result.win_rate) * 100:.1f}٪ تحت حدّ التعادل — لا حافّة في هذا الإعداد."
+
+    rate = float(result.win_rate)
+    z = win_rate_z(result.wins, result.trade_count, breakeven)
+    margin = (rate - breakeven) * 100
+    tail = (
+        f"{rate * 100:.1f}٪ مقابل تعادل {breakeven * 100:.1f}٪ "
+        f"(فارق {margin:+.1f} نقطة · z={z:.2f} على {result.trade_count} صفقة) "
+        f"· صافي {result.net_pnl:.2f}$"
     )
+
+    if z >= MIN_Z_FOR_EDGE:
+        return "ABOVE_BREAKEVEN", f"فوق التعادل بفارق يُعتدّ به — {tail}"
+    if z <= -MIN_Z_FOR_EDGE:
+        return "BELOW_BREAKEVEN", f"تحت التعادل بفارق يُعتدّ به — {tail}"
+    return "INDISTINGUISHABLE", f"**لا يُفرَّق عن التعادل** — {tail}"
 
 
 def main() -> int:
@@ -229,13 +286,18 @@ def main() -> int:
         stop_kind=StopKind.NORMAL,
         allow_overnight=False,
     )
-    engine = Backtester(cost_model=CapitalComCostModel(PROVISIONAL_EURUSD), config=config)
+    cost_model = CapitalComCostModel(PROVISIONAL_EURUSD)
+    engine = Backtester(cost_model=cost_model, config=config)
+    breakeven = breakeven_win_rate(cost_model, config, D("1.15837"))
+    print(f"{DIM}   حدّ التعادل لهذا الإعداد: {breakeven * 100:.1f}٪ "
+          f"(وقف {a.stop_pips} · هدف {a.tp_pips} نقطة){END}\n")
 
     report: dict = {
         "generated_utc": datetime.now(timezone.utc).isoformat(),
         "config": {
             "size": a.size, "stop_pips": a.stop_pips, "tp_pips": a.tp_pips,
-            "breakeven_win_rate": BREAKEVEN_WIN_RATE,
+            "breakeven_win_rate": round(breakeven, 4),
+            "breakeven_source": "محسوب من نموذج التكلفة للإعداد الجاري",
             "cost_model": "PROVISIONAL_EURUSD",
             "transplanted": bool(a.transplant),
         },
@@ -302,7 +364,7 @@ def main() -> int:
                 })
                 continue
 
-            code, sentence = verdict(result, config.min_trades_for_conclusion)
+            code, sentence = verdict(result, config.min_trades_for_conclusion, breakeven)
             report["runs"].append({
                 "epic": epic,
                 "resolution": resolution,
@@ -326,7 +388,8 @@ def main() -> int:
                 "config_digest": result.config_digest,
             })
             mark = {"ABOVE_BREAKEVEN": f"{OK}✅{END}",
-                    "BELOW_BREAKEVEN": f"{BAD}❌{END}"}.get(code, f"{WARN}○{END}")
+                    "BELOW_BREAKEVEN": f"{BAD}❌{END}",
+                    "INDISTINGUISHABLE": f"{WARN}≈{END}"}.get(code, f"{WARN}○{END}")
             print(f"  {mark} {epic:<8} {resolution:<10} {len(bars):>5} شمعة · "
                   f"{result.trade_count:>3} صفقة · {sentence}")
 
@@ -338,6 +401,7 @@ def main() -> int:
     conclusive = [r for r in report["runs"] if r["verdict"] in
                   ("ABOVE_BREAKEVEN", "BELOW_BREAKEVEN")]
     above = [r for r in conclusive if r["verdict"] == "ABOVE_BREAKEVEN"]
+    unclear = [r for r in report["runs"] if r["verdict"] == "INDISTINGUISHABLE"]
     declined = [r for r in report["runs"] if r["verdict"] == "DECLINED_INSTRUMENT"]
 
     print(f"\n{DIM}   التقرير: {a.report}{END}")
@@ -348,8 +412,13 @@ def main() -> int:
         print(f"\n{WARN}○ لا نتيجة حاسمة: لم تبلغ أي دقّة الحدّ الأدنى للصفقات.{END}")
         print(f"{DIM}  الشموع وصلت وقُرئت، لكن الإشارات أقلّ من أن يُحكَم عليها.{END}\n")
     elif above:
-        print(f"\n{OK}✅ {len(above)} من {len(conclusive)} إعداد فوق حدّ التعادل.{END}")
-        print(f"{DIM}  إشارة أوّلية لا اعتماد. البوابة التالية: Walk-forward ثم Shadow.{END}\n")
+        print(f"\n{OK}✅ {len(above)} إعداد فوق التعادل بفارق يُعتدّ به.{END}")
+        print(f"{DIM}  إشارة أوّلية لا اعتماد — والقياس داخل العيّنة.{END}")
+        print(f"{DIM}  البوابة التالية: Walk-forward خارج العيّنة، ثم Shadow.{END}\n")
+    elif unclear:
+        print(f"\n{WARN}≈ {len(unclear)} إعداد **لا يُفرَّق عن التعادل**.{END}")
+        print(f"{DIM}  ليس ربحاً ولا خسارة: العيّنة أصغر من أن تُظهر فارقاً بهذا الحجم.{END}")
+        print(f"{DIM}  والبناء على هذا بناءٌ على ضجيج — يلزم عمقٌ أكبر أو فرضية أقوى.{END}\n")
     else:
         print(f"\n{BAD}❌ لا إعداد فوق حدّ التعادل بعد التكلفة الحقيقية.{END}")
         print(f"{DIM}  وهذا **جوابٌ نافع**: لا تُبنى بنية إطلاق فوق حافّة غير موجودة.{END}\n")
