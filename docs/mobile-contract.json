@@ -58,7 +58,8 @@
       "connected": "boolean",
       "execution_locked": "boolean",
       "is_demo": "boolean",
-      "name": "string"
+      "name": "string",
+      "note_ar": "string"
     },
     "data_completeness": {
       "complete": "boolean",

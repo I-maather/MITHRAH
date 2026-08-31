@@ -53,6 +53,7 @@ const status: StatusData = {
     is_demo: true,
     account_masked: '••••00',
     execution_locked: true,
+    note_ar: 'تعذّر الوصل عند الإقلاع — يُعاد كل أربع دقائق.',
   },
   market: {
     is_open: false,

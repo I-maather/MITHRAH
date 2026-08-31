@@ -260,7 +260,8 @@ export default function HomeScreen(): React.JSX.Element {
             label={t.home.brokerConnection}
             value={`${s.broker.name} — ${presentConnection(s.broker.connected).labelAr}`}
             tone={s.broker.connected ? 'positive' : 'negative'}
-            hint={s.broker.is_demo ? t.system.demo : t.system.live}
+            /* السبب يسبق النوع حين يوجد: «غير متصل» وحدها لا يُتصرَّف عليها. */
+            hint={s.broker.note_ar ?? (s.broker.is_demo ? t.system.demo : t.system.live)}
           />
           <Field
             testID="market-field"

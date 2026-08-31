@@ -34,6 +34,7 @@ import logging
 from datetime import timedelta
 from typing import Optional
 
+from ..brokers.capital.errors import CapitalAuthLockout
 from ..clock import now_utc
 from ..contracts import Bar, DataSource, Decision
 from ..money import D
@@ -45,6 +46,7 @@ logger = logging.getLogger(__name__)
 
 DECISION_JOB = "decision-loop"
 CALENDAR_JOB = "calendar-refresh"
+BROKER_JOB = "broker-keepalive"
 
 #: تواتر إعادة التقييم. قصيرٌ كفايةً ليبدو حياً، وطويلٌ كفايةً ألّا يُرهق
 #: الوسيط ولا حدود المزوّدين.
@@ -57,6 +59,23 @@ TICK_SECONDS = 1.0
 #: لكن الغرض ليس الطزاجة وحدها بل **التعافي**: انقطاعٌ عابر يُصلَح في
 #: الساعة التالية بدل أن يُعطّل الحارس حتى يُعاد تشغيل الخدمة.
 CALENDAR_REFRESH_SECONDS = 3600
+
+#: تواتر إبقاء جلسة الوسيط حيّة وإعادة وصلها.
+#:
+#: **لماذا هذه المهمّة هي مبرّر الخادم نفسه.** نُقل النظام إلى خادم يعمل
+#: ٢٤/٧ كي لا ينقطع شيء. والوسيط كان يُوصَل **مرّة واحدة عند الإقلاع**، ثم
+#: لا شيء يُبقي الجلسة ولا يعيد المحاولة:
+#:
+#:   * جلسة كابيتال تنتهي بعد عشر دقائق خمول.
+#:   * وإخفاق الوصل عند الإقلاع كان يُبتلع بـ`except: pass`، فيبقى المحوّل
+#:     غير موصول **لعمر العملية**. و`_require_connection` ترفض كل قراءة،
+#:     فلا قراءةٌ تُصلح الجلسة، فلا تعافي أبداً — حتى يُعاد تشغيل الخدمة يدوياً.
+#:
+#: أي أن خادماً يعمل ٢٤/٧ كان يستطيع أن يبقى بلا وسيط أياماً، والتطبيق يقول
+#: «غير متصل» بلا سبب. وهذا نقضٌ لغرض النقل إلى الخادم من أصله.
+#:
+#: أربع دقائق: داخل مهلة العشر بهامش، وداخل هامش التجديد (ثمان دقائق).
+BROKER_KEEPALIVE_SECONDS = 240
 
 
 #: عدد الشموع المطلوبة لأطول استراتيجية (30 + 14 + 2 = 46) بهامش.
@@ -194,6 +213,44 @@ def register_runtime_jobs(state, *, interval_seconds: int = DEFAULT_INTERVAL_SEC
         kind=JobKind.READ_ONLY,
         interval=timedelta(seconds=CALENDAR_REFRESH_SECONDS),
         func=refresh_calendar,
+    )
+
+    def keep_broker_alive() -> None:
+        """
+        يُبقي جلسة الوسيط حيّة، ويعيد وصلها إن سقطت. `READ_ONLY` — لا يرسل
+        أمراً ولا يفتح قفلاً؛ يسجّل دخولاً ويستعلم عن الحال لا غير.
+
+        وقفلُ المصادقة يُحترَم: بعد ثلاث محاولات فاشلة يقفل المحوّل نفسه
+        عمداً، ولا تُعاد المحاولة تلقائياً — إلحاحٌ على اعتمادات خاطئة
+        يُوقف الحساب عند الوسيط، وذلك أسوأ من الانقطاع.
+        """
+        broker = state.broker
+        try:
+            if broker.health_check():
+                state.broker_note_ar = ""
+                return
+        except Exception as exc:  # noqa: BLE001
+            state.broker_note_ar = f"فحص الوسيط أخفق ({type(exc).__name__})."
+
+        try:
+            broker.connect()
+        except CapitalAuthLockout as exc:
+            # لا يُعاد المحاولة. يُقال للمالكة بالنصّ بدل «غير متصل» الصامتة.
+            state.broker_note_ar = f"المصادقة مقفلة: {exc}"
+            state.scheduler.disable(BROKER_JOB)
+            logger.warning("قفل مصادقة الوسيط — أُوقفت مهمة إبقاء الجلسة.")
+            return
+        except Exception as exc:  # noqa: BLE001
+            state.broker_note_ar = f"تعذّر وصل الوسيط ({type(exc).__name__})."
+            return
+
+        state.broker_note_ar = ""
+
+    state.scheduler.register(
+        BROKER_JOB,
+        kind=JobKind.READ_ONLY,
+        interval=timedelta(seconds=BROKER_KEEPALIVE_SECONDS),
+        func=keep_broker_alive,
     )
 
 

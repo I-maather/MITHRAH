@@ -91,6 +91,9 @@ export default function SystemScreen(): React.JSX.Element {
               value={data.broker.is_demo ? t.system.demo : t.system.live}
               tone={data.broker.is_demo ? 'info' : 'caution'}
             />
+            {data.broker.note_ar !== null ? (
+              <Field label="السبب" value={data.broker.note_ar} tone="caution" />
+            ) : null}
             <Field label={t.system.accountMasked} value={data.broker.account_masked} />
             <Field
               label={t.system.executionLock}

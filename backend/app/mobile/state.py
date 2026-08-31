@@ -82,6 +82,9 @@ def _status(sys: Any) -> dict[str, Any]:
         "broker": {
             "name": sys.broker.name,
             "connected": health.broker_connected,
+            # **السبب يُرسَل مع الحال.** «غير متصل» وحدها ترسل المالكة تبحث
+            # في سجلات الخادم عن شيء يعرفه النظام ولا يقوله.
+            "note_ar": getattr(sys, "broker_note_ar", "") or None,
             "is_demo": not sys.broker.is_live,
             # **لا يُرسَل معرّف الحساب** — لا كاملاً ولا مقنَّعاً في هذا
             # الإصدار. الحقل موجود في العقد ويبقى `null` حتى يُقنَّع بمصدر

@@ -42,6 +42,8 @@ export interface BrokerView {
   /** معرّف حساب مقنَّع — الخادم لا يرسل المعرّف كاملاً أبداً. */
   account_masked: string | null;
   execution_locked: boolean;
+  /** سبب الانقطاع بالنصّ. «غير متصل» وحدها لا تقول شيئاً يُتصرَّف عليه. */
+  note_ar: string | null;
 }
 
 export interface MarketView {

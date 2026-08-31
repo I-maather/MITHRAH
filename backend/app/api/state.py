@@ -73,6 +73,8 @@ class SystemState:
     locally_paused: bool = True
     #: جلسة قاعدة البيانات — تلزم لتثبيت إطفاء قاطع الطوارئ بموافقة مكتوبة (C2).
     db_session: object = None
+    #: سببُ انقطاع الوسيط بالنصّ. «غير متصل» وحدها ترسل المالكة تبحث.
+    broker_note_ar: str = ""
     last_result: Optional[PipelineResult] = None
     last_intelligence: Optional[IntelligenceResult] = None
 
@@ -129,8 +131,17 @@ def build_system(settings: Settings | None = None) -> SystemState:
     broker = build_broker(settings)
     try:
         broker.connect()
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:  # noqa: BLE001
+        # **لا يُبتلع صامتاً.** كان `pass` هنا يجعل إخفاق وصلٍ عابر عند
+        # الإقلاع انقطاعاً دائماً بلا سبب معروض: المحوّل يبقى غير موصول،
+        # و`_require_connection` ترفض كل قراءة، فلا قراءةٌ تُصلح الجلسة.
+        # التعافي الآن مهمّة `broker-keepalive`، والسبب يُكتب ليُقرأ.
+        logging.getLogger(__name__).warning(
+            "تعذّر وصل الوسيط عند الإقلاع: %s", type(exc).__name__
+        )
+        boot_note = f"تعذّر الوصل عند الإقلاع ({type(exc).__name__}) — يُعاد كل ٤ دقائق."
+    else:
+        boot_note = ""
 
     install_redacting_filter()
     settings.assert_mode_allowed()
@@ -192,6 +203,7 @@ def build_system(settings: Settings | None = None) -> SystemState:
         # باسمه في «ما هو ناقص» — لا مزوّدٌ يُخفق بصمت عند أول نداء.
         providers=build_provider_registry(secret_provider, broker),
         locally_paused=True,
+        broker_note_ar=boot_note,
     )
 
 
