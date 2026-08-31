@@ -151,7 +151,10 @@ def test_cancel_close_and_update_are_blocked():
     adapter, _g, _f = connected()
     for call in (
         lambda: adapter.cancel_order("deal-1"),
-        lambda: adapter.close_position("acct", "EURUSD", D("100")),
+        # التوقيع تغيّر إلى `dealId` وحده: كابيتال تغلق بالمعرّف لا بالأداة
+        # والكمية. والقديم كان يصف واجهة وسيطٍ آخر، ولم يكن له جسد يُنفَّذ
+        # فيُكشف — وهذا وحده كان ينبغي أن يكون جرساً.
+        lambda: adapter.close_position("deal-1"),
         lambda: adapter.update_position("deal-1", stop_level=D("1.08")),
     ):
         with pytest.raises(ExecutionLocked):

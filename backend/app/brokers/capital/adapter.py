@@ -52,6 +52,7 @@ from .endpoints import (
     market_path,
     position_path,
     prices_path,
+    working_order_path,
 )
 from .errors import (
     CapitalExecutionUncertain,
@@ -173,6 +174,32 @@ class CapitalComAdapter(BrokerAdapter):
             self.session.tokens.touch(now_utc())
         body = response.json()
         return body if isinstance(body, dict) else {"items": body}
+
+    def _delete(self, path: str) -> dict:
+        """
+        الحذف — الطريقة الثانية والأخيرة التي تُغيّر حالةً عند الوسيط.
+
+        نسخةٌ من قاعدة `_post` نفسها: **لا إعادة محاولة عند المهلة ولا عند
+        رفض المصادقة**. طلبٌ قد يكون وصل لا يُعاد؛ وإعادةُ إغلاقٍ قد يكون
+        وقع تفتح مركزاً معاكساً. الغموض يُعاد ولا يُداوى بمحاولةٍ ثانية.
+        """
+        self.session.ensure_session()
+        response = self.transport.send(
+            "DELETE", self._url(path), headers=self.session.auth_headers()
+        )
+        if response.status in (401, 403):
+            raise CapitalSessionExpired(
+                "رُفضت المصادقة أثناء الحذف. لا تجديد ولا إعادة محاولة هنا: "
+                "الطلب قد يكون وصل."
+            )
+        if response.status == 404:
+            raise CapitalNotFound(f"المسار {path} أعاد 404.")
+        if not response.ok:
+            raise CapitalTransportError(f"استجابة غير ناجحة {response.status} من {path}.")
+        body = response.body
+        if not isinstance(body, dict):
+            raise CapitalMalformedResponse(f"جسد غير متوقَّع من {path}.")
+        return body
 
     def _post(self, path: str, payload: dict) -> dict:
         """
@@ -824,13 +851,119 @@ class CapitalComAdapter(BrokerAdapter):
             updated_at_utc=at,
         )
 
+    # ------------------------------------------------------------------
+    # الإغلاق والإلغاء — النصف الثاني من دورة الأمر
+    #
+    # ## لماذا كُتبا متأخّرين، وما الذي يعنيه ذلك
+    #
+    # كان الأربعة — الإرسال والإلغاء والإغلاق والتعديل — مذكورين بالاسم في
+    # وثيقة الأدلة بوصفهم غير مكتوبين. وكُتب الإرسال وحده. فصار النظام
+    # **يفتح ولا يغلق** — وذلك أخطر من نظام لا يفعل شيئاً، لأن نصفه العامل
+    # هو النصف الذي يدخل السوق.
+    #
+    # ## القاعدة الحاكمة للاثنين
+    #
+    # استجابة الوسيط **ليست إثبات تنفيذ**. الدليل الوحيد أن `GET /confirms`
+    # قال `ACCEPTED`، ثم أن المركز **اختفى فعلاً** من قائمة المراكز. وهذه
+    # هي المطابقة، وهي ما ينقذنا من إغلاقٍ ظنّنّاه وقع ولم يقع.
+    #
+    # وما لا يُحسم يُعاد **غموضاً صريحاً** (`CapitalExecutionUncertain`) لا
+    # نجاحاً ولا فشلاً: مركزٌ لا نعرف أمفتوحٌ هو أم مغلق يستدعي عيناً بشرية،
+    # لا محاولةً ثانية.
+    # ------------------------------------------------------------------
     def cancel_order(self, broker_order_id: str) -> BrokerOrder:
+        """يلغي أمراً معلّقاً لم يُنفَّذ بعد."""
         self.execution_lock.assert_can_execute("DELETE /workingorders")
-        raise NotImplementedError("إلغاء الأوامر مقفل تحت هذه المهمة.")
+        if self.is_live:
+            raise LiveApiBlocked("إلغاء أمر على البيئة الحقيقية مرفوض في هذا الإصدار.")
+        self._require_connection()
 
-    def close_position(self, account_id: str, symbol: str, quantity: Decimal) -> BrokerOrder:
+        body = self._delete(working_order_path(broker_order_id))
+        deal_reference = body.get("dealReference")
+        if not deal_reference:
+            raise CapitalMalformedResponse(
+                "استجابة الإلغاء بلا dealReference — لا يمكن إثبات ما حدث."
+            )
+
+        state, confirmation = self.poll_confirmation(str(deal_reference))
+        at = now_utc()
+        if state is ExecutionUncertainty.UNKNOWN or confirmation is None:
+            raise CapitalExecutionUncertain(
+                f"أُرسل الإلغاء ({deal_reference}) ولم يُحسم مصيره. "
+                "لا تُعيدي الإرسال: استقصي الأوامر المعلّقة بنفسك."
+            )
+
+        cancelled = state is not ExecutionUncertainty.RESOLVED_REJECTED
+        return BrokerOrder(
+            broker_order_id=broker_order_id,
+            client_order_id=str(deal_reference),
+            symbol=confirmation.epic or "",
+            side=Side.BUY if (confirmation.direction or "BUY").upper() == "BUY" else Side.SELL,
+            order_type=OrderType.LIMIT,
+            quantity=confirmation.size or D("0"),
+            filled_quantity=D("0"),
+            average_fill_price=None,
+            status=OrderStatus.CANCELLED if cancelled else OrderStatus.REJECTED,
+            updated_at_utc=at,
+        )
+
+    def close_position(self, deal_id: str) -> BrokerOrder:
+        """
+        يغلق مركزاً قائماً، **ويثبت أنه أُغلق**.
+
+        التوقيع تغيّر عن `(account_id, symbol, quantity)`: كابيتال تغلق
+        بـ`dealId` لا بالأداة والكمية، والتوقيع القديم كان يصف واجهة وسيطٍ
+        آخر — ولم يكن له جسد يُنفَّذ فيُكشف.
+        """
         self.execution_lock.assert_can_execute("DELETE /positions")
-        raise NotImplementedError("إغلاق المراكز مقفل تحت هذه المهمة.")
+        if self.is_live:
+            raise LiveApiBlocked("إغلاق مركز على البيئة الحقيقية مرفوض في هذا الإصدار.")
+        self._require_connection()
+
+        before = {p.deal_id for p in self.list_positions()}
+        if deal_id not in before:
+            raise BrokerRejected(
+                f"لا مركز بالمعرّف {deal_id} — لا يُرسَل إغلاقٌ لما ليس مفتوحاً."
+            )
+
+        body = self._delete(position_path(deal_id))
+        deal_reference = body.get("dealReference")
+        if not deal_reference:
+            raise CapitalMalformedResponse(
+                "استجابة الإغلاق بلا dealReference — لا يمكن إثبات ما حدث."
+            )
+
+        state, confirmation = self.poll_confirmation(str(deal_reference))
+        at = now_utc()
+        if state is ExecutionUncertainty.UNKNOWN or confirmation is None:
+            raise CapitalExecutionUncertain(
+                f"أُرسل الإغلاق ({deal_reference}) ولم يُحسم مصيره. "
+                "**لا تُعيدي الإرسال** — إعادةُ إغلاقٍ وقع تفتح مركزاً معاكساً. "
+                "افحصي المراكز، وفعّلي قاطع الطوارئ."
+            )
+
+        # **المطابقة: هل اختفى المركز فعلاً؟**
+        # تأكيدٌ يقول «قُبل» لا يكفي. مركزٌ ما زال في القائمة بعد إغلاقٍ
+        # «ناجح» هو أخطر ما يمكن أن يُصدَّق.
+        still_open = deal_id in {p.deal_id for p in self.list_positions()}
+        if still_open:
+            raise CapitalExecutionUncertain(
+                f"قال الوسيط إن الإغلاق قُبل، والمركز {deal_id} ما زال مفتوحاً. "
+                "لا يُعاد الإرسال — تدخّلٌ بشري لازم."
+            )
+
+        return BrokerOrder(
+            broker_order_id=deal_id,
+            client_order_id=str(deal_reference),
+            symbol=confirmation.epic or "",
+            side=Side.BUY if (confirmation.direction or "BUY").upper() == "BUY" else Side.SELL,
+            order_type=OrderType.MARKET,
+            quantity=confirmation.size or D("0"),
+            filled_quantity=confirmation.size or D("0"),
+            average_fill_price=confirmation.level,
+            status=OrderStatus.FILLED,
+            updated_at_utc=at,
+        )
 
     def update_position(
         self, deal_id: str, *, stop_level: Optional[Decimal] = None,
