@@ -88,14 +88,26 @@ def main() -> int:
 
     # ---- البيانات الكلّية ---------------------------------------------------
     p = registry.macro
+    # المفاتيح من المزوّد نفسه لا من ذاكرتي. سؤالٌ بمفتاحٍ مخترع
+    # (`EUR_POLICY_RATE`) يعيد `UNKNOWN` بحقّ، ويُقرأ هنا «صفر من سلسلتين» —
+    # أي عطلٌ مُعلَن عن مزوّد سليم.
+    keys = list(getattr(p, "known_series_keys", ()) or ())[:2]
     if not p.configured:
         line("البيانات الكلّية", f"{WARN}○{END}", "غير مُعدّ")
+    elif not keys:
+        line("البيانات الكلّية", f"{WARN}○{END}", f"لا يعلن مفاتيحه · {p.name}")
     else:
         try:
-            series = p.series(keys=["EUR_POLICY_RATE", "US_POLICY_RATE"], as_of_utc=now)
-            got = [k for k, v in series.items() if getattr(v, "value", None) is not None]
+            series = p.series(keys=keys, as_of_utc=now)
+            got = [k for k, v in series.items() if getattr(v, "known", False)]
             mark = f"{OK}✅{END}" if got else f"{WARN}○{END}"
-            line("البيانات الكلّية", mark, f"{len(got)} من {len(series)} سلسلة · {p.name}")
+            detail = f"{len(got)} من {len(series)} سلسلة · {p.name}"
+            if not got:
+                # سببُ الصمت يُقال. «صفر» بلا سبب يُرسل المالكة تبحث في السجلات.
+                first = next(iter(series.values()), None)
+                if first is not None and first.note_ar:
+                    detail += f" · {first.note_ar}"
+            line("البيانات الكلّية", mark, detail)
         except Exception as exc:  # noqa: BLE001
             failures += 1
             line("البيانات الكلّية", f"{BAD}⛔{END}", f"{type(exc).__name__}: {exc}")

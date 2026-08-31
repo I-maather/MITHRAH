@@ -38,9 +38,11 @@ class FakeTransport:
         self._response = response
         self._raises = raises
         self.calls: list[str] = []
+        self.headers: list[dict] = []
 
     def get(self, url, *, headers=None, secrets=()):
         self.calls.append(url)
+        self.headers.append(dict(headers or {}))
         if self._raises is not None:
             raise self._raises
         return self._response
@@ -292,3 +294,41 @@ def test_querying_fetches_once_when_not_yet_loaded():
     p.events(currencies=["USD"], window_start_utc=NOW,
              window_end_utc=NOW + timedelta(hours=2))
     assert len(p.transport.calls) == 1
+
+
+def test_the_request_identifies_itself():
+    """
+    **العطل الذي كلّف يوماً.** التغذية خلف شبكة توصيل ترفض العملاء بلا
+    هويّة: الخادم أعاد 404 بينما العنوان نفسه يعطي ١٢٧ حدثاً من شبكة أخرى.
+    و404 هناك ليست «غير موجود» بل «لن أخدمك».
+
+    ولو حُذفت الترويسة في إعادة صياغة لاحقة، لعاد الحارس ميّتاً بصمت —
+    فتُثبَّت هنا.
+    """
+    p = provider(Response(200, rows(20)))
+    p.refresh()
+    assert p.transport.headers[0].get("User-Agent")
+
+
+def test_the_identity_does_not_impersonate_a_named_browser():
+    """
+    الهويّة تُعلن أن العميل برنامج وتسمّيه. وانتحال متصفّح بعينه كذبٌ على
+    المضيف، وغير لازم لتجاوز فحصٍ يسأل عن الهويّة لا عن نوعها.
+    """
+    from app.providers.faireconomy_calendar import REQUEST_HEADERS
+
+    agent = REQUEST_HEADERS["User-Agent"]
+    assert "mathrah" in agent.lower()
+    for browser in ("chrome", "safari", "firefox", "edge"):
+        assert browser not in agent.lower()
+
+
+def test_a_non_200_reports_what_the_body_said():
+    """
+    «404» وحدها أرسلتنا نبحث في الكود عن خطأ في العنوان بينما الرفض كان من
+    شبكة التوصيل. الرمز وحده لا يشخّص.
+    """
+    p = provider(Response(404, "Sorry, you have been blocked"))
+    p.refresh()
+    assert "404" in p.note_ar
+    assert "blocked" in p.note_ar

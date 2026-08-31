@@ -56,6 +56,20 @@ MAX_FEED_AGE = timedelta(hours=12)
 #: صفرُ أحداث هو بالضبط ما أعادته FMP حين مُنعت — ولم نعرف إلا بالمسبار.
 MIN_PLAUSIBLE_EVENTS = 10
 
+#: ترويسات الطلب.
+#:
+#: التغذية خلف شبكة توصيل ترفض العملاء بلا هويّة: الخادم أعاد **404** بينما
+#: العنوان نفسه يعطي ١٢٧ حدثاً من شبكةٍ أخرى. و404 هنا ليست «غير موجود» بل
+#: «لن أخدمك» — ولذلك تُقرأ خطأً لا فراغاً.
+#:
+#: والهويّة **صادقة**: لا تنتحل متصفّحاً بعينه، بل تعلن أن العميل برنامج،
+#: وتسمّيه. انتحالُ متصفّح كذبٌ على المضيف، وهو غير لازم لتجاوز فحصٍ يسأل
+#: عن الهويّة لا عن نوعها.
+REQUEST_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (compatible; mathrah/0.7; personal trading assistant)",
+    "Accept": "application/json,text/plain,*/*",
+}
+
 _IMPACT = {
     "high": ImpactLevel.HIGH,
     "medium": ImpactLevel.MEDIUM,
@@ -146,12 +160,19 @@ class FairEconomyCalendarProvider(EconomicCalendarProvider):
 
         for url in urls:
             try:
-                response = self.transport.get(url)
+                response = self.transport.get(url, headers=REQUEST_HEADERS)
             except Exception as exc:  # noqa: BLE001
                 self._failure_ar = f"تعذّر جلب التقويم ({type(exc).__name__})."
                 return
             if getattr(response, "status", 0) != 200:
-                self._failure_ar = f"التقويم أعاد رمز {getattr(response, 'status', '?')}."
+                # مقتطفٌ من الجسد مع الرمز: «404» وحدها أرسلتنا نبحث في
+                # الكود عن خطأ في العنوان بينما الرفض كان من شبكة التوصيل.
+                # ولا سرّ في هذا العنوان — لا مفتاح فيه ولا ترويسة سرّية.
+                snippet = str(getattr(response, "body", ""))[:120].replace("\n", " ")
+                self._failure_ar = (
+                    f"التقويم أعاد رمز {getattr(response, 'status', '?')}."
+                    + (f" {snippet}" if snippet.strip() else "")
+                )
                 return
             try:
                 raw = response.body

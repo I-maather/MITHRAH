@@ -385,7 +385,8 @@ class CompositeMacroDataProvider(MacroDataProvider):
             out.setdefault(key, Sourced(
                 value=UNKNOWN, source=COMPOSITE_MACRO_NAME,
                 reliability=SourceReliability.UNVERIFIED,
-                observed_at_utc=as_of_utc, note_ar="لا مزوّد أعطى هذه السلسلة.",
+                source_timestamp_utc=None, retrieved_at_utc=as_of_utc,
+                note_ar="لا مزوّد أعطى هذه السلسلة.",
             ))
         return out
 

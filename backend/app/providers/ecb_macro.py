@@ -38,6 +38,7 @@ from ..intelligence.providers import MacroDataProvider, ProviderKind
 from ..intelligence.snapshot import UNKNOWN, Sourced, SourceReliability
 from ..money import D
 from .http import ProviderHttpError, ProviderTransport, RateLimiter, get_with_retry
+from .period import period_to_utc
 from .provenance import LicenseClass, build_provenance
 from .results import ProviderResult, ProviderResultState
 
@@ -295,17 +296,32 @@ class EcbMacroDataProvider(MacroDataProvider):
     def is_validated(self, series_key: str) -> bool:
         return series_key in self._validated
 
+    @property
+    def known_series_keys(self) -> tuple[str, ...]:
+        return tuple(SERIES_BY_KEY)
+
     def series(
         self, *, keys: Sequence[str], as_of_utc: datetime
     ) -> dict[str, Sourced[Any]]:
         out: dict[str, Sourced[Any]] = {}
         for key in keys:
+            # **تحقّقٌ كسول.** التحقّق شرطٌ لقراءة أي ملاحظة، ولم يكن في
+            # النظام كلّه سطرٌ واحد يستدعيه — فكان كل مفتاح يعود `UNKNOWN`
+            # إلى الأبد، وحارسُ الكلّيات ميّتاً بلا أن يشكو أحد.
+            #
+            # ويبقى التحقّق شرطاً: لا يُقرأ مفتاحٌ لم يُثبَت أنه حيّ. غاية
+            # التغيير أن يقع الإثبات عند أوّل حاجة بدل ألّا يقع أبداً.
+            if not self.is_validated(key):
+                self.validate_series(key, now_utc=as_of_utc)
+
             result = self.observations(key, now_utc=as_of_utc)
             if not result.usable_for_decision or not result.records:
                 out[key] = Sourced(
                     value=UNKNOWN, source=PROVIDER_NAME,
                     reliability=SourceReliability.UNVERIFIED,
-                    observed_at_utc=as_of_utc,
+                    # لا قيمة ⇒ لا لحظة رصد. `None` لا `as_of_utc`.
+                    source_timestamp_utc=None,
+                    retrieved_at_utc=as_of_utc,
                     note_ar=result.detail_ar or "غير متاح.",
                 )
                 continue
@@ -313,7 +329,11 @@ class EcbMacroDataProvider(MacroDataProvider):
             out[key] = Sourced(
                 value=D(latest["value"]), source=PROVIDER_NAME,
                 reliability=SourceReliability.OFFICIAL_PROVIDER,
-                observed_at_utc=as_of_utc,
+                # لحظة الرصد من **فترة السلسلة** لا من وقت الجلب: سعرُ فائدة
+                # نُشر قبل ثلاثة أشهر عمرُه ثلاثة أشهر، ووضعُ وقت الجلب هنا
+                # يجعل حارس الطزاجة يمرّ على بيانٍ بائت وهو يظنّه طازجاً.
+                source_timestamp_utc=period_to_utc(latest.get("period")),
+                retrieved_at_utc=as_of_utc,
                 note_ar=f"{SERIES_BY_KEY[key].official_title} — {latest['period']}",
             )
         return out

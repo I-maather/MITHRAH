@@ -133,6 +133,20 @@ class MacroDataProvider(DataProvider):
     def series(self, *, keys: Sequence[str], as_of_utc: datetime) -> dict[str, Sourced[Any]]:
         """سلاسل كلية (تضخم، بطالة، عوائد سندات...). المفقود يعود `UNKNOWN`."""
 
+    @property
+    def known_series_keys(self) -> tuple[str, ...]:
+        """
+        المفاتيح التي يعرفها هذا المزوّد بأسمائها عنده.
+
+        وُجدت لأن المسبار الحيّ كان يسأل عن مفاتيح **مخترعة**
+        (`EUR_POLICY_RATE`) فيعيد المزوّد `UNKNOWN` بحقّ، ويقرأها المسبار
+        «صفر من سلسلتين» — أي عطلٌ مُعلَن عن مزوّد سليم. والمفاتيح هنا
+        أصلية عند مصدرها (`DGS10` لدى FRED، ومفتاح SDMX كامل لدى ECB) ولا
+        تُترجَم إلى أسماء عامة: الترجمة طبقةٌ أخرى، واختراعها هنا يعيد
+        العطل نفسه بثوبٍ ألطف.
+        """
+        return ()
+
 
 class VerifiedNewsProvider(DataProvider):
     kind = ProviderKind.VERIFIED_NEWS
