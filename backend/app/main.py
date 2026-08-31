@@ -185,7 +185,15 @@ def today(sys: SystemState = Depends(system)):
             "open_riyadh": format_riyadh(market.session_open_utc) if market.session_open_utc else None,
             "close_riyadh": format_riyadh(market.session_close_utc) if market.session_close_utc else None,
         },
-        "trading_allowed": sys.kill_switch.allows_new_entries() and market.is_open,
+        # **كل البوابات، لا اثنتين منها.**
+        #
+        # كان: `kill_switch.allows_new_entries() and market.is_open` — يفحص
+        # قفلين ويتجاهل أربعة، فيقول «مسموح» بينما التداول مستحيل. حقلٌ اسمه
+        # أوسع مما يفحص هو كذبٌ بالتسمية.
+        #
+        # ومعه `blocked_by`: لا يكفي أن نقول «ممنوع»، بل **أيّ بوابة** منعت —
+        # وإلا صار على المالكة أن تخمّن أو تسألني في كل مرة.
+        **_trading_gates(sys, market),
         "broker": {"name": sys.broker.name, "connected": sys.broker.health_check(), "is_live": sys.broker.is_live},
         "live_trading_enabled": sys.settings.live_trading,
         "risk_mode": limits.mode.value,
@@ -413,6 +421,29 @@ def settings_view(sys: SystemState = Depends(system)):
 # ---------------------------------------------------------------------------
 # Capital.com — الوسيط والاعتمادات والتشغيل التجريبي
 # ---------------------------------------------------------------------------
+
+def _trading_gates(sys: SystemState, market) -> dict:
+    """
+    البوابات التي يجب أن تُفتح جميعاً قبل أي دخول جديد.
+
+    تُعاد مسمّاةً لا مجموعةً بـ`and`: «ممنوع» بلا سبب يجعل المالكة تخمّن،
+    و«مسموح» من فحصٍ ناقص أسوأ — لأنه يُصدَّق.
+    """
+    from .brokers.capital.adapter import STOP_DISTANCE_UNIT_PROVEN
+
+    gates = {
+        "قاطع الطوارئ": sys.kill_switch.allows_new_entries(),
+        "السوق مفتوح": market.is_open,
+        "التشغيل غير موقوف محلياً": not sys.locally_paused,
+        "التداول الحقيقي مُفعَّل": sys.settings.live_trading,
+        "قفل التنفيذ مفتوح": sys.execution_lock.unlocked,
+        "وحدة الوقف مُثبَتة": STOP_DISTANCE_UNIT_PROVEN,
+    }
+    return {
+        "trading_allowed": all(gates.values()),
+        "blocked_by": [name for name, ok in gates.items() if not ok],
+    }
+
 
 def _broker_environment(broker) -> str:
     """بيئة الوسيط كما يقولها هو. الوسطاء بلا جلسة (الوهمي) يُعلنون أنفسهم."""

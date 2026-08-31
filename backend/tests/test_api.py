@@ -161,3 +161,31 @@ def test_settings_endpoint_marks_constitution_read_only(client):
     r = client.get("/api/settings").json()
     assert r["risk_constitution_editable"] is False
     assert r["mode"] == "PAPER/MOCK"
+
+
+def test_trading_allowed_counts_every_gate_not_two(client):
+    """
+    كان `trading_allowed` يفحص بوابتين من ست، فيقول «مسموح» بينما الإيقاف
+    المحلي مرفوع وقفل التنفيذ مغلق ووحدة الوقف غير مُثبَتة.
+
+    الثابت هنا: **لا يكون `true` وأيّ بوابة مغلقة.** وهو يصمد أياً كانت
+    البوابة المغلقة، ولا يحتاج تعديلاً حين تُضاف بوابة سابعة.
+    """
+    r = client.get("/api/today").json()
+    assert "blocked_by" in r, "لا يكفي «ممنوع» بلا تسمية المانع"
+    assert r["trading_allowed"] is (len(r["blocked_by"]) == 0)
+
+    # في بيئة الاختبار: وسيط وهمي، والتداول الحقيقي مطفأ، والتنفيذ مقفل.
+    assert r["trading_allowed"] is False
+    assert r["blocked_by"], "بوابات مغلقة ولم تُسمَّ"
+
+
+def test_trading_allowed_is_false_whenever_execution_is_impossible(client):
+    """
+    فحصٌ من الجهة الأخرى: كل قفلٍ يمنع التنفيذ فعلياً يجب أن يظهر أثره هنا.
+    لو ظهر `trading_allowed: true` بينما `live_trading_enabled: false`، فالحقل
+    يكذب — والمالكة تقرأ منه استعداد النظام.
+    """
+    r = client.get("/api/today").json()
+    if not r["live_trading_enabled"]:
+        assert r["trading_allowed"] is False
