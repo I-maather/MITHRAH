@@ -189,3 +189,25 @@ def test_trading_allowed_is_false_whenever_execution_is_impossible(client):
     r = client.get("/api/today").json()
     if not r["live_trading_enabled"]:
         assert r["trading_allowed"] is False
+
+
+def test_blocked_by_names_the_failure_not_the_requirement(client):
+    """
+    أول نسخة أدرجت **الشرط المطلوب** في `blocked_by` بدل **سبب المنع**،
+    فقرأت المالكة: «ممنوع بسبب: التشغيل غير موقوف محلياً» — عكس المعنى.
+
+    والاختبار السابق مرّ عليها، لأنه يفحص العلاقة (`allowed` ⟺ القائمة
+    فارغة) لا دلالة النصّ. فهذا يثبّت الصياغة: في بيئة الاختبار البوابات
+    الثلاث مغلقة يقيناً، وأسبابها تُكتب بصيغة الحال لا بنفي الشرط.
+    """
+    r = client.get("/api/today").json()
+    blocked = r["blocked_by"]
+
+    assert "التشغيل موقوف محلياً" in blocked
+    assert "التداول الحقيقي مُعطَّل" in blocked
+    assert "قفل التنفيذ مغلق" in blocked
+
+    # ولا يظهر شرطٌ مُحقَّق في قائمة الموانع.
+    for satisfied in ("التشغيل غير موقوف محلياً", "قفل التنفيذ مفتوح",
+                      "التداول الحقيقي مُفعَّل", "وحدة الوقف مُثبَتة"):
+        assert satisfied not in blocked, f"شرطٌ مُحقَّق أُدرج كمانع: {satisfied}"

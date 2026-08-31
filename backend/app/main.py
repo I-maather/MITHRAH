@@ -426,23 +426,25 @@ def _trading_gates(sys: SystemState, market) -> dict:
     """
     البوابات التي يجب أن تُفتح جميعاً قبل أي دخول جديد.
 
-    تُعاد مسمّاةً لا مجموعةً بـ`and`: «ممنوع» بلا سبب يجعل المالكة تخمّن،
-    و«مسموح» من فحصٍ ناقص أسوأ — لأنه يُصدَّق.
+    لكل بوابة صيغتان: **الشرط** حين تكون مفتوحة، و**سبب المنع** حين تكون
+    مغلقة. ولا تُشتقّ الثانية بنفي الأولى: أول نسخة أدرجت الشرط نفسه في
+    `blocked_by`، فقرأتها المالكة «ممنوع بسبب: التشغيل غير موقوف محلياً» —
+    عكس المعنى تماماً. والنفي اللغوي ليس نفياً منطقياً في العربية ولا في
+    غيرها، فتُكتب الصيغتان صراحةً.
     """
     from .brokers.capital.adapter import STOP_DISTANCE_UNIT_PROVEN
 
-    gates = {
-        "قاطع الطوارئ": sys.kill_switch.allows_new_entries(),
-        "السوق مفتوح": market.is_open,
-        "التشغيل غير موقوف محلياً": not sys.locally_paused,
-        "التداول الحقيقي مُفعَّل": sys.settings.live_trading,
-        "قفل التنفيذ مفتوح": sys.execution_lock.unlocked,
-        "وحدة الوقف مُثبَتة": STOP_DISTANCE_UNIT_PROVEN,
-    }
-    return {
-        "trading_allowed": all(gates.values()),
-        "blocked_by": [name for name, ok in gates.items() if not ok],
-    }
+    #: (مفتوحة؟, سبب المنع حين تكون مغلقة)
+    gates = [
+        (sys.kill_switch.allows_new_entries(), "قاطع الطوارئ مُفعَّل"),
+        (market.is_open, "السوق مغلق"),
+        (not sys.locally_paused, "التشغيل موقوف محلياً"),
+        (sys.settings.live_trading, "التداول الحقيقي مُعطَّل"),
+        (sys.execution_lock.unlocked, "قفل التنفيذ مغلق"),
+        (STOP_DISTANCE_UNIT_PROVEN, "وحدة مسافة الوقف لم تُثبَت بعد"),
+    ]
+    blocked = [reason for ok, reason in gates if not ok]
+    return {"trading_allowed": not blocked, "blocked_by": blocked}
 
 
 def _broker_environment(broker) -> str:
