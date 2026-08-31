@@ -32,7 +32,13 @@ from fastapi import APIRouter, Header, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from .api import API_PREFIX, MobileApi, MobileApiError, describe_api
+from .api import (
+    API_PREFIX,
+    MobileActions,
+    MobileApi,
+    MobileApiError,
+    describe_api,
+)
 from .security import MobileSecurityService
 
 #: مجال البيانات — قراءة، وثلاثة إجراءات تُقلّل المخاطرة.
@@ -93,9 +99,15 @@ class MobileRuntime:
     def __init__(
         self, *, security: MobileSecurityService,
         state_source: Callable[[], dict] = dict,
+        actions: Optional[MobileActions] = None,
     ) -> None:
         self.security = security
-        self.api = MobileApi(security=security, state_source=state_source)
+        # `actions` تُحقَن كي تبقى هذه الطبقة جاهلةً بالوسيط والنظام.
+        # وغير الموصول منها **يرفض** ولا يعيد «تمّ» — انظري `MobileActions`.
+        self.api = MobileApi(
+            security=security, state_source=state_source,
+            actions=actions or MobileActions(),
+        )
 
 
 _runtime: Optional[MobileRuntime] = None
@@ -275,5 +287,5 @@ async def mobile_mutate(
 
 __all__ = [
     "router", "session_router",
-    "MobileRuntime", "set_runtime", "get_runtime",
+    "MobileRuntime", "MobileActions", "set_runtime", "get_runtime",
 ]

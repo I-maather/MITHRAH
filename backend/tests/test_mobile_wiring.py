@@ -18,7 +18,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app, system
 from app.mobile.pairing import assert_payload_carries_no_secret
-from app.mobile.routes import MobileRuntime, set_runtime
+from app.mobile.routes import MobileActions, MobileRuntime, set_runtime
 from app.mobile.security import (
     NEVER_ON_DEVICE,
     MobileSecurityService,
@@ -35,8 +35,18 @@ def wired(tmp_path: Path):
     path = tmp_path / "mobile-state.json"
     store = MobileStateStore(path)
     service = MobileSecurityService(store=store)
+    # الأفعال تُحقَن كما يفعل `main.py` — بلا وصلٍ ترفض الأزرار وتفشل مغلقة،
+    # وهو سلوكٌ مقصود يُختبَر في `test_mobile_backend.py`.
+    calls: dict[str, list[str]] = {"paused": [], "killed": []}
     set_runtime(
-        MobileRuntime(security=service, state_source=lambda: build_mobile_state(system()))
+        MobileRuntime(
+            security=service,
+            state_source=lambda: build_mobile_state(system()),
+            actions=MobileActions(
+                pause=lambda reason: calls["paused"].append(reason),
+                activate_kill_switch=lambda reason: calls["killed"].append(reason),
+            ),
+        )
     )
     return TestClient(app), service, path
 

@@ -42,6 +42,7 @@ from .mobile.routes import (
     MobileRuntime,
     router as mobile_router,
     session_router as mobile_session_router,
+    MobileActions,
     set_runtime,
 )
 from .mobile.security import MobileSecurityService
@@ -129,9 +130,26 @@ def system() -> SystemState:
 
 _MOBILE_STATE_PATH = Path(__file__).resolve().parents[2] / "data" / "mobile-state.json"
 
+def _mobile_pause(reason_ar: str) -> None:
+    """يوقف التداول محلياً **فعلاً**. كان الزرّ يسجّل ولا يوقف."""
+    sys_state = system()
+    sys_state.locally_paused = True
+    sys_state.audit.record(
+        actor=Actor.OWNER, action=AuditAction.CONFIG_CHANGE, decision="LOCAL_PAUSE",
+        reason_ar=reason_ar, source="mobile",
+    )
+
+
+def _mobile_kill(reason_ar: str) -> None:
+    """يفعّل قاطع الطوارئ **فعلاً**. كان الزرّ يسجّل ولا يفعّل."""
+    sys_state = system()
+    sys_state.kill_switch.trigger(KillSwitchTrigger.MANUAL, reason_ar=reason_ar)
+
+
 mobile_runtime = MobileRuntime(
     security=MobileSecurityService(store=MobileStateStore(_MOBILE_STATE_PATH)),
     state_source=lambda: build_mobile_state(system()),
+    actions=MobileActions(pause=_mobile_pause, activate_kill_switch=_mobile_kill),
 )
 set_runtime(mobile_runtime)
 # مجال الجلسة أولاً: مساراته صريحة، ومجال البيانات ينتهي بمُلتقِط عام.

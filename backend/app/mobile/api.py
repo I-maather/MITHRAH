@@ -24,7 +24,7 @@ MOBILE API — `/api/mobile/v1/` — قراءة، وثلاثة إجراءات ت
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable, Optional
 
@@ -107,6 +107,52 @@ def assert_response_is_clean(body: Any) -> None:
             )
 
 
+class MobileActionUnavailable(MobileApiError):
+    """الإجراء غير موصول بالنظام. **يفشل مغلقاً** ولا يُقال «تمّ»."""
+
+    def __init__(self, action_ar: str) -> None:
+        super().__init__(
+            f"{action_ar} غير موصول بهذا الخادم — لم يقع شيء. "
+            "لا تعتمدي على هذا الزرّ حتى يُصلَح.",
+            status=503,
+        )
+
+
+@dataclass
+class MobileActions:
+    """
+    ما تفعله أزرار الجوال **فعلاً** في النظام.
+
+    ## العطل الذي فرض وجود هذا الصنف
+
+    كان `pause/request` يكتب قيداً في السجل ويعيد `accepted: true` — **ولا
+    يوقف شيئاً**. ومثله `killswitch/activate`: يسجّل ولا يُفعّل القاطع.
+
+    أي أن أخطر زرَّين في التطبيق كانا يقولان «تمّ» ولا يفعلان. تضغط المالكة
+    «إيقاف» في لحظة تحتاجه، فيؤكّد لها التطبيق، والنظام يواصل. وهذا أسوأ من
+    زرٍّ معطّل ظاهرَ العطل، لأنه يشتري سكوتها.
+
+    ## ولماذا الافتراض يرفع لا يسكت
+
+    الافتراضي هنا **يرفع استثناءً** ولا يعيد نجاحاً صامتاً: خادمٌ لم يوصل
+    إجراءً يجب أن يقول ذلك للمالكة، لا أن يبتلعه. فشلٌ ظاهرٌ خيرٌ من نجاحٍ
+    كاذب — وهذه هي القاعدة التي كُسرت هنا.
+    """
+
+    pause: Optional[Callable[[str], None]] = None
+    activate_kill_switch: Optional[Callable[[str], None]] = None
+
+    def do_pause(self, reason_ar: str) -> None:
+        if self.pause is None:
+            raise MobileActionUnavailable("الإيقاف المحلي")
+        self.pause(reason_ar)
+
+    def do_kill(self, reason_ar: str) -> None:
+        if self.activate_kill_switch is None:
+            raise MobileActionUnavailable("قاطع الطوارئ")
+        self.activate_kill_switch(reason_ar)
+
+
 @dataclass
 class MobileApi:
     """
@@ -118,6 +164,8 @@ class MobileApi:
     security: MobileSecurityService
     state_source: Callable[[], dict] = dict
     clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc)
+    #: الأفعال الحقيقية. غير الموصول منها **يرفض** ولا يدّعي النجاح.
+    actions: "MobileActions" = field(default_factory=lambda: MobileActions())
 
     # -- المصادقة ----------------------------------------------------------
 
@@ -188,18 +236,40 @@ class MobileApi:
     def _mutate(self, route: str, device: RegisteredDevice, payload: dict) -> dict:
         now = self.clock()
         if route == "pause/request":
+            reason = str(payload.get("reason_ar") or "إيقاف بطلب من الجوال.")
+            # **يُنفَّذ أوّلاً، ثم يُسجَّل.** التسجيل قبل التنفيذ يُنتج سجلاً
+            # يقول «أُوقف» عن إيقافٍ لم يقع.
+            try:
+                self.actions.do_pause(reason)
+            except MobileApiError:
+                self.security._audit_log(
+                    "MOBILE_PAUSE_FAILED", device_id=device.device_id,
+                    detail_ar="طُلب الإيقاف ولم يُنفَّذ — الإجراء غير موصول.",
+                    success=False,
+                )
+                raise
             self.security._audit_log(
                 "MOBILE_PAUSE_REQUESTED", device_id=device.device_id,
-                detail_ar="طُلب إيقاف مؤقت من الجوال — إجراء يقلّل المخاطرة.",
+                detail_ar="أُوقف التداول محلياً من الجوال — إجراء يقلّل المخاطرة.",
                 success=True,
             )
             return {
                 "action": "PAUSE_REQUESTED", "accepted": True,
                 "at_utc": now.isoformat(),
-                "note_ar": "الإيقاف يقلّل المخاطرة ولا يفتح شيئاً.",
+                "note_ar": "أُوقف التداول محلياً. الإيقاف يقلّل المخاطرة ولا يفتح شيئاً.",
             }
 
         if route == "killswitch/activate":
+            reason = str(payload.get("reason_ar") or "تفعيل من الجوال.")
+            try:
+                self.actions.do_kill(reason)
+            except MobileApiError:
+                self.security._audit_log(
+                    "MOBILE_KILL_SWITCH_FAILED", device_id=device.device_id,
+                    detail_ar="طُلب القاطع ولم يُفعَّل — الإجراء غير موصول.",
+                    success=False,
+                )
+                raise
             self.security._audit_log(
                 "MOBILE_KILL_SWITCH", device_id=device.device_id,
                 detail_ar="فُعِّل قاطع الطوارئ من الجوال.", success=True,
@@ -246,5 +316,6 @@ __all__ = [
     "API_PREFIX", "READ_ROUTES", "RISK_REDUCING_ROUTES",
     "FORBIDDEN_ROUTE_TOKENS", "FORBIDDEN_RESPONSE_TOKENS",
     "MobileApi", "MobileApiError", "MobileResponse",
+    "MobileActions", "MobileActionUnavailable",
     "assert_response_is_clean", "describe_api",
 ]

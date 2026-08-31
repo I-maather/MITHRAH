@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from app.mobile.api import (
+    MobileActions,
     API_PREFIX,
     FORBIDDEN_ROUTE_TOKENS,
     READ_ROUTES,
@@ -208,7 +209,27 @@ def test_profile_upgrade_only_starts_a_server_side_cooling_period():
 # 4. مجال الجوال
 # ===========================================================================
 
-def api_with_device():
+class RecordingActions:
+    """
+    يسجّل ما استُدعي فعلاً.
+
+    الاختبار القديم كان يتحقّق أن الاستجابة تقول `accepted: true` وأن قيداً
+    كُتب — **ولم يتحقّق أن شيئاً وقع**. ومرّ بذلك زرّان أخطر ما في التطبيق
+    وهما لا يفعلان شيئاً.
+    """
+
+    def __init__(self) -> None:
+        self.paused: list[str] = []
+        self.killed: list[str] = []
+
+    def as_actions(self) -> MobileActions:
+        return MobileActions(
+            pause=lambda reason: self.paused.append(reason),
+            activate_kill_switch=lambda reason: self.killed.append(reason),
+        )
+
+
+def api_with_device(actions: object | None = None):
     svc = service()
     device = enrolled(svc)
     access, _ = svc.issue_tokens(device.device_id)
@@ -216,7 +237,9 @@ def api_with_device():
         "status": {"system": "IDLE"},
         "decision": {"final": "NO_TRADE"},
         "risk": {"used": "0.00"},
-    }, clock=lambda: NOW)
+    }, clock=lambda: NOW, actions=actions or MobileActions(
+        pause=lambda reason: None, activate_kill_switch=lambda reason: None,
+    ))
     return api, svc, device, access.token
 
 
@@ -280,12 +303,47 @@ def test_mutating_http_methods_are_refused(method):
     assert caught.value.status == 405
 
 
-def test_pause_and_kill_switch_are_accepted_and_audited():
-    api, svc, _device, token = api_with_device()
+def test_pause_and_kill_switch_actually_act_not_merely_audit():
+    """
+    **العطل الذي كشفه سؤال المالكة عن أزرار التطبيق.**
+
+    كان `pause/request` يكتب قيداً ويعيد `accepted: true` — ولا يوقف شيئاً.
+    ومثله `killswitch/activate`. أي أن أخطر زرَّين يقولان «تمّ» ولا يفعلان،
+    فتضغط المالكة «إيقاف» في لحظة تحتاجه، فيؤكّد لها التطبيق، والنظام
+    يواصل. وهذا أسوأ من زرٍّ معطّل ظاهرَ العطل، لأنه يشتري سكوتها.
+
+    والاختبار السابق كان يتحقّق من الاستجابة ومن القيد — لا من الأثر.
+    """
+    recorder = RecordingActions()
+    api, svc, _device, token = api_with_device(recorder.as_actions())
+
     assert api.handle("POST", "pause/request", token=token).body["accepted"] is True
     assert api.handle("POST", "killswitch/activate", token=token).body["accepted"] is True
-    actions = {e.action for e in svc.audit()}
-    assert {"MOBILE_PAUSE_REQUESTED", "MOBILE_KILL_SWITCH"} <= actions
+
+    assert recorder.paused, "قيل «أُوقف» ولم يقع إيقاف"
+    assert recorder.killed, "قيل «فُعِّل القاطع» ولم يُفعَّل"
+
+    audited = {e.action for e in svc.audit()}
+    assert {"MOBILE_PAUSE_REQUESTED", "MOBILE_KILL_SWITCH"} <= audited
+
+
+@pytest.mark.parametrize("route,label", [
+    ("pause/request", "الإيقاف المحلي"),
+    ("killswitch/activate", "قاطع الطوارئ"),
+])
+def test_an_unwired_action_fails_closed_and_says_so(route, label):
+    """
+    خادمٌ لم يوصل الإجراء **يرفض** ولا يعيد نجاحاً صامتاً. فشلٌ ظاهرٌ خيرٌ من
+    نجاحٍ كاذب — وهذه هي القاعدة التي كُسرت هنا.
+    """
+    api, svc, _device, token = api_with_device(MobileActions())   # بلا وصل
+    with pytest.raises(MobileApiError) as caught:
+        api.handle("POST", route, token=token)
+    assert caught.value.status == 503
+    assert label in str(caught.value)
+
+    failed = {e.action for e in svc.audit() if not e.success}
+    assert failed, "أخفق الإجراء ولم يُسجَّل إخفاقه"
 
 
 def test_kill_switch_cannot_be_deactivated_from_mobile():
