@@ -21,7 +21,7 @@ from app.brokers.capital.adapter import CapitalComAdapter          # noqa: E402
 from app.brokers.capital.endpoints import CapitalEnvironment        # noqa: E402
 from app.brokers.capital.errors import CapitalAuthError, CapitalAuthLockout  # noqa: E402
 from app.brokers.capital.ratelimit import RateLimiter               # noqa: E402
-from app.brokers.capital.safety import LIVE_API_ENABLED, ExecutionLock  # noqa: E402
+from app.brokers.capital.safety import ExecutionLock  # noqa: E402
 from app.brokers.capital.session import CapitalSession              # noqa: E402
 from app.brokers.capital.transport import GuardedTransport, HttpxTransport  # noqa: E402
 from app.contracts import Bar, DataSource, StopKind                 # noqa: E402
@@ -70,12 +70,23 @@ def main(argv=None) -> int:
     p.add_argument("--tp-pips", default="60")
     a = p.parse_args(argv)
 
-    if LIVE_API_ENABLED:
-        print("⛔ قفل Live مفتوح في الكود. توقّف.", file=sys.stderr)
-        return 2
+    # كان هنا حارس: «إن كان قفل Live مفتوحاً في الكود فتوقّف».
+    #
+    # وقد **انقلب معناه** يوم رُفع القفل بموافقة مكتوبة: صار يرفض تشغيل
+    # اختبارٍ تاريخي لأن **القراءة** الحيّة صارت مسموحة. أي حارسٌ يمنع
+    # الآمن لأن غيره صار مسموحاً — وهذا ثالث حارس في هذا المشروع ينقلب
+    # حين يتغيّر عَلَمٌ عامّ تحته.
+    #
+    # والأمان هنا ليس من هذا السطر: قفل التنفيذ مغلق، والجلسة قراءةٌ فقط،
+    # ولا مسار إرسال في هذا الملف أصلاً.
 
+    from app.config import get_settings   # noqa: E402
+
+    # مسار الأسرار من الإعدادات لا مثبَّتاً هنا. تثبيتُه على
+    # `secrets/capital.env` بينما الخدمة تقرأ `runtime.env` جعل مفتاحاً
+    # موجوداً يُقرأ «ناقصاً» — وهذه رابع مرّة يقع فيها هذا الاختلاف نفسه.
     provider = build_secret_provider(
-        env_file=REPO / "secrets" / "capital.env", allow_process_env=False
+        env_file=get_settings().secrets_file, allow_process_env=False
     )
     missing = provider.missing(REQUIRED_CAPITAL_SECRETS)
     if missing:

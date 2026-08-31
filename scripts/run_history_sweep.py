@@ -1,33 +1,48 @@
+#!/usr/bin/env python3
 """
 مسح التاريخ الكامل — يقرأ ما يسمح به الوسيط ويقيس عليه.
 
-    backend/.venv/bin/python scripts/run_history_sweep.py --source live
+    /opt/mathrah/.venv/bin/python scripts/run_history_sweep.py
 
-## لماذا سكربت منفصل عن run_backtest
+## السؤال الذي يجيبه
 
-`run_backtest` يقرأ نافذةً واحدة (`max` شمعة على دقّة واحدة)، وسقف الوسيط
-٢٠٠ شمعة لكل نداء. فطلب «التاريخ الكامل» لا يُنفَّذ بتمرير رقم أكبر: يُنفَّذ
-بالنزول في الزمن نداءً بعد نداء (`from`/`to`)، وعبر أكثر من دقّة.
+**هل توجد حافّة أصلاً؟** وهو المجهول الأكبر في المشروع، وشرط بوابة
+`G3 — Viability`. كل ما بُني حتى الآن — الأقفال والحدود والمزوّدون
+والشاشات — بنيةٌ حول جواب لم يُقَس بعد.
 
-## ما يقيسه
+## لماذا سكربت منفصل عن `run_backtest`
 
-على كل دقّة، وعلى كل أداة، يمرّر الشموع على الاستراتيجية ويعدّ:
+`run_backtest` يقرأ نافذةً واحدة وسقف الوسيط ٢٠٠ شمعة لكل نداء. فطلب
+«التاريخ الكامل» لا يُنفَّذ بتمرير رقم أكبر: يُنفَّذ بالنزول في الزمن نداءً
+بعد نداء (`from`/`to`)، وعبر أكثر من دقّة.
 
-  * الفرص التي تجاوزت عتبة الجودة
-  * أيّها كان سيُنفَّذ فعلاً بعد حدود المخاطرة وحجم الحساب
-  * الرابح والخاسر، والعائد إلى المخاطرة المُلاحَظ
-  * أطول سلسلة خسائر، وأكبر تراجع
+## ما كان مكسوراً فيه — ولم يُشغَّل مرّة
+
+كُتب هذا الملف ولم يُنفَّذ قط، فحمل أربعة أعطال كان أوّلها يقتله عند أوّل
+سطر: وحدةٌ باسم `app.backtest.runner` **لا وجود لها** (الصحيح
+`app.strategies.backtest`)، واستيرادٌ من `scripts` وهي ليست على المسار،
+وحقلٌ باسم `bars[0].timestamp` والصحيح `start_utc`، ونداءُ
+`Backtester().run(bars)` بينما المُنشئ يطلب نموذج تكلفة وإعداداً،
+و`run` يطلب استراتيجية.
+
+أربعة أخطاء في اثني عشر سطراً — وكلّها من كتابةٍ عن ظنٍّ بلا تشغيل. وهذا
+سبب وجود الملاحظة هنا: **سكربتٌ لم يُشغَّل ليس كوداً، بل نيّة.**
+
+## أداةٌ واحدة عمداً
+
+EUR/USD وحده. نموذج التكلفة الوحيد المعرَّف في المشروع
+(`PROVISIONAL_EURUSD`) — وحجم النقطة فيه 0.0001، وهو **يستحيل** لزوجٍ
+مقوَّم بالين حيث النقطة 0.01. وتشغيله على USDJPY يُنتج أرقاماً بخانات
+عشرية جميلة وخاطئة بمئة ضعف. رقمٌ خاطئٌ في تقرير حافّة أسوأ من لا رقم.
 
 ## ما لا يفعله
 
 **لا يرسل أمراً، ولا يفتح قفلاً، ولا يغيّر إعداداً.** قراءةٌ وحساب وتقرير.
-والوصول إلى الحساب الحقيقي يمرّ من القائمة البيضاء نفسها: GET فقط.
 
 ## قيدٌ مُعلَن
 
-سقف الوسيط ٢٠٠ شمعة لكل نداء، والعمق المتاح يختلف بالدقّة: الدقيقة تعود
-أسابيع، واليوم يعود سنوات. فـ«التاريخ الكامل» هنا يعني **أقصى ما يعطيه
-الوسيط**، لا أكثر — ولا يُدَّعى غير ذلك.
+«التاريخ الكامل» هنا يعني **أقصى ما يعطيه الوسيط**، لا أكثر — والعمق
+يختلف بالدقّة.
 """
 from __future__ import annotations
 
@@ -39,6 +54,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "backend"))
+sys.path.insert(0, str(REPO))          # كي يُستورَد `scripts.run_backtest`
 
 #: الدقّة → (طول الشمعة، عدد النداءات المطلوبة للنزول عميقاً)
 LADDER = {
@@ -49,12 +65,19 @@ LADDER = {
 }
 PAGE = 200  # سقف الوسيط لكل نداء
 
-DEFAULT_EPICS = ["EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD"]
+#: الأداة الوحيدة التي يملك المشروع لها نموذج تكلفة. انظري الشرح أعلاه.
+PRICED_EPICS = ("EURUSD",)
+
+#: حدّ التعادل المحسوب عند R:R صافٍ 1.75 — مصدره §5 في `PROJECT-TRUTH`.
+BREAKEVEN_WIN_RATE = 0.364
+
+OK, BAD, WARN, DIM, END = "\033[32m", "\033[31m", "\033[33m", "\033[2m", "\033[0m"
 
 
 def fetch_window(adapter, epic: str, resolution: str, start, end):
     """نداء واحد بنافذة زمنية. يعيد [] عند أي رفض بدل أن يوقف المسح كلّه."""
     from app.brokers.capital.endpoints import prices_path
+    from app.brokers.capital.models import CapitalCandle
 
     fmt = "%Y-%m-%dT%H:%M:%S"
     try:
@@ -68,10 +91,8 @@ def fetch_window(adapter, epic: str, resolution: str, start, end):
             },
         )
     except Exception as exc:  # noqa: BLE001
-        print(f"      ⚠️  {epic}/{resolution}: {type(exc).__name__}")
+        print(f"      {WARN}⚠️{END}  {epic}/{resolution}: {type(exc).__name__}")
         return []
-    from app.brokers.capital.models import CapitalCandle
-
     return CapitalCandle.parse_list(body)
 
 
@@ -90,59 +111,170 @@ def sweep(adapter, epic: str, resolution: str) -> list:
     return out
 
 
-def main() -> None:
+def verdict(result, minimum: int) -> tuple[str, str]:
+    """(الرمز، الحكم) — ثلاث حالات لا اثنتان: **غير حاسم ليس فشلاً**."""
+    if result.trade_count < minimum:
+        return "INCONCLUSIVE", (
+            f"{result.trade_count} صفقة أقلّ من {minimum} — لا يُستنتج منها شيء."
+        )
+    if result.win_rate is None:
+        return "INCONCLUSIVE", "لا معدّل فوز محسوب."
+    if float(result.win_rate) > BREAKEVEN_WIN_RATE:
+        return "ABOVE_BREAKEVEN", (
+            f"{float(result.win_rate) * 100:.1f}٪ فوق حدّ التعادل "
+            f"{BREAKEVEN_WIN_RATE * 100:.1f}٪ — إشارة أوّلية لا اعتماد."
+        )
+    return "BELOW_BREAKEVEN", (
+        f"{float(result.win_rate) * 100:.1f}٪ تحت حدّ التعادل — لا حافّة في هذا الإعداد."
+    )
+
+
+def main() -> int:
     ap = argparse.ArgumentParser(description="مسح التاريخ وقياس الاستراتيجية عليه")
     ap.add_argument("--source", choices=["live", "demo"], default="live")
-    ap.add_argument("--epics", nargs="*", default=DEFAULT_EPICS)
+    ap.add_argument("--epics", nargs="*", default=list(PRICED_EPICS))
+    ap.add_argument("--resolutions", nargs="*", default=list(LADDER))
+    ap.add_argument("--stop-pips", default="30")
+    ap.add_argument("--tp-pips", default="60")
+    ap.add_argument("--size", default="100")
     ap.add_argument("--report", default=str(REPO / "data" / "history-sweep.json"))
     a = ap.parse_args()
+
+    unpriced = [e for e in a.epics if e not in PRICED_EPICS]
+    if unpriced:
+        print(
+            f"{BAD}⛔ لا نموذج تكلفة لـ{'، '.join(unpriced)}.{END}\n"
+            f"   نموذج المشروع الوحيد لـEUR/USD، وحجم نقطته 0.0001 — يستحيل\n"
+            f"   لزوجٍ مقوَّم بالين. تشغيلُه عليها يُنتج أرقاماً خاطئة بمئة ضعف.",
+            file=sys.stderr,
+        )
+        return 2
 
     from app.brokers.capital.endpoints import CapitalEnvironment
     from app.brokers.factory import build_capital_adapter
     from app.config import get_settings
+    from app.contracts import StopKind
+    from app.money import D
+    from app.risk.capital_costs import PROVISIONAL_EURUSD, CapitalComCostModel
     from app.secretstore.provider import build_secret_provider
+    from app.strategies.backtest import BacktestConfig, Backtester, InsufficientData
+    from app.strategies.trend_pullback_v1 import TrendPullbackV1
+
+    from scripts.run_backtest import to_bars   # نفس التحويل، بلا ازدواج منطق
 
     settings = get_settings()
     env = CapitalEnvironment.LIVE if a.source == "live" else CapitalEnvironment.DEMO
+    # مسار الأسرار من الإعدادات لا مثبَّتاً: تثبيتُه كان يجعل مفتاحاً كُتب
+    # على الخادم في ملفٍ آخر «موجوداً وغير مقروء». هذه رابع مرّة.
     secrets = build_secret_provider(env_file=settings.secrets_file, allow_process_env=False)
     adapter = build_capital_adapter(env, secrets=secrets)
     adapter.connect()
-    print(f"✅ متصل — {adapter.name} (قراءة فقط)\n")
+    print(f"\n{OK}✅{END} متصل — {adapter.name} (قراءة فقط)\n")
 
-    from app.backtest.runner import Backtester  # نفس المحرّك الذي يستعمله run_backtest
-    from scripts.run_backtest import to_bars     # نفس التحويل، بلا ازدواج منطق
+    config = BacktestConfig(
+        size=D(a.size),
+        stop_distance_pips=D(a.stop_pips),
+        take_profit_distance_pips=D(a.tp_pips),
+        stop_kind=StopKind.NORMAL,
+        allow_overnight=False,
+    )
+    engine = Backtester(cost_model=CapitalComCostModel(PROVISIONAL_EURUSD), config=config)
 
-    report: dict = {"generated_utc": datetime.now(timezone.utc).isoformat(), "runs": []}
+    report: dict = {
+        "generated_utc": datetime.now(timezone.utc).isoformat(),
+        "config": {
+            "size": a.size, "stop_pips": a.stop_pips, "tp_pips": a.tp_pips,
+            "breakeven_win_rate": BREAKEVEN_WIN_RATE,
+            "cost_model": "PROVISIONAL_EURUSD",
+        },
+        "runs": [],
+    }
+
     for epic in a.epics:
-        for resolution in LADDER:
+        for resolution in a.resolutions:
+            if resolution not in LADDER:
+                print(f"  {WARN}○{END} {resolution} — دقّة غير معروفة، تُخطّى")
+                continue
             candles = sweep(adapter, epic, resolution)
             if len(candles) < 120:
-                print(f"  {epic:<8} {resolution:<10} {len(candles):>5} شمعة — أقلّ من ١٢٠، تُخطّى")
+                print(f"  {WARN}○{END} {epic:<8} {resolution:<10} "
+                      f"{len(candles):>5} شمعة — أقلّ من ١٢٠، تُخطّى")
+                report["runs"].append({
+                    "epic": epic, "resolution": resolution, "bars": len(candles),
+                    "verdict": "INSUFFICIENT_BARS",
+                })
                 continue
+
             bars = to_bars(candles, epic)
             try:
-                result = Backtester().run(bars)
-                row = {
-                    "epic": epic,
-                    "resolution": resolution,
-                    "bars": len(bars),
-                    "from": str(bars[0].timestamp),
-                    "to": str(bars[-1].timestamp),
-                    "result": getattr(result, "as_dict", lambda: str(result))(),
-                }
+                result = engine.run(TrendPullbackV1(), bars, symbol=epic)
+            except InsufficientData as exc:
+                print(f"  {WARN}○{END} {epic:<8} {resolution:<10} {exc}")
+                report["runs"].append({
+                    "epic": epic, "resolution": resolution, "bars": len(bars),
+                    "verdict": "INSUFFICIENT_DATA", "detail": str(exc),
+                })
+                continue
             except Exception as exc:  # noqa: BLE001
-                row = {"epic": epic, "resolution": resolution, "bars": len(bars),
-                       "error": f"{type(exc).__name__}: {exc}"}
-            report["runs"].append(row)
-            print(f"  {epic:<8} {resolution:<10} {len(bars):>5} شمعة  "
-                  f"{bars[0].timestamp} → {bars[-1].timestamp}")
+                print(f"  {BAD}⛔{END} {epic:<8} {resolution:<10} "
+                      f"{type(exc).__name__}: {exc}")
+                report["runs"].append({
+                    "epic": epic, "resolution": resolution, "bars": len(bars),
+                    "verdict": "ERROR", "detail": f"{type(exc).__name__}: {exc}",
+                })
+                continue
+
+            code, sentence = verdict(result, config.min_trades_for_conclusion)
+            report["runs"].append({
+                "epic": epic,
+                "resolution": resolution,
+                "bars": len(bars),
+                "from": bars[0].start_utc.isoformat(),
+                "to": bars[-1].start_utc.isoformat(),
+                "trades": result.trade_count,
+                "wins": result.wins,
+                "losses": result.losses,
+                "win_rate": None if result.win_rate is None else str(result.win_rate),
+                "expectancy": None if result.expectancy is None else str(result.expectancy),
+                "net_pnl": str(result.net_pnl),
+                "profit_factor": (
+                    None if result.profit_factor is None else str(result.profit_factor)
+                ),
+                "max_drawdown": str(result.max_drawdown),
+                "warnings": list(result.warnings),
+                "verdict": code,
+                "verdict_ar": sentence,
+                "run_id": result.run_id,
+                "config_digest": result.config_digest,
+            })
+            mark = {"ABOVE_BREAKEVEN": f"{OK}✅{END}",
+                    "BELOW_BREAKEVEN": f"{BAD}❌{END}"}.get(code, f"{WARN}○{END}")
+            print(f"  {mark} {epic:<8} {resolution:<10} {len(bars):>5} شمعة · "
+                  f"{result.trade_count:>3} صفقة · {sentence}")
 
     Path(a.report).parent.mkdir(parents=True, exist_ok=True)
-    Path(a.report).write_text(json.dumps(report, ensure_ascii=False, indent=2, default=str),
-                              encoding="utf-8")
-    print(f"\n✅ التقرير: {a.report}")
-    print("   لم يُرسل أمر، ولم يُفتح قفل.")
+    Path(a.report).write_text(
+        json.dumps(report, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
+    )
+
+    conclusive = [r for r in report["runs"] if r["verdict"] in
+                  ("ABOVE_BREAKEVEN", "BELOW_BREAKEVEN")]
+    above = [r for r in conclusive if r["verdict"] == "ABOVE_BREAKEVEN"]
+
+    print(f"\n{DIM}   التقرير: {a.report}{END}")
+    if not conclusive:
+        print(f"\n{WARN}○ لا نتيجة حاسمة: لم تبلغ أي دقّة الحدّ الأدنى للصفقات.{END}")
+        print(f"{DIM}  وهذا ليس فشلاً — هو أن العمق المتاح لا يكفي للحكم بعد.{END}\n")
+    elif above:
+        print(f"\n{OK}✅ {len(above)} من {len(conclusive)} إعداد فوق حدّ التعادل.{END}")
+        print(f"{DIM}  إشارة أوّلية لا اعتماد. البوابة التالية: Walk-forward ثم Shadow.{END}\n")
+    else:
+        print(f"\n{BAD}❌ لا إعداد فوق حدّ التعادل بعد التكلفة الحقيقية.{END}")
+        print(f"{DIM}  وهذا **جوابٌ نافع**: لا تُبنى بنية إطلاق فوق حافّة غير موجودة.{END}\n")
+
+    print(f"{DIM}   لم يُرسل أمر، ولم يُفتح قفل.{END}\n")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
