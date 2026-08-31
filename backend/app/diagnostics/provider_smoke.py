@@ -19,6 +19,7 @@
 """
 from __future__ import annotations
 
+import re
 import sys
 from datetime import datetime, timedelta, timezone
 
@@ -26,7 +27,21 @@ OK, BAD, WARN, DIM, END = "\033[32m", "\033[31m", "\033[33m", "\033[2m", "\033[0
 
 
 def line(label: str, mark: str, detail: str) -> None:
-    print(f"  {mark} {label:<26} {detail}")
+    print(f"  {mark} {label:<26} {clean(detail)}")
+
+
+def clean(text: str) -> str:
+    """
+    يُخرج نصّاً صالحاً لسطرٍ عربي واحد.
+
+    صفحة nginx خام طُبعت داخل سطر عربي فتشابكت الاتجاهات وصار السطر غير
+    مقروء: «<hr><center>nginx</cFound</h1></center>d>لتقويم أعاد رمز 404».
+    والتشخيص الذي لا يُقرأ ليس تشخيصاً.
+
+    فتُنزع الوسوم ويُضغط الفراغ. وعزلُ الاتجاه يقع عند **مصدر** المقتطف
+    اللاتيني لا هنا: عزلُ السطر كلّه كان سيفرض اتجاه اليسار على جملةٍ عربية.
+    """
+    return " ".join(re.sub(r"<[^>]*>", " ", text).split())[:160]
 
 
 def main() -> int:
@@ -133,11 +148,23 @@ def main() -> int:
             failures += 1
             line("بيانات السوق", f"{BAD}⛔{END}", f"{type(exc).__name__}: {exc}")
 
+    # المزوّد الإلزامي غير المُعدّ **إخفاق**، لا حالةٌ محايدة.
+    #
+    # كانت الخلاصة تقول «كل مزوّد مُعدّ أعطى بيانات» وتخرج بصفر بينما التقويم
+    # — وهو حارسٌ إلزامي — ميّت. الجملة صحيحة حرفياً وتُقرأ «كل شيء تمام»،
+    # وهذا بالضبط صنف العطل الذي بُني هذا المسبار لكشفه: شيءٌ يُعرَض سليماً
+    # ولم يُقَس من مصدره. ومسبارٌ يطمئن كذباً أسوأ من لا مسبار.
+    missing = registry.missing_mandatory()
     print()
+    if missing:
+        names = "، ".join(k.value for k in missing)
+        print(f"{BAD}⛔ مزوّد إلزامي غير مُعدّ: {names}{END}")
     if failures:
-        print(f"{BAD}⛔ {failures} مزوّداً أخفق. النظام سيمتنع عن التداول — وهذا صحيح.{END}\n")
+        print(f"{BAD}⛔ {failures} مزوّداً أخفق.{END}")
+    if missing or failures:
+        print(f"{DIM}   النظام سيمتنع عن التداول — وهذا صحيح.{END}\n")
         return 1
-    print(f"{OK}✅ كل مزوّد مُعدّ أعطى بيانات.{END}")
+    print(f"{OK}✅ كل مزوّد إلزامي مُعدّ وأعطى بيانات.{END}")
     print(f"{DIM}   لم يُرسل أمر، ولم يُفتح قفل.{END}\n")
     return 0
 

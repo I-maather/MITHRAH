@@ -32,6 +32,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
@@ -168,10 +169,17 @@ class FairEconomyCalendarProvider(EconomicCalendarProvider):
                 # مقتطفٌ من الجسد مع الرمز: «404» وحدها أرسلتنا نبحث في
                 # الكود عن خطأ في العنوان بينما الرفض كان من شبكة التوصيل.
                 # ولا سرّ في هذا العنوان — لا مفتاح فيه ولا ترويسة سرّية.
-                snippet = str(getattr(response, "body", ""))[:120].replace("\n", " ")
+                # تُنزع الوسوم قبل التخزين: هذا النصّ يذهب إلى `/api` وإلى
+                # شاشة المزوّدين في التطبيق، وصفحةُ nginx خام داخل سطر عربي
+                # تكسر السطر ولا تشخّص شيئاً.
+                snippet = " ".join(
+                    re.sub(r"<[^>]*>", " ", str(getattr(response, "body", ""))).split()
+                )[:110]
+                # المقتطف لاتيني داخل جملة عربية، فيُعزل اتجاهه وحده
+                # (‎U+2066…U+2069) كي لا يُزيح ما حوله عند العرض.
                 self._failure_ar = (
                     f"التقويم أعاد رمز {getattr(response, 'status', '?')}."
-                    + (f" {snippet}" if snippet.strip() else "")
+                    + (f" \u2066{snippet}\u2069" if snippet.strip() else "")
                 )
                 return
             try:
