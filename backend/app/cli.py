@@ -18,7 +18,7 @@ from .brokers.capital.adapter import CapitalComAdapter
 from .brokers.capital.endpoints import CapitalEnvironment
 from .brokers.capital.errors import CapitalAuthError, CapitalAuthLockout
 from .brokers.capital.ratelimit import RateLimiter
-from .brokers.capital.safety import LIVE_API_ENABLED, ExecutionLock, LiveApiBlocked
+from .brokers.capital.safety import ExecutionLock, LiveApiBlocked
 from .brokers.capital.session import CapitalSession
 from .brokers.capital.transport import GuardedTransport, HttpxTransport
 from .clock import format_riyadh, now_utc
@@ -139,13 +139,12 @@ def cmd_capital_discover(args: argparse.Namespace) -> int:
     if args.environment.lower() != "demo":
         print(
             "⛔ الاكتشاف مسموح على بيئة demo فقط. "
-            "عنوان Live مقفل في الكود (safety.LIVE_API_ENABLED=False).",
+            "هذا الأمر لا يعمل إلا على demo.",
             file=sys.stderr,
         )
         return 2
-    if LIVE_API_ENABLED:
-        print("⛔ حالة غير متوقعة: قفل Live مفتوح في الكود. توقّف.", file=sys.stderr)
-        return 2
+    # كان هنا وقفٌ عامّ عند رفع القفل الأول. حُذف: الشرط أعلاه خاصّ بالنداء
+    # ويرفض كل بيئة غير demo، فلا مسار يبلغ به هذا الأمر عنواناً حقيقياً.
 
     provider = build_secret_provider(env_file=args.secrets_file, allow_process_env=False)
     missing = provider.missing(REQUIRED_CAPITAL_SECRETS)
@@ -218,9 +217,7 @@ def cmd_capital_auth_probe(args: argparse.Namespace) -> int:
     if args.environment.lower() != "demo":
         print("⛔ التشخيص مسموح على demo فقط.", file=sys.stderr)
         return 2
-    if LIVE_API_ENABLED:
-        print("⛔ قفل Live مفتوح في الكود. توقّف.", file=sys.stderr)
-        return 2
+    # وقفٌ عامّ محذوف — الشرط أعلاه خاصّ بالنداء ويكفي.
 
     provider = build_secret_provider(env_file=args.secrets_file, allow_process_env=False)
     missing = provider.missing(REQUIRED_CAPITAL_SECRETS)

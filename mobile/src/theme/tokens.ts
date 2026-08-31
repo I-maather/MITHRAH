@@ -1,5 +1,5 @@
 /**
- * نسق مآثر — رموز التصميم.
+ * نسق مثراة — رموز التصميم.
  *
  * An original token set for this app. It is deliberately quiet: one accent, a
  * narrow neutral ramp, and three semantic risk colours. Nothing here imitates

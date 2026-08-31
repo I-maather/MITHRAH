@@ -658,8 +658,18 @@ class CapitalComAdapter(BrokerAdapter):
         """
         self.execution_lock.assert_can_execute("POST /positions")
 
-        # دفاع في العمق: لا إرسال على بيئة حقيقية مهما قال القفل.
-        if self.is_live or LIVE_API_ENABLED:
+        # دفاع في العمق: لا إرسال على بيئة حقيقية، مهما كانت حالة القفل الأول.
+        #
+        # كان الشرط `self.is_live or LIVE_API_ENABLED`، و`or` هنا خلطٌ بين
+        # أمرين: القفل الأول يحكم **إمكان بلوغ عناوين البيئة الحقيقية** (ويُفرَض
+        # في `assert_environment_allowed` و`assert_url_allowed`)، لا **منع
+        # الإرسال في كل مكان**. فلمّا رُفع القفل صار كلّ إرسال مرفوضاً حتى على
+        # الديمو، وسقط ٣٥ اختباراً — والسبب أن الشرط عامّ وهذا الموضع خاصّ
+        # بالمحوّل الذي بين يديه.
+        #
+        # والحماية لم تُضعَف: الإرسال على البيئة الحقيقية يبقى مرفوضاً هنا،
+        # والديمو يبقى محروساً بقفل التنفيذ وبـ`STOP_DISTANCE_UNIT_PROVEN`.
+        if self.is_live:
             raise LiveApiBlocked("إرسال أمر على البيئة الحقيقية مرفوض في هذا الإصدار.")
 
         self._assert_executable(intent.symbol)

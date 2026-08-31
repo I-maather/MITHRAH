@@ -4,7 +4,7 @@ import * as SecureStore from 'expo-secure-store';
  * تخزين **رموز جلسة التطبيق فقط** في سلسلة مفاتيح iOS.
  *
  * WHAT LIVES HERE
- *   access token   — 15 دقيقة، يصدره خادم مآثر لهذا الجهاز.
+ *   access token   — 15 دقيقة، يصدره خادم مثراة لهذا الجهاز.
  *   refresh token  — 30 يوماً، يُدوَّر عند كل استعمال.
  *   device id      — معرّف عام يصدره الخادم.
  *

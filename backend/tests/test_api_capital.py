@@ -31,11 +31,22 @@ def client(tmp_path, monkeypatch):
 
 # --- حالة الوسيط -------------------------------------------------------------
 
-def test_broker_endpoint_shows_demo_and_locked_live(client):
+def test_broker_endpoint_reports_the_locks_truthfully(client):
+    """
+    الثابت المحروس ليس **قيمة** القفل بل **صدق التبليغ عنها**.
+
+    كان الاختبار يشترط `live_api_enabled_in_source is False`. ولمّا رُفع القفل
+    بموافقة مكتوبة كان سيسقط، فيُغرى أحدٌ بحذفه. والخطر الحقيقي ليس أن يكون
+    القفل مرفوعاً — بل أن تعرض الواجهة أنه مغلق وهو مرفوع. فالشرط الآن:
+    ما تقوله الواجهة = ما في المصدر.
+    """
+    from app.brokers.capital.safety import LIVE_API_ENABLED
+
     body = client.get("/api/broker").json()
+    assert body["live_api_enabled_in_source"] is LIVE_API_ENABLED
     assert body["is_demo"] is True
-    assert body["live_api_enabled_in_source"] is False
     assert body["base_url"].startswith("https://demo-api-capital")
+    # يبقى شرطاً قاطعاً بلا استثناء: قفل التنفيذ مغلق.
     assert body["execution_lock"]["unlocked"] is False
     assert body["risk_constitution_version"] == "0.2.0"
 

@@ -156,31 +156,71 @@ def test_tokens_never_appear_in_session_repr():
 
 # --- رفض العنوان الحقيقي -----------------------------------------------------
 
-def test_live_api_is_locked_in_source():
-    assert LIVE_API_ENABLED is False
+def test_live_api_flag_is_a_source_literal():
+    """
+    رُفع القفل إلى True في ٣١ أغسطس بموافقة مكتوبة، للقراءة فقط.
+    والثابت المحروس هنا ليس القيمة بل **مصدرها**: سطرٌ حرفيّ في الملف،
+    تغييره يتطلّب تعديلاً ومراجعة — لا متغيّر بيئة ولا إعداد.
+    """
+    from pathlib import Path
+
+    from app.brokers.capital import safety
+
+    line = next(
+        raw for raw in Path(safety.__file__).read_text(encoding="utf-8").splitlines()
+        if raw.startswith("LIVE_API_ENABLED")
+    )
+    assert line.strip() in ("LIVE_API_ENABLED: bool = True",
+                            "LIVE_API_ENABLED: bool = False")
+    assert isinstance(LIVE_API_ENABLED, bool)
 
 
-def test_live_url_is_recognised_and_rejected():
+def test_live_url_is_allowed_only_while_the_source_lock_is_open():
+    """عنوان كابيتال الحقيقي يتبع القفل: مسموح حين يُرفع، مرفوض حين يُغلق."""
     assert is_live_url(LIVE_BASE_URL) is True
     assert is_live_url(DEMO_BASE_URL) is False
+    if LIVE_API_ENABLED:
+        assert_url_allowed(LIVE_BASE_URL + "/api/v1/session")  # لا يرفع
+    else:
+        with pytest.raises(LiveApiBlocked):
+            assert_url_allowed(LIVE_BASE_URL + "/api/v1/session")
+
+
+@pytest.mark.parametrize("host", [
+    "https://evil.example.com/api/v1/positions",
+    "https://api-capital.backend-capital.com.evil.com/api/v1/session",
+    "http://127.0.0.1:8000/api/v1/session",
+    "https://backend-capital.com/api/v1/session",
+])
+def test_a_host_outside_the_allowlist_is_refused(host):
+    """
+    **هذا الاختبار كشف ثغرة حقيقية.**
+
+    كان الرفض يقع بالمصادفة: `is_live_url` يعدّ كل ما ليس ديمو «حقيقياً»،
+    فكان القفل المغلق يحجب المضيف المجهول تبعاً. ولمّا رُفع القفل سقط الحجب
+    عن كل عنوان في الدنيا. فصار الفحص قائمة بيضاء صريحة، وهذا الاختبار
+    يحرسها — ورفعُ القفل أو إغلاقه لا يغيّر نتيجته.
+    """
     with pytest.raises(LiveApiBlocked):
-        assert_url_allowed(LIVE_BASE_URL + "/api/v1/session")
+        assert_url_allowed(host)
 
 
-def test_unknown_host_is_treated_as_live_and_blocked():
-    with pytest.raises(LiveApiBlocked):
-        assert_url_allowed("https://evil.example.com/api/v1/positions")
-
-
-def test_live_environment_session_cannot_be_constructed():
+def test_live_session_construction_follows_the_source_lock():
+    """بناء جلسة على البيئة الحقيقية يتبع القفل — ولا يعني قدرةً على التنفيذ."""
     from app.brokers.capital.transport import FixtureTransport
 
-    with pytest.raises(LiveApiBlocked):
-        CapitalSession(
+    def build():
+        return CapitalSession(
             transport=FixtureTransport(),
             secrets=None,
             environment=CapitalEnvironment.LIVE,
         )
+
+    if LIVE_API_ENABLED:
+        assert build().environment is CapitalEnvironment.LIVE
+    else:
+        with pytest.raises(LiveApiBlocked):
+            build()
 
 
 # --- الحسابات ---------------------------------------------------------------

@@ -3,7 +3,8 @@
 
 ثلاثة أقفال مستقلة، كلٌّ منها كافٍ وحده لمنع أي طلب خطر:
 
-  1. LIVE_API_ENABLED = False  — ثابت في الكود، يمنع أي عنوان حقيقي.
+  1. LIVE_API_ENABLED          — ثابت في الكود. مرفوعٌ الآن للقراءة فقط
+                                 (٣١ أغسطس، بموافقة مكتوبة).
   2. ExecutionLock              — يمنع كل نداء يُعدّل شيئاً عند الوسيط.
   3. is_mutating() في الناقل    — يمنع الطلب نفسه قبل مغادرته العملية.
 
@@ -21,7 +22,19 @@ from ...secretstore.redaction import RedactedError
 from .endpoints import CapitalEnvironment, is_live_url, is_mutating
 
 #: قفل مصدري. لا يقرأ متغير بيئة عمداً.
-LIVE_API_ENABLED: bool = False
+#:
+#: **رُفع في ٣١ أغسطس ٢٠٢٦ بموافقة المالكة المكتوبة.**
+#:
+#: ما فتحه: قراءة الحساب الحقيقي — الأسعار والرصيد والشموع وقواعد التداول.
+#: وما لم يفتحه: إرسال أمر. ثلاثة أقفال مستقلّة تمنعه ولم يمسّها هذا التغيير:
+#:
+#:   ExecutionLock في الناقل   — يرفض كل فعل مُعدِّل قبل مغادرة الطلب العملية
+#:   LIVE_TRADING = false      — في بيئة الخادم
+#:   STOP_DISTANCE_UNIT_PROVEN — ثابت في المحوّل يمنع كل إرسال حتى تُثبَت
+#:                               وحدة `stopDistance` بأمر تجريبي واحد
+#:
+#: وإعادته إلى False تُعيد المنع فوراً وبلا أثر جانبي — لا حالة تعتمد عليه.
+LIVE_API_ENABLED: bool = True
 
 #: قفل التنفيذ الافتراضي. كل نداء مُعدِّل مرفوض ما لم يُفتح صراحةً بموافقة موثقة.
 EXECUTION_UNLOCK_ENV = "CAPITAL_EXECUTION_UNLOCKED"
@@ -47,10 +60,38 @@ def assert_environment_allowed(environment: CapitalEnvironment) -> None:
         )
 
 
+#: المضيفون المسموح بلوغهم — قائمة بيضاء صريحة، لا استنتاج.
+def _allowed_hosts() -> frozenset[str]:
+    from urllib.parse import urlparse
+
+    from .endpoints import DEMO_BASE_URL, DEMO_WS_URL, LIVE_BASE_URL, LIVE_WS_URL
+
+    hosts = {DEMO_BASE_URL, DEMO_WS_URL.replace("wss://", "https://")}
+    if LIVE_API_ENABLED:
+        hosts |= {LIVE_BASE_URL, LIVE_WS_URL.replace("wss://", "https://")}
+    return frozenset(urlparse(u).netloc.lower() for u in hosts)
+
+
 def assert_url_allowed(url: str) -> None:
-    if is_live_url(url) and not LIVE_API_ENABLED:
+    """
+    يرفض كل مضيف خارج القائمة البيضاء.
+
+    **كان الفحص `is_live_url(url) and not LIVE_API_ENABLED`** — وهو يرفض
+    المضيف المجهول *بالمصادفة* لا بالقصد: `is_live_url` يعدّ كلّ ما ليس ديمو
+    «حقيقياً»، فكان القفل المغلق يحجب الجميع. ولمّا رُفع القفل (٣١ أغسطس،
+    للقراءة فقط) سقط الحجب عن **كل عنوان في الدنيا**، لا عن كابيتال وحده.
+    كشفه اختبار `test_unknown_host_is_treated_as_live_and_blocked`.
+
+    فالفحص الآن قائمة بيضاء صريحة: الديمو دائماً، والحقيقي حين يكون القفل
+    مرفوعاً، ولا شيء غيرهما — ورفعُ القفل يضيف مضيفَي كابيتال فقط.
+    """
+    from urllib.parse import urlparse
+
+    parsed = urlparse(url if "//" in url else f"https://{url}")
+    host = (parsed.netloc or parsed.path).lower()
+    if host not in _allowed_hosts():
         raise LiveApiBlocked(
-            "رُفض عنوان لا ينتمي إلى بيئة Capital.com التجريبية. الحقيقي مقفل في الكود."
+            f"رُفض مضيف خارج القائمة البيضاء: {host or '(فارغ)'}."
         )
 
 
@@ -71,7 +112,8 @@ class ExecutionLock:
       * متغير بيئة صريح
       * مرجع موافقة مالكة غير فارغ
       * سبب مكتوب
-    ولا يُفتح أبداً لبيئة Live ما دام LIVE_API_ENABLED = False.
+    وهو **مستقلّ تماماً** عن `LIVE_API_ENABLED`: رفعُ ذاك يفتح القراءة
+    على البيئة الحقيقية، ولا يمسّ هذا القفل بحال.
     """
 
     unlocked: bool = False

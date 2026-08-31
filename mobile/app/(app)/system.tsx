@@ -27,7 +27,7 @@ import { presentConnection } from '@/utils/present';
  * صراحةً (مُعمّاة أم لا، وهل هوية الخادم مؤكدة) قبل أي معلومة عن الوسيط.
  *
  * لا يظهر هنا عنوان وسيط ولا مفتاح ولا رمز جلسة وسيط. التطبيق لا يعرف الوسيط
- * أصلاً؛ ما يعرفه هو ما يقوله خادم مآثر عنه.
+ * أصلاً؛ ما يعرفه هو ما يقوله خادم مثراة عنه.
  */
 export default function SystemScreen(): React.JSX.Element {
   const theme = useTheme();

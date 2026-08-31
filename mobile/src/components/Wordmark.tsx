@@ -20,6 +20,8 @@ export interface WordmarkProps {
   scheme?: 'light' | 'dark';
   style?: ViewStyle;
   testID?: string;
+  /** الوصف المنطوق. الافتراضي اسم العلامة. */
+  accessibilityLabel?: string;
 }
 
 //: نسبة العرض إلى الارتفاع، مأخوذة من `viewBox` الأصل — لا تُقدَّر بالعين.
@@ -35,6 +37,7 @@ export function Wordmark({
   scheme,
   style,
   testID,
+  accessibilityLabel = 'مثراة',
 }: WordmarkProps): React.JSX.Element {
   const system = useColorScheme();
   const mode = scheme ?? (system === 'dark' ? 'dark' : 'light');
@@ -44,7 +47,7 @@ export function Wordmark({
       <Image
         source={SOURCES[mode]}
         accessibilityRole="image"
-        accessibilityLabel="مثراة"
+        accessibilityLabel={accessibilityLabel}
         resizeMode="contain"
         style={{ height, width: height * ASPECT }}
       />

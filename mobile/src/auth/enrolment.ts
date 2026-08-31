@@ -105,12 +105,12 @@ export function parseEnrolmentPayload(
   } catch {
     return {
       ok: false,
-      result: fail('MALFORMED', 'هذا الرمز ليس رمز اقتران مآثر.'),
+      result: fail('MALFORMED', 'هذا الرمز ليس رمز اقتران مثراة.'),
     };
   }
 
   if (typeof parsed !== 'object' || parsed === null) {
-    return { ok: false, result: fail('MALFORMED', 'هذا الرمز ليس رمز اقتران مآثر.') };
+    return { ok: false, result: fail('MALFORMED', 'هذا الرمز ليس رمز اقتران مثراة.') };
   }
   const record = parsed as Record<string, unknown>;
 

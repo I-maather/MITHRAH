@@ -9,6 +9,7 @@
 """
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 import textwrap
@@ -81,13 +82,16 @@ def test_capital_live_is_refused_while_the_source_lock_is_closed():
 
 def test_the_source_lock_is_assigned_a_literal_not_read_from_anywhere():
     """
-    فحصٌ على المصدر نفسه: السطر يجب أن يُسنِد `False` حرفياً.
+    الثابت الذي يحرسه هذا الاختبار ليس **قيمة** القفل بل **مصدرها**:
+    سطرٌ حرفيّ في الملف، لا يُقرأ من بيئة ولا إعداد ولا وسيط أمر.
 
-    ولا يستعمل هذا الاختبار `importlib.reload` عمداً. إعادة التحميل تُنشئ
-    **أصنافاً جديدة** لنفس الأسماء، فيصير `ExecutionLocked` المرفوع من الناقل
-    غير `ExecutionLocked` الذي يمسكه `pytest.raises` في الاختبارات التالية،
-    فتسقط اختباراتٌ سليمة لسببٍ لا علاقة له بها. اختبارٌ يُفسد جيرانه أسوأ من
-    اختبار ناقص.
+    رُفع القفل إلى True في ٣١ أغسطس بموافقة مكتوبة. ولو كان الاختبار مربوطاً
+    بالقيمة لسقط عند الرفع فحُذف أو ضُعّف — وهذا كيف تموت الاختبارات الأمنية.
+    فهو مربوط بالشكل: أياً كانت القيمة، تغييرها يتطلّب تعديل الملف ومراجعة.
+
+    ولا يستعمل `importlib.reload` عمداً: إعادة التحميل تُنشئ أصنافاً جديدة
+    لنفس الأسماء، فيصير `ExecutionLocked` المرفوع غير الذي يمسكه
+    `pytest.raises` في الاختبارات التالية، فتسقط اختباراتٌ سليمة.
     """
     from app.brokers.capital import safety
 
@@ -95,22 +99,33 @@ def test_the_source_lock_is_assigned_a_literal_not_read_from_anywhere():
         raw for raw in Path(safety.__file__).read_text(encoding="utf-8").splitlines()
         if raw.startswith("LIVE_API_ENABLED")
     )
-    assert line.strip() == "LIVE_API_ENABLED: bool = False"
-    for forbidden in ("environ", "getenv", "Field(", "Settings"):
+    assert re.fullmatch(r"LIVE_API_ENABLED: bool = (True|False)", line.strip()), line
+    for forbidden in ("environ", "getenv", "Field(", "Settings", "argv"):
         assert forbidden not in line
 
 
-def test_the_source_lock_stays_closed_under_a_hostile_environment():
+def test_the_source_lock_is_immune_to_a_hostile_environment():
     """
-    تحقّق سلوكي في **عملية منفصلة** — فلا تتلوّث جلسة الاختبار الحالية.
-    نضبط كل متغيّر بيئة قد يخطر ببال أحد ثم نستورد الوحدة من الصفر.
+    تحقّق سلوكي في **عملية منفصلة** فلا تتلوّث جلسة الاختبار.
+
+    نضبط كل متغيّر بيئة قد يخطر ببال أحد، ثم نستورد الوحدة من الصفر،
+    ونشترط أن القيمة **مطابقة للمكتوب في المصدر** — لا أن تكون False.
+    فالبيئة لا ترفع القفل ولا تُنزله؛ هذا هو الأمان، لا القيمة نفسها.
     """
+    from app.brokers.capital import safety
+
+    line = next(
+        raw for raw in Path(safety.__file__).read_text(encoding="utf-8").splitlines()
+        if raw.startswith("LIVE_API_ENABLED")
+    )
+    in_source = line.strip().endswith("True")
+
     code = textwrap.dedent(
         """
         import os
         for name in ("LIVE_API_ENABLED", "CAPITAL_LIVE_ENABLED",
                      "CAPITAL_ENVIRONMENT", "LIVE_TRADING", "BROKER_MODE"):
-            os.environ[name] = "true"
+            os.environ[name] = "false"
         from app.brokers.capital import safety
         print(safety.LIVE_API_ENABLED)
         """
@@ -120,7 +135,36 @@ def test_the_source_lock_stays_closed_under_a_hostile_environment():
         cwd=str(BACKEND_ROOT), capture_output=True, text=True, timeout=60,
     )
     assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == "False"
+    assert result.stdout.strip() == str(in_source)
+
+
+def test_live_environment_is_read_only_even_with_the_source_lock_open():
+    """
+    **هذا هو الاختبار الذي صار يحمي المال.**
+
+    بعد رفع القفل الأول صار الوصول إلى الحساب الحقيقي ممكناً. وهذا الاختبار
+    يُثبت أن ذلك الوصول **قراءةٌ فقط**: محوّل البيئة الحقيقية يُبنى بقفل تنفيذ
+    مغلق، وكل فعل مُعدِّل يُرفض في الناقل قبل أن يغادر الطلب العملية.
+    """
+    from app.brokers.capital import safety
+
+    if not safety.LIVE_API_ENABLED:
+        pytest.skip("القفل المصدري مغلق — لا بيئة حقيقية تُختبر")
+
+    adapter = build_capital_adapter(
+        CapitalEnvironment.LIVE, secrets=a_secret_provider()
+    )
+    assert adapter.is_live is True
+    assert adapter.session.transport.execution_lock is adapter.execution_lock
+    for method, path in (
+        ("POST", "/api/v1/positions"),
+        ("PUT", "/api/v1/positions/abc"),
+        ("DELETE", "/api/v1/positions/abc"),
+    ):
+        with pytest.raises(ExecutionLocked):
+            adapter.session.transport.send(
+                method, f"{CapitalEnvironment.LIVE.base_url}{path}", headers={}
+            )
 
 
 # ---------------------------------------------------------------------------

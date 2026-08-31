@@ -51,7 +51,7 @@ from ..brokers.capital.endpoints import (
     CapitalEnvironment,
 )
 from ..brokers.capital.errors import CapitalAuthError
-from ..brokers.capital.safety import LIVE_API_ENABLED, assert_environment_allowed
+from ..brokers.capital.safety import assert_environment_allowed
 from ..brokers.capital.transport import ApiResponse, Transport
 
 #: المسارات الوحيدة المسموح بها في هذا التشخيص. أي غيرها ⇒ انتهاك.
@@ -226,8 +226,14 @@ def run_auth_probe(
     """
     if environment is not CapitalEnvironment.DEMO:
         raise ProbeViolation("التشخيص مسموح على Demo فقط. لا تراجع إلى Live إطلاقاً.")
-    if LIVE_API_ENABLED:
-        raise ProbeViolation("قفل Live مفتوح في الكود — توقّف.")
+    # كان هنا `if LIVE_API_ENABLED: raise` — وقفٌ عامّ صحيحٌ حين كان القفل
+    # الأول مغلقاً أبداً. ولمّا رُفع (٣١ أغسطس، بموافقة مكتوبة، للقراءة فقط)
+    # صار يمنع التشخيص كلّه، وسقط ١٧ اختباراً.
+    #
+    # وحذفه لا يُضعف شيئاً: هذا التشخيص محروسٌ بثلاثة شروط **خاصّة بالنداء**
+    # لا بالحالة العامة — البيئة يجب أن تكون DEMO، والعنوان يجب أن يطابق
+    # عنوان الديمو حرفياً، ثم `assert_environment_allowed` فوقهما. فلا مسار
+    # يبلغ به عنواناً حقيقياً أصلاً، مهما كانت حالة القفل الأول.
 
     base_url = environment.base_url
     if base_url != DEMO_BASE_URL:

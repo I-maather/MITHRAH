@@ -5,7 +5,7 @@ import { useRouter } from 'expo-router';
 
 import { readCapabilities, describeGate, type GateCapabilities } from '@/auth/biometrics';
 import { useSession } from '@/auth/SessionProvider';
-import { Banner, Button, Card, Text } from '@/components';
+import { Banner, Button, Card, Text, Wordmark } from '@/components';
 import { t } from '@/i18n';
 import { useTheme } from '@/theme';
 
@@ -73,9 +73,7 @@ export default function SecureLaunchScreen(): React.JSX.Element {
       }}
     >
       <View style={{ gap: theme.spacing.sm, marginTop: theme.spacing.huge }}>
-        <Text variant="display" accessibilityRole="header">
-          {t.gate.title}
-        </Text>
+        <Wordmark height={34} accessibilityLabel={t.gate.title} />
         <Text variant="body" tone="secondary">
           {t.app.tagline}
         </Text>

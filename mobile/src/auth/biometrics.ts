@@ -56,7 +56,7 @@ export async function readCapabilities(): Promise<GateCapabilities> {
 /** وصف عربي لطريقة الفتح المتاحة — يُعرض على شاشة القفل. */
 export function describeGate(caps: GateCapabilities): string {
   if (caps.securityLevel === LocalAuthentication.SecurityLevel.NONE) {
-    return 'هذا الجهاز بلا رمز قفل. لا يمكن فتح مآثر عليه.';
+    return 'هذا الجهاز بلا رمز قفل. لا يمكن فتح مثراة عليه.';
   }
   if (caps.hasHardware && caps.isEnrolled) {
     const faceId = caps.types.includes(
@@ -67,7 +67,7 @@ export function describeGate(caps: GateCapabilities): string {
   return 'الفتح برمز الجهاز.';
 }
 
-export const PROMPT_AR = 'افتحي مآثر';
+export const PROMPT_AR = 'افتحي مثراة';
 export const FALLBACK_LABEL_AR = 'استعملي رمز الجهاز';
 
 /**
@@ -84,7 +84,7 @@ export async function requestUnlock(
       ok: false,
       reason: 'NO_DEVICE_SECURITY',
       messageAr:
-        'لا يوجد رمز قفل على هذا الجهاز. مآثر لا يفتح على جهاز غير محمي — فعّلي رمز القفل ثم أعيدي المحاولة.',
+        'لا يوجد رمز قفل على هذا الجهاز. مثراة لا يفتح على جهاز غير محمي — فعّلي رمز القفل ثم أعيدي المحاولة.',
     };
   }
 
