@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import pathlib
 import sys
 from pathlib import Path
 
@@ -83,7 +84,15 @@ from .secretstore.provider import (
 )
 from .secretstore.redaction import install_redacting_filter
 
-DEFAULT_SECRETS_FILE = REPO_ROOT / "secrets" / "capital.env"
+#: **مصدرٌ واحد للأسرار، مشترك مع الخدمة.**
+#:
+#: كان `secrets/capital.env` بينما الخدمة تقرأ `secrets/runtime.env` (وهو ما
+#: يكتبه `configure_server_secrets.sh`). فكانت الواجهة تقول «المزوّدون
+#: مُعدّون» والمسبار يقول «المفتاح غير مُعدّ» — في اللحظة نفسها، على الخادم
+#: نفسه. ملفّان مختلفان لسرٍّ واحد.
+#:
+#: ويُقرأ من الإعدادات لا يُثبَّت هنا: تثبيتُه هو ما أنتج الاختلاف أصلاً.
+DEFAULT_SECRETS_FILE = pathlib.Path(get_settings().secrets_file)
 
 
 def _configure_logging(verbose: bool) -> None:

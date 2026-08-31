@@ -169,3 +169,39 @@ def test_every_provider_answers_status_without_raising(kind):
     assert matching, f"لا مزوّد من نوع {kind}"
     for provider in matching:
         provider.status()
+
+
+# ---------------------------------------------------------------------------
+# مصدر الأسرار — واحدٌ للخدمة وللأدوات
+# ---------------------------------------------------------------------------
+def test_cli_and_service_read_the_same_secrets_file():
+    """
+    **حدث فعلاً على الخادم:** الواجهة تقول «المزوّدون مُعدّون، الأهلية true»،
+    والمسبار في اللحظة نفسها يقول «FMP_API_KEY غير مُعدّ».
+
+    السبب أن `cli.py` كان يثبّت `secrets/capital.env` بينما الخدمة تقرأ
+    `secrets/runtime.env` — وهو ما يكتبه سكربت نقل الأسرار. ملفّان مختلفان
+    لسرٍّ واحد، وكلاهما «صادق» في ما يراه.
+
+    والثابت هنا ليس المسار بعينه بل **وحدته**: أداةٌ تقرأ غير ما تقرأ الخدمة
+    تُنتج تشخيصاً يقود إلى الاتجاه الخطأ.
+    """
+    from app.cli import DEFAULT_SECRETS_FILE
+    from app.config import get_settings
+
+    assert str(DEFAULT_SECRETS_FILE) == get_settings().secrets_file
+
+
+def test_secrets_path_is_not_hardcoded_in_the_cli():
+    """فحصٌ على المصدر: تثبيتُ المسار هو ما أنتج الاختلاف، فلا يعود."""
+    from pathlib import Path
+
+    import app.cli as cli
+
+    line = next(
+        raw for raw in Path(cli.__file__).read_text(encoding="utf-8").splitlines()
+        if raw.startswith("DEFAULT_SECRETS_FILE")
+    )
+    assert "capital.env" not in line
+    assert "runtime.env" not in line
+    assert "get_settings()" in line
