@@ -10,7 +10,7 @@ import React, {
 } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
 
-import { MobileApiClient, type TokenSource } from '@/api/client';
+import { MobileApiClient, type RefreshOutcome, type TokenSource } from '@/api/client';
 import { API_BASE_URL, AUTO_LOCK_MINUTES, SESSION_REFRESH_PATH, verifyBaseUrl } from '@/api/config';
 import { requestUnlock, type GateOutcome } from './biometrics';
 import { tokenStore, type StoredSession } from './tokenStore';
@@ -129,40 +129,55 @@ export function SessionProvider({
   const tokens = useMemo<TokenSource>(
     () => ({
       getAccessToken: () => tokenStore.loadAccessToken(),
-      refresh: async () => {
+      refresh: async (): Promise<RefreshOutcome> => {
         const refreshToken = await tokenStore.loadRefreshToken();
         if (refreshToken === null) {
-          return null;
+          // لا رمز أصلاً — لا شيء يُجدَّد ولا شيء يُمحى.
+          return { status: 'rejected' };
         }
         const verdict = verifyBaseUrl(API_BASE_URL);
         if (!verdict.ok) {
-          return null;
+          // عنوانٌ غير صالح عطلُ إعداد لا إلغاءُ جهاز.
+          return { status: 'unavailable' };
         }
         const doFetch = overrides?.fetchImpl ?? fetch;
+        let response: Response;
         try {
-          const response = await doFetch(`${API_BASE_URL}${SESSION_REFRESH_PATH}`, {
+          response = await doFetch(`${API_BASE_URL}${SESSION_REFRESH_PATH}`, {
             method: 'POST',
             headers: { 'content-type': 'application/json', accept: 'application/json' },
             body: JSON.stringify({ refresh_token: refreshToken }),
           });
-          if (!response.ok) {
-            return null;
-          }
+        } catch {
+          // شبكة. **لا تُمحى جلسة لأن الخادم لم يُجب.**
+          return { status: 'unavailable' };
+        }
+
+        // 401/403 وحدهما رفضٌ صريح لهذا الجهاز. و5xx خادمٌ متعثّر —
+        // وإعادةُ تشغيل الخدمة عند كل نشر تمرّ من هنا بالضبط.
+        if (response.status === 401 || response.status === 403) {
+          return { status: 'rejected' };
+        }
+        if (!response.ok) {
+          return { status: 'unavailable' };
+        }
+
+        try {
           const body: unknown = await response.json();
           if (typeof body !== 'object' || body === null) {
-            return null;
+            return { status: 'unavailable' };
           }
           const record = body as Record<string, unknown>;
           const access = record.access_token;
           const nextRefresh = record.refresh_token;
           if (typeof access !== 'string' || typeof nextRefresh !== 'string') {
-            return null;
+            return { status: 'unavailable' };
           }
           // التدوير إجباري: الرمز القديم يُكتب فوقه فوراً.
           await tokenStore.rotate(access, nextRefresh);
-          return access;
+          return { status: 'renewed', accessToken: access };
         } catch {
-          return null;
+          return { status: 'unavailable' };
         }
       },
       onSessionLost: async () => {

@@ -1,4 +1,4 @@
-export { ApiError, MobileApiClient, type ClientOptions, type FailureKind, type TokenSource } from './client';
+export { ApiError, MobileApiClient, type ClientOptions, type FailureKind, type RefreshOutcome, type TokenSource } from './client';
 export {
   API_BASE_URL,
   API_PREFIX,

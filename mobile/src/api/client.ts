@@ -51,12 +51,36 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * نتيجة محاولة التجديد — **ثلاث حالات لا اثنتان**.
+ *
+ * ## العطل الذي فرض هذا التمييز
+ *
+ * كان `refresh` يعيد `null` لكل إخفاق: رفضٌ من الخادم، وانقطاعُ شبكة،
+ * وخطأُ 502 لحظةَ إعادة تشغيل الخدمة — كلّها سواء. والعميل يقرأ `null`
+ * «الجهاز أُلغي» فيمسح سلسلة المفاتيح.
+ *
+ * والنتيجة: **كل نشرٍ يُعيد التطبيق إلى مسح رمز الاقتران.** النشر يعيد
+ * تشغيل الخدمة، فيصادف تجديدٌ جارٍ خادماً لا يردّ، فتُمحى الجلسة — وهي
+ * سليمة تماماً، والخادم لم يقل عنها شيئاً.
+ *
+ * فالمحو الآن لا يقع إلا حين **يقول الخادم صراحةً** إن هذا الجهاز لم يعد
+ * معروفاً. وما دون ذلك: نبقى مقفلين، ويُفتح بالوجه.
+ */
+export type RefreshOutcome =
+  /** رمزٌ جديد. */
+  | { status: 'renewed'; accessToken: string }
+  /** الخادم **رفض** الرمز: أُلغي الجهاز أو انتهى التجديد. تُمحى الجلسة. */
+  | { status: 'rejected' }
+  /** لم يُحسم: شبكة، أو مهلة، أو خادم يُعيد التشغيل. **لا تُمحى الجلسة.** */
+  | { status: 'unavailable' };
+
 export interface TokenSource {
   /** يعيد رمز الوصول الحالي أو null. */
   getAccessToken: () => Promise<string | null>;
-  /** يحاول التجديد مرة واحدة ويعيد رمزاً جديداً أو null. */
-  refresh: () => Promise<string | null>;
-  /** يُستدعى عند 401 نهائي — الجلسة انتهت ويجب القفل. */
+  /** يحاول التجديد مرة واحدة. انظري `RefreshOutcome`. */
+  refresh: () => Promise<RefreshOutcome>;
+  /** يُستدعى عند رفضٍ صريح من الخادم — الجلسة انتهت ويجب الاقتران مجدداً. */
   onSessionLost: () => Promise<void>;
 }
 
@@ -90,7 +114,7 @@ export class MobileApiClient {
   private readonly tokens: TokenSource;
   private readonly fetchImpl: typeof fetch;
   private readonly timeoutMs: number;
-  private refreshing: Promise<string | null> | null = null;
+  private refreshing: Promise<RefreshOutcome> | null = null;
 
   constructor(options: ClientOptions) {
     this.baseUrl = (options.baseUrl ?? API_BASE_URL).replace(/\/+$/, '');
@@ -243,9 +267,16 @@ export class MobileApiClient {
 
     if (response.status === 401) {
       if (!isRetry) {
-        const fresh = await this.refreshOnce();
-        if (fresh !== null) {
+        const outcome = await this.refreshOnce();
+        if (outcome.status === 'renewed') {
           return this.request<T>(method, route, payload, true);
+        }
+        if (outcome.status === 'unavailable') {
+          // لم يقل الخادم شيئاً عن هذا الجهاز — لا تُمحى جلسة على ظنّ.
+          throw new ApiError(
+            'OFFLINE',
+            'تعذّر تجديد الجلسة الآن. جلستك محفوظة — أعيدي المحاولة.',
+          );
         }
       }
       await this.tokens.onSessionLost();
@@ -287,11 +318,12 @@ export class MobileApiClient {
   }
 
   /** تجديد واحد متزامن مهما تعدّدت الطلبات المتوازية. */
-  private refreshOnce(): Promise<string | null> {
+  private refreshOnce(): Promise<RefreshOutcome> {
     if (this.refreshing === null) {
       this.refreshing = this.tokens
         .refresh()
-        .catch(() => null)
+        // استثناءٌ غير متوقَّع ليس رفضاً من الخادم — لا يُمحى عليه شيء.
+        .catch((): RefreshOutcome => ({ status: 'unavailable' }))
         .finally(() => {
           this.refreshing = null;
         });

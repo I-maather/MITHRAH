@@ -1,4 +1,4 @@
-import { ApiError, MobileApiClient, type TokenSource } from '@/api/client';
+import { ApiError, MobileApiClient, type RefreshOutcome, type TokenSource } from '@/api/client';
 import { verifyBaseUrl } from '@/api/config';
 import { envelope } from './helpers';
 
@@ -8,7 +8,7 @@ import { envelope } from './helpers';
 
 const makeTokens = (overrides: Partial<TokenSource> = {}): TokenSource => ({
   getAccessToken: jest.fn(async () => 'access-token'),
-  refresh: jest.fn(async () => null),
+  refresh: jest.fn(async (): Promise<RefreshOutcome> => ({ status: 'rejected' })),
   onSessionLost: jest.fn(async () => undefined),
   ...overrides,
 });
@@ -110,7 +110,10 @@ describe('حارس الغلاف', () => {
 describe('التجديد عند 401', () => {
   it('يجدّد مرة واحدة ثم يعيد المحاولة', async () => {
     let call = 0;
-    const refresh = jest.fn(async () => 'fresh-token');
+    const refresh = jest.fn(async (): Promise<RefreshOutcome> => ({
+      status: 'renewed',
+      accessToken: 'fresh-token',
+    }));
     const client = new MobileApiClient({
       tokens: makeTokens({ refresh }),
       fetchImpl: (async () => {
@@ -123,14 +126,54 @@ describe('التجديد عند 401', () => {
     expect(result.data).toEqual({ profile: 'X' });
   });
 
-  it('يُسقط الجلسة عند فشل التجديد', async () => {
+  it('يُسقط الجلسة حين **يرفض الخادم** الرمز', async () => {
     const onSessionLost = jest.fn(async () => undefined);
     const client = new MobileApiClient({
-      tokens: makeTokens({ refresh: jest.fn(async () => null), onSessionLost }),
+      tokens: makeTokens({
+        refresh: jest.fn(async (): Promise<RefreshOutcome> => ({ status: 'rejected' })),
+        onSessionLost,
+      }),
       fetchImpl: (async () => okResponse({}, 401)) as unknown as typeof fetch,
     });
     await expect(client.getRisk()).rejects.toMatchObject({ kind: 'UNAUTHORISED', status: 401 });
     expect(onSessionLost).toHaveBeenCalledTimes(1);
+  });
+
+  it('لا يُسقط الجلسة حين يتعذّر التجديد — شبكة أو خادم يُعيد التشغيل', async () => {
+    /**
+     * **العطل الذي كان يفرض مسح رمز اقتران بعد كل نشر.**
+     *
+     * كان كل إخفاق في التجديد يُقرأ «أُلغي الجهاز» فتُمسح سلسلة المفاتيح.
+     * والنشر يعيد تشغيل الخدمة، فيصادف تجديدٌ جارٍ خادماً لا يردّ —
+     * فتُمحى جلسةٌ سليمة تماماً، والخادم لم يقل عنها شيئاً.
+     *
+     * المحو الآن لا يقع إلا على رفضٍ صريح.
+     */
+    const onSessionLost = jest.fn(async () => undefined);
+    const client = new MobileApiClient({
+      tokens: makeTokens({
+        refresh: jest.fn(async (): Promise<RefreshOutcome> => ({ status: 'unavailable' })),
+        onSessionLost,
+      }),
+      fetchImpl: (async () => okResponse({}, 401)) as unknown as typeof fetch,
+    });
+    await expect(client.getRisk()).rejects.toMatchObject({ kind: 'OFFLINE' });
+    expect(onSessionLost).not.toHaveBeenCalled();
+  });
+
+  it('استثناءٌ داخل التجديد لا يُسقط الجلسة', async () => {
+    const onSessionLost = jest.fn(async () => undefined);
+    const client = new MobileApiClient({
+      tokens: makeTokens({
+        refresh: jest.fn(async () => {
+          throw new Error('boom');
+        }),
+        onSessionLost,
+      }),
+      fetchImpl: (async () => okResponse({}, 401)) as unknown as typeof fetch,
+    });
+    await expect(client.getRisk()).rejects.toMatchObject({ kind: 'OFFLINE' });
+    expect(onSessionLost).not.toHaveBeenCalled();
   });
 
   it('403 لا يُعامَل كجلسة منتهية', async () => {
