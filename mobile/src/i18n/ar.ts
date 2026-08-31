@@ -115,6 +115,12 @@ export const t = {
     noPosition: 'لا مركز مفتوح.',
     noEvent: 'لا حدث مُعلَن ضمن النافذة.',
     noPositionWhy: 'لا أدخل إلا حين تكتمل شروطي كلها.',
+    portfolio: 'المحفظة',
+    brokerEquity: 'الرصيد لدى الوسيط',
+    brokerEquityMissing: 'لم يُقرَأ — الوسيط غير متصل. لا يُعرض رقم قديم.',
+    baselineEquity: 'رأس المال المرجعي',
+    baselineEquityHint: 'كل الحدود تُحسب منه',
+    baselineDrift: 'المرجع لا يطابق الرصيد',
     openDetail: 'التفاصيل',
   },
 

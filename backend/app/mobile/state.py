@@ -180,6 +180,47 @@ def _risk(sys: Any) -> dict[str, Any]:
         "two_loss_lock_active": session.consecutive_losses >= 2,
         # الحدود تُفرَض على الخادم. الثابت يُفحَص في العميل عند كل استجابة.
         "editable_from_device": False,
+        # ---- المحفظة -------------------------------------------------------
+        # ثلاثة أرقام لا واحد، **والخلاف بينها معلومة لا خطأ**:
+        #
+        #   المرجعي   الرقم الذي تُحسب منه كل الحدود.
+        #   الفعلي    ما يقوله الوسيط الآن.
+        #   الحالي    المرجعي زائد ما تحقّق من ربح أو خسارة.
+        #
+        # وعرض الفعلي وحده يُخفي أن الحدود قد تُحسب على رقمٍ آخر — وهو ما
+        # بقي صامتاً حتى انكشف بالمصادفة: ١٥٠ مرجعاً و١٤٠ في الحساب.
+        # وعرض المرجعي وحده يُخفي المال نفسه.
+        "portfolio": _portfolio(sys, session),
+    }
+
+
+def _portfolio(sys: Any, session: Any) -> dict[str, Any]:
+    """
+    المرجع والرصيد والخلاف بينهما.
+
+    **لا يُختلق رقم.** وسيطٌ مفصول لا يُثبت شيئاً عن الرصيد، فيعود `null`
+    مع سببٍ مكتوب — لا صفر ولا آخر قيمة معروفة.
+    """
+    from ..risk.session_state import check_baseline_against_broker
+
+    baseline = sys.limits.baseline_equity
+    try:
+        drift = check_baseline_against_broker(sys.broker, baseline)
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "baseline_equity": _money(baseline),
+            "broker_equity": None,
+            "current_equity": _money(session.current_equity),
+            "diverged": False,
+            "note_ar": f"تعذّر فحص الرصيد ({type(exc).__name__}).",
+        }
+
+    return {
+        "baseline_equity": _money(drift.baseline),
+        "broker_equity": _money(drift.broker_equity),
+        "current_equity": _money(session.current_equity),
+        "diverged": drift.diverged,
+        "note_ar": drift.reason_ar,
     }
 
 

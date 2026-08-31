@@ -12,6 +12,7 @@ import {
   Field,
   Hadd,
   LoadingState,
+  Metric,
   NavRow,
   OfflineBanner,
   RiskMeter,
@@ -182,6 +183,39 @@ export default function HomeScreen(): React.JSX.Element {
             </View>
           ))}
         </View>
+      ) : null}
+
+      {/* ---- المحفظة: المال قبل الحدود ---- */}
+      {r !== null ? (
+        <Card testID="portfolio-card" title={t.home.portfolio}>
+          <View style={{ flexDirection: 'row', gap: theme.spacing.xl }}>
+            <Metric
+              testID="portfolio-broker"
+              label={t.home.brokerEquity}
+              value={r.portfolio?.broker_equity ?? null}
+              caption={(r.portfolio?.broker_equity ?? null) === null ? t.home.brokerEquityMissing : undefined}
+            />
+            <Metric
+              testID="portfolio-baseline"
+              label={t.home.baselineEquity}
+              value={r.portfolio?.baseline_equity ?? null}
+              caption={t.home.baselineEquityHint}
+            />
+          </View>
+          {/*
+            الخلاف يُعرض لأنه **معلومة لا خطأ**: كل الحدود تُحسب من المرجعي،
+            فاختلافه عن الرصيد الفعلي يعني أن حدودك محسوبة على رقم غير واقعي.
+            وقد بقي هذا صامتاً حتى انكشف بالمصادفة: ١٥٠ مرجعاً و١٤٠ في الحساب.
+          */}
+          {r.portfolio?.diverged ? (
+            <Banner
+              testID="baseline-drift-banner"
+              tone="caution"
+              title={t.home.baselineDrift}
+              body={r.portfolio?.note_ar ?? undefined}
+            />
+          ) : null}
+        </Card>
       ) : null}
 
       {/* ---- كم بقي لي ---- */}

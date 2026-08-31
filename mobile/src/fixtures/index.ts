@@ -169,6 +169,13 @@ const risk: RiskData = {
   consecutive_losses: 0,
   two_loss_lock_active: false,
   editable_from_device: false,
+  portfolio: {
+    baseline_equity: '140.00',
+    broker_equity: '140.00',
+    current_equity: '140.00',
+    diverged: false,
+    note_ar: 'المرجع 140.00 والرصيد 140.00 — ضمن المدى.',
+  },
 };
 
 const profiles: ProfilesData = {
