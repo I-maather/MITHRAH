@@ -10,6 +10,7 @@ import {
   Divider,
   ErrorState,
   Field,
+  Hadd,
   LoadingState,
   NavRow,
   OfflineBanner,
@@ -18,9 +19,10 @@ import {
   StaleBanner,
   StatusPill,
   Text,
+  Vacancy,
 } from '@/components';
 import { fixtures, isPreviewMode, previewOr } from '@/fixtures';
-import { formatCooling, formatInstant, formatRatio, formatSince, t } from '@/i18n';
+import { formatCooling, formatInstant, formatRatio, formatSince, formatToday, t } from '@/i18n';
 import { useTheme } from '@/theme';
 import {
   presentCompleteness,
@@ -98,6 +100,16 @@ export default function HomeScreen(): React.JSX.Element {
     return Number.isFinite(v) ? v : null;
   })();
 
+  /** حدّ اليوم = المستهلَك + المتبقّي. لا حقل له في العقد، فيُشتقّ لا يُخترع. */
+  const limitToday = ((): string | null => {
+    const used = Number(r?.risk_used_today?.replace(/,/g, ''));
+    const remaining = Number(r?.risk_remaining_today?.replace(/,/g, ''));
+    if (!Number.isFinite(used) || !Number.isFinite(remaining)) {
+      return null;
+    }
+    return (used + remaining).toFixed(2);
+  })();
+
   const riskRatio = ((): number | null => {
     if (r === null) {
       return null;
@@ -114,7 +126,9 @@ export default function HomeScreen(): React.JSX.Element {
   return (
     <Screen
       testID="home-screen"
-      title={t.home.title}
+      // العنوان يملكه شريط التبويبات وحده. كان يُكتب ثلاث مرّات في شاشة
+      // واحدة: هيدر التنقّل، وعنوان الشاشة، والتبويب.
+      title={formatToday()}
       subtitle={t.app.tagline}
       preview={preview}
       onRefresh={refreshAll}
@@ -181,10 +195,43 @@ export default function HomeScreen(): React.JSX.Element {
             remainingValue={remainingToday}
             ratio={riskRatio}
           />
+          {/*
+            «الحدّ» — العنصر التوقيعي. علامته تظهر عند صفر بالمئة أيضاً،
+            بخلاف المؤشّر الذي كان يختفي فتبدو الشاشة معطوبة وهي سليمة.
+            العتبتان ٦٠٪ و٨٥٪ هما حيث تُضيَّق الأحجام ثم يُمنع الدخول.
+          */}
+          {riskRatio !== null ? (
+            <Hadd
+              testID="risk-hadd"
+              value={riskRatio}
+              max={1}
+              label="المستهلَك من حدّ اليوم"
+              readout={`${r.risk_used_today ?? '—'} من ${limitToday ?? '—'}`}
+              thresholds={[
+                { at: 0.6, tone: 'neutral' },
+                { at: 0.85, tone: 'negative' },
+              ]}
+              style={{ marginTop: theme.spacing.sm }}
+            />
+          ) : null}
           {r.two_loss_lock_active ? (
             <Banner tone="negative" title="قفل الخسارتين مُفعَّل" body="لا دخول جديد اليوم." />
           ) : null}
         </Card>
+      ) : null}
+
+      {/* ---- المركز: الفراغ حالة لا خطأ ---- */}
+      {pos !== null && pos.has_position === false ? (
+        <Vacancy
+          testID="no-position-empty"
+          what="لا مركز مفتوح."
+          why="لا أدخل إلا حين تكتمل شروطي كلها."
+          next={
+            s !== null && !s.market.is_open
+              ? `السوق مغلق — ${s.market.reason_ar}`
+              : undefined
+          }
+        />
       ) : null}
 
       {/* ---- حالة النظام ---- */}

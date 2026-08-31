@@ -13,5 +13,5 @@ export { Field, Metric } from './Value';
 export { AnimatedNumber } from './AnimatedNumber';
 export { TabBar, TABS } from './TabBar';
 export * from './Hadd';
-export * from './EmptyState';
+export * from './Vacancy';
 export * from './Wordmark';

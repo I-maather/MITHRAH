@@ -5,7 +5,11 @@ import { useTheme } from '@/theme';
 import { Text } from './Text';
 
 /**
- * الحالة الصفرية — **حالة، لا خطأ**.
+ * الحالة الصفرية المشروحة — **حالة، لا خطأ**.
+ *
+ * سُمّي `Vacancy` لا `EmptyState`: الاسم الثاني مأخوذ في `States.tsx` لمكوّنٍ
+ * يعرض رسالةً واحدة. وتسميتُهما بالاسم نفسه جعلت `index.ts` يُصدّر الأول
+ * ويحجب الثاني بصمت — والمترجم وحده أمسكها.
  *
  * ثلاث عشرة شاشة في هذا التطبيق تعرض فراغاً بلا تفسير، والفراغ هو ما ستراه
  * المالكة أكثر من غيره في الأسابيع الأولى: لا صفقات، لا مركز، لا تعارضات،
@@ -25,7 +29,7 @@ import { Text } from './Text';
  * الرسوم اللطيفة في الحالات الفارغة تُخفّف وقع الفراغ، وهذا بالضبط ما لا
  * نريده: النظام مالي، والفراغ فيه معلومةٌ تُقرأ لا شعورٌ يُلطَّف.
  */
-export interface EmptyStateProps {
+export interface VacancyProps {
   /** ماذا يوجد الآن — جملة واحدة مكتملة. */
   what: string;
   /** لماذا — بصوت النظام، لا بلغة المطوّرين. */
@@ -38,14 +42,14 @@ export interface EmptyStateProps {
   testID?: string;
 }
 
-export function EmptyState({
+export function Vacancy({
   what,
   why,
   next,
   tone = 'neutral',
   style,
   testID,
-}: EmptyStateProps): React.JSX.Element {
+}: VacancyProps): React.JSX.Element {
   const theme = useTheme();
 
   const borderColor =
