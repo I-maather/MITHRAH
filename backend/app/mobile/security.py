@@ -303,6 +303,30 @@ class MobileSecurityService:
             return
         self._load_challenges(self.store.load().get("challenges", []))
 
+    def _absorb_unknown_challenges(self) -> None:
+        """
+        يضمّ تحدّيات كتبها **مسار آخر** قبل الحفظ.
+
+        الخدمة تحمل حالتها في الذاكرة وتكتب الملف كاملاً. وأداة الاقتران
+        (`python -m app.mobile.pairing`) عمليةٌ منفصلة تكتب تحدّياً في الملف
+        نفسه. فأي حفظٍ من الخدمة بين توليد الرمز ومسحه كان **يمحوه** —
+        وتدوير رمزٍ كل ربع ساعة يجعل ذلك واقعاً لا نظرياً. فترى المالكة
+        «تحدٍّ منتهٍ أو مُستهلَك» عن رمزٍ وُلد قبل ثوانٍ.
+
+        **ولا يُستورَد إلا ما ليس في الذاكرة.** لو أُعيد استيراد تحدٍّ
+        استُهلك للتوّ لعاد من القرص بعلامة «غير مُستهلَك»، فانكسر شرط
+        «لمرة واحدة» — وهو شرط أمان لا راحة.
+        """
+        if self.store is None:
+            return
+        try:
+            rows = self.store.load().get("challenges", [])
+        except Exception:  # noqa: BLE001
+            return  # قراءةٌ متعذّرة لا توقف الحفظ — الحفظ أهمّ
+        unknown = [r for r in rows if r.get("challenge_id") not in self._challenges]
+        if unknown:
+            self._load_challenges(unknown)
+
     def _persist(self) -> None:
         """
         يُستدعى بعد كل تغيير في الأجهزة أو الرموز.
@@ -312,6 +336,7 @@ class MobileSecurityService:
         """
         if self.store is None:
             return
+        self._absorb_unknown_challenges()
         now = self.clock()
         self.store.save(
             devices=[
