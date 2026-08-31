@@ -224,6 +224,7 @@ def build_provider_registry(secrets, broker=None) -> ProviderRegistry:
     وبيانات السوق تأتي من الوسيط نفسه لا من طرف ثالث: هو مصدر السعر الذي
     سنُنفّذ عليه، فقياسٌ من مصدرٍ آخر يُدخل فرقاً لا يُفسَّر.
     """
+    from ..live_readonly.capital_bridge import CapitalReadOnlyBridge
     from ..live_readonly.market_data import LiveReadOnlyMarketDataProvider
     from ..providers.ecb_macro import EcbMacroDataProvider
     from ..providers.finnhub_news import FinnhubForexNewsProvider
@@ -245,11 +246,15 @@ def build_provider_registry(secrets, broker=None) -> ProviderRegistry:
     news = FinnhubForexNewsProvider(api_key=finnhub) if finnhub else None
     macro = FredMacroDataProvider(api_key=fred) if fred else EcbMacroDataProvider()
 
+    # جلسة الوسيط تُمرَّر عبر جسرٍ لا مباشرةً: المزوّد كُتب لواجهة
+    # `LiveSession` (`authenticated` و`get`)، وجلسة كابيتال واجهتها أخرى.
+    # وتمريرها مباشرةً كان ينفجر بـAttributeError عند أوّل استعلام —
+    # ولم يمسكه اختبار لأن الوسيط الوهمي بلا جلسة أصلاً.
     market_data = None
     session = getattr(broker, "session", None)
     if session is not None:
         try:
-            market_data = LiveReadOnlyMarketDataProvider(session)
+            market_data = LiveReadOnlyMarketDataProvider(CapitalReadOnlyBridge(session))
         except Exception as exc:  # noqa: BLE001
             logger.warning("تعذّر بناء مزوّد بيانات السوق: %s", type(exc).__name__)
 
