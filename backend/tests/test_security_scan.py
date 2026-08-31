@@ -25,6 +25,13 @@ MOBILE = REPO_ROOT / "mobile"
 SKIP_DIRS = {
     "node_modules", ".git", "__pycache__", ".venv", "venv", ".next",
     ".pytest_cache", ".expo", "dist", "build", "data", "_to_delete",
+    # اعتماديات موردة يولّدها CocoaPods. ليست مصدرنا ولا تُودَع (mobile/.gitignore
+    # يستبعد ios/ كاملاً)، ومسحُها أنتج إنذاراً كاذباً واحداً بعينه:
+    # Pods/boost/.../keyword/private.hpp — ترويسة C++ لا علاقة لها ببياناتنا.
+    #
+    # والاستثناء **للمورَّد وحده، لا لـios/ كلها**: ملفٌ من بياناتها يُنسخ إلى
+    # حزمة التطبيق هو بالضبط ما يحرسه هذا الفحص، فلا يُوسَّع الاستثناء إليه.
+    "Pods", "Carthage",
 }
 
 

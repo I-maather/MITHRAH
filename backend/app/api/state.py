@@ -227,8 +227,8 @@ def build_provider_registry(secrets, broker=None) -> ProviderRegistry:
     from ..live_readonly.capital_bridge import CapitalReadOnlyBridge
     from ..live_readonly.market_data import LiveReadOnlyMarketDataProvider
     from ..providers.ecb_macro import EcbMacroDataProvider
+    from ..providers.faireconomy_calendar import FairEconomyCalendarProvider
     from ..providers.finnhub_news import FinnhubForexNewsProvider
-    from ..providers.fmp_calendar import FmpEconomicCalendarProvider
     from ..providers.fred_macro import FredMacroDataProvider
 
     def key(name: str) -> Optional[str]:
@@ -238,11 +238,20 @@ def build_provider_registry(secrets, broker=None) -> ProviderRegistry:
             return None
         return value or None
 
-    fmp = key("FMP_API_KEY")
     finnhub = key("FINNHUB_API_KEY")
     fred = key("FRED_API_KEY")
 
-    calendar = FmpEconomicCalendarProvider(api_key=fmp) if fmp else None
+    # التقويم: التغذية المجانية وحدها.
+    #
+    # أثبت المسبار أن تقويم FMP **خارج الخطة المجانية** — يعيد صفر أحداث بلا
+    # خطأ. فلا يصلح بديلاً: بديلٌ يعيد صفراً بلا شكوى ليس بديلاً بل تمويه،
+    # وهو بالضبط ما جعلنا نظنّ التقويم عاملاً أسابيع.
+    #
+    # ولا يُجلب هنا. الجلب عند بناء النظام يعني أمرين سيّئين: إقلاعٌ يتعلّق
+    # بشبكةٍ خارجية، وانقطاعٌ عابر لحظةَ الإقلاع يُعطّل الحارس **لعمر
+    # العملية كلها** لأن لا أحد يعيد المحاولة. فالجلب مهمّةٌ مجدولة
+    # (`calendar-refresh`) تعمل عند أول نبضة وكل ساعة، فيتعافى النظام وحده.
+    calendar = FairEconomyCalendarProvider()
     news = FinnhubForexNewsProvider(api_key=finnhub) if finnhub else None
     macro = FredMacroDataProvider(api_key=fred) if fred else EcbMacroDataProvider()
 

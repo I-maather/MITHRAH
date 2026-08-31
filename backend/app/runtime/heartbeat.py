@@ -44,6 +44,7 @@ from ..scheduling import JobKind
 logger = logging.getLogger(__name__)
 
 DECISION_JOB = "decision-loop"
+CALENDAR_JOB = "calendar-refresh"
 
 #: تواتر إعادة التقييم. قصيرٌ كفايةً ليبدو حياً، وطويلٌ كفايةً ألّا يُرهق
 #: الوسيط ولا حدود المزوّدين.
@@ -51,6 +52,11 @@ DEFAULT_INTERVAL_SECONDS = 60
 
 #: تواتر نبضة الحلقة نفسها. المجدول يقرّر ما يستحقّ التشغيل.
 TICK_SECONDS = 1.0
+
+#: تواتر تحديث التقويم الاقتصادي. التغذية أسبوعية، فساعةٌ سخيّة جداً —
+#: لكن الغرض ليس الطزاجة وحدها بل **التعافي**: انقطاعٌ عابر يُصلَح في
+#: الساعة التالية بدل أن يُعطّل الحارس حتى يُعاد تشغيل الخدمة.
+CALENDAR_REFRESH_SECONDS = 3600
 
 
 #: عدد الشموع المطلوبة لأطول استراتيجية (30 + 14 + 2 = 46) بهامش.
@@ -165,6 +171,29 @@ def register_runtime_jobs(state, *, interval_seconds: int = DEFAULT_INTERVAL_SEC
         kind=JobKind.ANALYSIS,
         interval=timedelta(seconds=interval_seconds),
         func=run_decision,
+    )
+
+    def refresh_calendar() -> None:
+        """
+        يُحدّث التقويم الاقتصادي. `READ_ONLY`: يقرأ تغذيةً عامة ولا يلمس شيئاً.
+
+        وهذه المهمة هي ما يجعل الحارس **يتعافى**. لو جُلب التقويم عند الإقلاع
+        وحده، لكان انقطاع شبكةٍ لثوانٍ لحظةَ الإقلاع يُبقي `configured=False`
+        حتى يُعاد تشغيل الخدمة — أي حارسٌ ميّتٌ بلا أن يقول أحدٌ شيئاً.
+
+        وإخفاق الجلب لا يُرفَع: `SafeScheduler.tick` يعزل الخطأ ويسجّله،
+        والمزوّد يبقى غير مُعدّ — فتسقط أهلية التداول. يفشل مغلقاً.
+        """
+        calendar = getattr(state.providers, "calendar", None)
+        refresh = getattr(calendar, "refresh", None)
+        if callable(refresh):
+            refresh()
+
+    state.scheduler.register(
+        CALENDAR_JOB,
+        kind=JobKind.READ_ONLY,
+        interval=timedelta(seconds=CALENDAR_REFRESH_SECONDS),
+        func=refresh_calendar,
     )
 
 

@@ -50,9 +50,14 @@ def main() -> int:
     print(f"\n\033[1m▸ المزوّدون — نداء واحد لكل واحد\033[0m\n")
 
     # ---- التقويم الاقتصادي ------------------------------------------------
+    # التقويم يُجلب بمهمة مجدولة داخل الخدمة، ولا مجدول هنا. فيُطلب الجلب
+    # صراحةً — وإلا لقال المسبار «غير مُعدّ» عن مزوّدٍ سليم لم يُسأل بعد.
     p = registry.calendar
+    if not p.configured and hasattr(p, "refresh"):
+        p.refresh()
     if not p.configured:
-        line("التقويم الاقتصادي", f"{WARN}○{END}", "غير مُعدّ")
+        note = getattr(p, "note_ar", "") or "غير مُعدّ"
+        line("التقويم الاقتصادي", f"{WARN}○{END}", f"غير مُعدّ — {note}")
     else:
         try:
             events = p.events(
