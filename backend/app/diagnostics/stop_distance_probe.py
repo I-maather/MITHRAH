@@ -82,16 +82,17 @@ def main() -> int:
 
     settings = get_settings()
 
-    # ---- السور الأول: Demo حصراً، قبل فتح أي جلسة ------------------------
+    # ---- السور الأول: البيئة مثبَّتة على Demo في الكود لا في الإعداد ------
+    #
+    # المسبار **يفرض** Demo ولا يقرأ `BROKER_MODE` أصلاً: بيئةٌ تُقرأ من
+    # إعدادٍ يمكن أن يتغيّر ليست سوراً — والسور ما لا يُغيَّر من خارج الملف.
+    #
+    # وحسابا Demo والحقيقي عند كابيتال **حسابان منفصلان بنفس الاعتمادات**،
+    # وقد قِيس ذلك: `capital-auth-probe` نجح على مضيف Demo بالأسرار نفسها
+    # التي تخدم الحقيقي. فلا حاجة لتبديل وضع الخادم — وتبديلُه كان سيقطع
+    # قراءة السوق الحيّة عن التطبيق بلا مقابل.
     environment = CapitalEnvironment.DEMO
-    if str(getattr(settings, "broker_mode", "")).upper().endswith("LIVE"):
-        print(
-            f"{BAD}⛔ إعداد الخادم على البيئة الحقيقية.{END}\n"
-            f"   هذا المسبار لا يعمل إلا على Demo. اضبطي BROKER_MODE=CAPITAL_DEMO\n"
-            f"   في بيئة الخادم ثم أعيدي — ولا تُشغّليه على حسابك الحقيقي.",
-            file=sys.stderr,
-        )
-        return 3
+    print(f"{DIM}   البيئة مثبَّتة على Demo في الكود — إعداد الخادم لا يُقرأ هنا.{END}")
 
     secrets = build_secret_provider(env_file=settings.secrets_file, allow_process_env=False)
 
@@ -104,7 +105,14 @@ def main() -> int:
         at=now_utc(),
     )
     adapter = build_capital_adapter(environment, secrets=secrets, execution_lock=lock)
-    adapter.connect()
+    try:
+        adapter.connect()
+    except Exception as exc:  # noqa: BLE001
+        # رسالةٌ تُقرأ بدل أثر استدعاءات. المسبار أداةُ تشخيص، وأداةٌ تنهار
+        # بأثرٍ خام تُضيف عطلاً إلى العطل الذي جاءت تقيسه.
+        print(f"\n{BAD}⛔ تعذّر الاتصال بحساب Demo.{END}", file=sys.stderr)
+        print(f"   {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 1
     print(f"\n{OK}✅{END} متصل — {adapter.name}")
     if adapter.is_live:
         print(f"{BAD}⛔ المحوّل يقول إنه حقيقي. توقّف.{END}", file=sys.stderr)
