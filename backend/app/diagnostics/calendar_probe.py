@@ -24,14 +24,25 @@
 """
 from __future__ import annotations
 
+import time
+
 from app.providers.faireconomy_calendar import REQUEST_HEADERS
 
 #: مُرشَّحو العنوان. الأوّل هو المستعمَل في الكود.
+#:
+#: وقد حُذف `ff_calendar_nextweek.json` بعد أن أثبت المسبار أنه غير موجود —
+#: وكان وجودُه في الكود هو سبب تعطّل التقويم يوماً كاملاً.
 CANDIDATES = (
     ("JSON هذا الأسبوع", "https://nfs.faireconomy.media/ff_calendar_thisweek.json"),
     ("XML هذا الأسبوع", "https://nfs.faireconomy.media/ff_calendar_thisweek.xml"),
-    ("JSON الأسبوع القادم", "https://nfs.faireconomy.media/ff_calendar_nextweek.json"),
 )
+
+#: فاصلٌ بين الطلبات.
+#:
+#: أوّل تشغيلٍ لهذا المسبار أعطى 200، والثاني بعده مباشرةً أعطى **429**.
+#: أي أن المسبار كسر ما جاء يفحصه، ثم قرأ كسرَه تشخيصاً. أداةُ قياس تغيّر
+#: ما تقيسه ليست أداة قياس.
+PAUSE_SECONDS = 3.0
 
 VARIANTS = (
     ("بلا هويّة", {}),
@@ -50,16 +61,21 @@ def main() -> int:
     for label, url in CANDIDATES:
         print(f"  {DIM}{url}{END}")
         for variant, headers in VARIANTS:
+            time.sleep(PAUSE_SECONDS)
             try:
                 response = httpx.get(url, headers=headers, timeout=20)
             except Exception as exc:  # noqa: BLE001
                 print(f"    {BAD}⛔{END} {variant:<10} {type(exc).__name__}: {exc}")
                 continue
 
-            body = response.text[:60].replace("\n", " ")
+            body = " ".join(response.text[:200].split())[:60]
             mark = f"{OK}✅{END}" if response.status_code == 200 else f"{BAD}⛔{END}"
             if response.status_code == 200:
                 reachable = True
+            elif response.status_code == 429:
+                # 429 ليست حجباً بل «سألتَ أكثر مما ينبغي». وقراءتها حجباً
+                # تُرسلنا نبحث عن مصدرٍ بديل عن مصدرٍ سليم.
+                body = "أكثرنا الطلب — لا حجب. أعيدي بعد دقائق. " + body
             print(
                 f"    {mark} {variant:<10} {response.status_code}"
                 f"  {len(response.content)} بايت  ⁦{body}⁩"
@@ -69,8 +85,9 @@ def main() -> int:
     if reachable:
         print(f"{OK}✅ العنوان يُخدَم من هذا الخادم. قارني السطرين: الفرق هو السبب.{END}\n")
         return 0
-    print(f"{BAD}⛔ لا مُرشَّح خُدِم. الحجب على مستوى الشبكة، ولا ترويسة تُصلحه —{END}")
-    print(f"{BAD}   يُبحَث عن مصدر آخر، ولا يُرقَّع هذا.{END}\n")
+    print(f"{BAD}⛔ لا مُرشَّح خُدِم.{END}")
+    print(f"{DIM}   إن كان الرمز 429 فالسبب إلحاحنا نحن — أعيدي بعد دقائق.{END}")
+    print(f"{DIM}   وإن كان غير ذلك فالحجب على مستوى الشبكة، ويُبحَث عن مصدر آخر.{END}\n")
     return 1
 
 

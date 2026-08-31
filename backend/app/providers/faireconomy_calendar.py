@@ -45,9 +45,16 @@ from .http import ProviderTransport
 
 PROVIDER_NAME = "faireconomy-calendar"
 
-#: التغذية الأسبوعية. الأسبوع الجاري يكفي لحارسٍ مداه ساعات.
+#: التغذية الأسبوعية — **عنوانٌ واحد**. الأسبوع الجاري يكفي لحارسٍ مداه ساعات.
+#:
+#: وكان هنا عنوانٌ ثانٍ للأسبوع القادم، **وهو غير موجود**: أثبت المسبار أنه
+#: يعيد 404 دائماً. فكان كل تحديث يجلب الأسبوع الجاري بنجاح ثم يسقط على
+#: الثاني، فيُلغي الجلبة الناجحة كلها بحكم الذرّية — والنتيجة تقويمٌ لا
+#: يمكن أن يُعدّ أبداً، وسببٌ معروض يشير إلى المكان الخطأ.
+#:
+#: والدرس: عنوانٌ كُتب من الذاكرة لا من قياس. نفس عائلة `UNRELIABLE`
+#: و`observed_at_utc` — اسمٌ يبدو صحيحاً ولم يُسأل عنه أحد.
 THIS_WEEK_URL = "https://nfs.faireconomy.media/ff_calendar_thisweek.json"
-NEXT_WEEK_URL = "https://nfs.faireconomy.media/ff_calendar_nextweek.json"
 
 #: أقصى عمر مقبول للتغذية. أقدم من ذلك ⇒ لا يُعتمد عليها.
 #: تغذيةٌ بايتة أخطر من غيابها: الغياب يمنع، والبيات يُطمئن كذباً.
@@ -56,6 +63,17 @@ MAX_FEED_AGE = timedelta(hours=12)
 #: أقلّ عدد أحداث يُتوقَّع في أسبوع عمل. أقلّ منه ⇒ التغذية مبتورة.
 #: صفرُ أحداث هو بالضبط ما أعادته FMP حين مُنعت — ولم نعرف إلا بالمسبار.
 MIN_PLAUSIBLE_EVENTS = 10
+
+#: أقلّ فاصل بين جلبتين ناجحتين.
+#:
+#: التغذية أسبوعية، فلا معنى لسؤالها كل دقيقة — والمضيف يردّ **429** على من
+#: يُلحّ. وقد رأيناها: ستة طلبات في نداءين متتاليين كفت لتحويل 200 إلى 429،
+#: فصار المسبار هو من يكسر ما يفحصه.
+#:
+#: والحارس هنا لا في المجدول وحده: المجدول ليس النداء الوحيد — الاستعلام
+#: يجلب عند الحاجة، والمسبار يجلب، والتطبيق قد يُنعش. فيُوضع القيد حيث
+#: يمرّ الجميع.
+MIN_REFRESH_INTERVAL = timedelta(minutes=20)
 
 #: ترويسات الطلب.
 #:
@@ -116,7 +134,6 @@ class FairEconomyCalendarProvider(EconomicCalendarProvider):
     """
 
     transport: ProviderTransport = None  # type: ignore[assignment]
-    include_next_week: bool = True
 
     _events: tuple[EconomicEvent, ...] = field(default_factory=tuple, init=False)
     _fetched_at: Optional[datetime] = field(default=None, init=False)
@@ -150,16 +167,22 @@ class FairEconomyCalendarProvider(EconomicCalendarProvider):
         return f"{len(self._events)} حدثاً · جُلبت {self._fetched_at:%H:%M} UTC"
 
     # ------------------------------------------------------------------
-    def refresh(self) -> None:
+    def refresh(self, *, force: bool = False) -> None:
         """
         يجلب التغذية ويستبدل المحفوظ **ذرّياً**: إمّا مجموعةٌ صالحة كاملة،
         أو يبقى القديم وتُسجَّل العلّة. لا حالة نصفية.
+
+        ولا يُلحّ: جلبةٌ ناجحة قريبة تجعل النداء بلا أثر. و`force` للمسبار
+        وحده حين يكون الغرض قياس المضيف لا استعمال البيانات.
         """
-        urls = [THIS_WEEK_URL] + ([NEXT_WEEK_URL] if self.include_next_week else [])
+        if not force and self._fetched_at is not None:
+            if (now_utc() - self._fetched_at) < MIN_REFRESH_INTERVAL:
+                return
+
         collected: list[EconomicEvent] = []
         retrieved = now_utc()
 
-        for url in urls:
+        for url in (THIS_WEEK_URL,):
             try:
                 response = self.transport.get(url, headers=REQUEST_HEADERS)
             except Exception as exc:  # noqa: BLE001

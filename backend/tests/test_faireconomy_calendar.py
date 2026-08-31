@@ -17,6 +17,8 @@ from app.intelligence.snapshot import EventCategory, ImpactLevel
 from app.providers.faireconomy_calendar import (
     MAX_FEED_AGE,
     MIN_PLAUSIBLE_EVENTS,
+    MIN_REFRESH_INTERVAL,
+    THIS_WEEK_URL,
     FairEconomyCalendarProvider,
 )
 
@@ -64,9 +66,7 @@ def rows(count: int, *, impact: str = "High", currency: str = "USD",
 
 
 def provider(response=None, raises=None) -> FairEconomyCalendarProvider:
-    return FairEconomyCalendarProvider(
-        transport=FakeTransport(response, raises), include_next_week=False
-    )
+    return FairEconomyCalendarProvider(transport=FakeTransport(response, raises))
 
 
 # ---------------------------------------------------------------------------
@@ -332,3 +332,67 @@ def test_a_non_200_reports_what_the_body_said():
     p.refresh()
     assert "404" in p.note_ar
     assert "blocked" in p.note_ar
+
+
+# ---------------------------------------------------------------------------
+# عنوانٌ واحد، وبلا إلحاح
+# ---------------------------------------------------------------------------
+def test_only_one_url_is_requested():
+    """
+    **العطل الذي منع التقويم من العمل يوماً كاملاً.**
+
+    كان يُجلب عنوانان: الأسبوع الجاري ثم الأسبوع القادم. والثاني **غير
+    موجود** — 404 دائماً. فينجح الأول ثم يسقط الثاني، فتُلغى الجلبة
+    الناجحة كلها بحكم الذرّية. تقويمٌ لا يمكن أن يُعدّ أبداً، وسببٌ معروض
+    يشير إلى المكان الخطأ: «التقويم أعاد 404» بينما التقويم أعطى ١٢٧ حدثاً.
+    """
+    p = provider(Response(200, rows(20)))
+    p.refresh()
+    assert p.transport.calls == [THIS_WEEK_URL]
+
+
+def test_a_recent_successful_fetch_is_not_repeated():
+    """
+    المضيف يردّ 429 على من يُلحّ — رأيناه: ستة طلبات في نداءين متتاليين
+    كفت لتحويل 200 إلى 429. والتغذية أسبوعية، فالإلحاح بلا مقابل.
+    """
+    p = provider(Response(200, rows(20)))
+    p.refresh()
+    p.refresh()
+    assert len(p.transport.calls) == 1
+
+
+def test_the_interval_is_bypassed_only_when_asked():
+    """`force` للمسبار حين يكون الغرض قياس المضيف لا استعمال البيانات."""
+    p = provider(Response(200, rows(20)))
+    p.refresh()
+    p.refresh(force=True)
+    assert len(p.transport.calls) == 2
+
+
+def test_a_failed_fetch_may_be_retried_immediately():
+    """
+    القيد على النجاح لا على الإخفاق. لو قيّد الإخفاق أيضاً لبقي التقويم
+    معطّلاً عشرين دقيقة بعد انقطاعٍ دام ثانية.
+    """
+    p = provider(raises=ConnectionError("down"))
+    p.refresh()
+    p.refresh()
+    assert len(p.transport.calls) == 2
+
+
+def test_too_many_requests_is_reported_as_such():
+    p = provider(Response(429, "<html><body>Rate Limited</body></html>"))
+    p.refresh()
+    assert p.configured is False
+    assert "429" in p.note_ar
+    assert "Rate Limited" in p.note_ar
+    assert "<" not in p.note_ar          # الوسوم تُنزع قبل العرض
+
+
+def test_the_stale_interval_is_far_longer_than_the_refresh_interval():
+    """
+    لو تقارب القيدان لتعذّر التحديث قبل البيات، فسقطت الأهلية دورياً بلا
+    سبب مفهوم.
+    """
+    assert MIN_REFRESH_INTERVAL * 4 < MAX_FEED_AGE
