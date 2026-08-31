@@ -11,3 +11,4 @@ export { StatusPill, ToneDot } from './StatusPill';
 export { Text, type TextTone } from './Text';
 export { Field, Metric } from './Value';
 export { AnimatedNumber } from './AnimatedNumber';
+export { TabBar, TABS } from './TabBar';

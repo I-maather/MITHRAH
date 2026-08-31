@@ -5,6 +5,8 @@ import { StatusBar } from 'expo-status-bar';
 import { Slot, useRouter } from 'expo-router';
 import * as Linking from 'expo-linking';
 
+import { useFonts } from 'expo-font';
+
 import { SessionProvider, useSession } from '@/auth/SessionProvider';
 import { CrashGuard, PrivacyVeil, Text } from '@/components';
 import { applyRtl, rtlState } from '@/i18n';
@@ -89,18 +91,45 @@ export function AppShell(): React.JSX.Element {
   );
 }
 
+/**
+ * بوابة الخطوط.
+ *
+ * الخطوط تُحمَّل قبل أول رسم، وإلا ظهر النص بخط النظام ثم قفز — وقفزةُ الخط
+ * على شاشة أرقام تبدو عطلاً لا انتقالاً.
+ *
+ * **والفشل لا يُنتج شاشة سوداء.** `error` تُعامَل كـ`loaded`: يُرسَم التطبيق
+ * بخط النظام ويعمل كل شيء. خطٌّ ناقص عيبٌ بصري؛ وشاشةٌ سوداء عطلٌ صامت —
+ * وقد حدث في هذا المشروع مرة، ولا يتكرّر من بابٍ فتحتُه أنا.
+ */
+function FontGate({ children }: { children: React.ReactNode }): React.JSX.Element | null {
+  const [loaded, error] = useFonts({
+    'IBMPlexSansArabic-Regular': require('../assets/fonts/IBMPlexSansArabic-Regular.ttf'),
+    'IBMPlexSansArabic-Medium': require('../assets/fonts/IBMPlexSansArabic-Medium.ttf'),
+    'IBMPlexSansArabic-SemiBold': require('../assets/fonts/IBMPlexSansArabic-SemiBold.ttf'),
+    'IBMPlexSansArabic-Bold': require('../assets/fonts/IBMPlexSansArabic-Bold.ttf'),
+    Newsreader: require('../assets/fonts/Newsreader.ttf'),
+    ReemKufi: require('../assets/fonts/ReemKufi.ttf'),
+  });
+  if (!loaded && !error) {
+    return null;
+  }
+  return <>{children}</>;
+}
+
 export default function RootLayout(): React.JSX.Element {
   return (
     // **الحارس فوق كل شيء** — فوق السمة والجلسة معاً. لو انهار أيٌّ منهما
     // ظهرت رسالة عربية بدل شاشة سوداء صمّاء. وقد ظهرت الشاشة السوداء فعلاً.
     <CrashGuard>
-      <ThemeProvider>
-        <SafeAreaProvider>
-          <SessionProvider>
-            <AppShell />
-          </SessionProvider>
-        </SafeAreaProvider>
-      </ThemeProvider>
+      <FontGate>
+        <ThemeProvider>
+          <SafeAreaProvider>
+            <SessionProvider>
+              <AppShell />
+            </SessionProvider>
+          </SafeAreaProvider>
+        </ThemeProvider>
+      </FontGate>
     </CrashGuard>
   );
 }

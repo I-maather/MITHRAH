@@ -2,7 +2,7 @@ import React from 'react';
 import { Text as RNText, type StyleProp, type TextStyle } from 'react-native';
 
 import { useTheme } from '@/theme';
-import { fonts } from '@/theme/tokens';
+import { fontFamilies } from '@/theme/tokens';
 import type { TypographyKey } from '@/theme/tokens';
 import { textStart } from '@/i18n/rtl';
 
@@ -55,6 +55,8 @@ export function Text({
 }: TextProps): React.JSX.Element {
   const theme = useTheme();
   const scale = theme.typography[variant];
+  //: الأرقام تأخذ الوجه السيريفي: كل ما هو `tabular` أو من مقاسات `numeric`.
+  const numbersFace = tabular || variant === 'numeric' || variant === 'numericLarge';
 
   const colorFor = (): string => {
     switch (tone) {
@@ -101,12 +103,9 @@ export function Text({
           writingDirection: 'rtl',
         },
         tabular ? { fontVariant: ['tabular-nums'] } : null,
-        // الأرقام تأخذ خطها الخاص: كل ما هو `tabular` أو من مقاسات `numeric`.
-        tabular || variant === 'numeric' || variant === 'numericLarge'
-          ? { fontFamily: fonts.numeric }
-          : fonts.arabic
-            ? { fontFamily: fonts.arabic }
-            : null,
+        // العائلة تحمل الوزن، فيُسقَط `fontWeight` — وإلا اصطنع iOS وزناً مشوّهاً.
+        { fontFamily: numbersFace ? fontFamilies.numeric : fontFamilies.arabic[scale.weight],
+          fontWeight: undefined },
         style,
       ]}
     >

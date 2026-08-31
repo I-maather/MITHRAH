@@ -48,3 +48,10 @@ mobile/.expo/
 mobile/ios/
 mobile/android/
 mobile/dist/
+
+# نسخ Finder المكرّرة — تُستورَد بالخطأ فتُنتج سلوكاً غامضاً
+* [0-9].py
+* [0-9].ts
+* [0-9].tsx
+* [0-9].md
+mobile/assets/fonts/*.zip

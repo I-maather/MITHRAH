@@ -4,6 +4,7 @@ import { View } from 'react-native';
 import { useEndpoint } from '@/api/useEndpoint';
 import { ApiError } from '@/api/client';
 import {
+  AnimatedNumber,
   Banner,
   Card,
   Divider,
@@ -33,9 +34,21 @@ import {
 /**
  * لوحة الرئيسية.
  *
- * ترتيب البطاقات مقصود: **ما يوقف قبل ما يشجّع**. حالة النظام والقاطع أولاً،
- * ثم المخاطرة، ثم القرار، ثم القراءة. من يفتح التطبيق في لحظة توتّر يجب أن
- * ترى «هل النظام يعمل؟ وكم بقي لي؟» قبل أي شيء آخر.
+ * ## لماذا أُعيد ترتيبها
+ *
+ * كانت **تسع بطاقات متساوية الوزن** فوق بعضها، فلا شيء فيها أهمّ من شيء —
+ * والشاشة التي كل شيء فيها مهمّ لا شيء فيها مهمّ. وقياس 69 لقطة من 18 تطبيقاً
+ * وجد أن **لا واحد منها يعرض «لماذا لم أتداول»**. فهذا هو الفراغ، وهذا موضعه:
+ * أول ما تقع عليه العين، بحجم العنوان لا بحجم الحاشية.
+ *
+ * الترتيب الآن يجيب أسئلة بترتيب طرحها:
+ *   1. ماذا قرّرتَ اليوم، ولماذا؟   ← الحكم، بحجم العنوان
+ *   2. كم بقي لي؟                  ← المتبقّي رقماً كبيراً متحرّكاً
+ *   3. هل النظام بخير؟             ← شريط حالة مضغوط
+ *   4. التفاصيل                    ← تحت، لمن أرادها
+ *
+ * وبطاقة «الشاشات» حُذفت: كانت قائمة تنقّل مرسومة كبطاقة، وحلّ محلّها شريط
+ * التبويبات أسفل الشاشة.
  *
  * كل قيمة معروضة تأتي من الخادم. ما لم يصل يُقال «غير متاح» ولا يُخترع.
  */
@@ -73,6 +86,18 @@ export default function HomeScreen(): React.JSX.Element {
   const p = profiles.data;
   const pos = position.data;
 
+  /** المتبقّي رقماً — للعدّ المتدرّج. نصٌّ غير قابل للتحويل ⇒ `null` بلا تخمين. */
+  const remainingToday = ((): number | null => {
+    const v = Number(r?.risk_remaining_today?.replace(/,/g, ''));
+    return Number.isFinite(v) ? v : null;
+  })();
+
+  /** الربح غير المحقّق رقماً. نصٌّ غير قابل للتحويل ⇒ يُعرض كما هو بلا حركة. */
+  const unrealised = ((): number | null => {
+    const v = Number(pos?.unrealised_pnl?.replace(/[,\s+]/g, '').replace('−', '-'));
+    return Number.isFinite(v) ? v : null;
+  })();
+
   const riskRatio = ((): number | null => {
     if (r === null) {
       return null;
@@ -106,6 +131,62 @@ export default function HomeScreen(): React.JSX.Element {
         <ErrorState error={status.error} onRetry={refreshAll} />
       ) : null}
 
+      {/* ---- الحكم: أول ما تقع عليه العين ---- */}
+      {s !== null || d !== null ? (
+        <View style={{ gap: theme.spacing.sm, paddingBottom: theme.spacing.xs }}>
+          <Text variant="micro" tone="tertiary">
+            اليوم
+          </Text>
+          <Text variant="display" testID="home-verdict">
+            {d !== null && d.decision !== 'NO_TRADE'
+              ? presentDecision(d.decision, d.decision_ar).labelAr
+              : 'لم أتداول'}
+          </Text>
+          {s !== null && s.no_trade_reason_ar !== null ? (
+            <Text variant="body" tone="secondary" testID="no-trade-reason">
+              {s.no_trade_reason_ar}
+            </Text>
+          ) : d !== null && d.explanation_ar !== null ? (
+            <Text variant="body" tone="secondary" testID="decision-explanation">
+              {d.explanation_ar}
+            </Text>
+          ) : null}
+          {d?.blocking_reasons_ar.map((reason, index) => (
+            <View
+              key={`${index}-${reason}`}
+              style={{ flexDirection: 'row', gap: theme.spacing.sm }}
+              accessible
+              accessibilityRole="text"
+              accessibilityLabel={reason}
+            >
+              <Text variant="caption" tone="tertiary">
+                ·
+              </Text>
+              <Text variant="caption" tone="secondary" style={{ flex: 1 }}>
+                {reason}
+              </Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+
+      {/* ---- كم بقي لي ---- */}
+      {r !== null ? (
+        <Card testID="risk-card" title={t.home.risk}>
+          <RiskMeter
+            testID="risk-meter-daily"
+            label="المتبقّي من مخاطرة اليوم"
+            usedLabel={r.risk_used_today}
+            remainingLabel={r.risk_remaining_today}
+            remainingValue={remainingToday}
+            ratio={riskRatio}
+          />
+          {r.two_loss_lock_active ? (
+            <Banner tone="negative" title="قفل الخسارتين مُفعَّل" body="لا دخول جديد اليوم." />
+          ) : null}
+        </Card>
+      ) : null}
+
       {/* ---- حالة النظام ---- */}
       {s !== null ? (
         <Card testID="system-card" title={t.home.systemState}>
@@ -118,7 +199,9 @@ export default function HomeScreen(): React.JSX.Element {
             {s.kill_switch.active ? (
               <StatusPill testID="killswitch-pill" label="قاطع الطوارئ مُفعَّل" tone="negative" />
             ) : null}
-            {s.locally_paused ? (
+            {/* الشارة الثانية تظهر فقط إن لم تقلها المرحلة — كانت تُعرض مرّتين. */}
+            {s.locally_paused &&
+            !presentSystemPhase(s.system_state, s.system_state_ar).labelAr.includes('موقوف') ? (
               <StatusPill testID="paused-pill" label="موقوف محلياً" tone="caution" />
             ) : null}
           </View>
@@ -161,27 +244,16 @@ export default function HomeScreen(): React.JSX.Element {
         </Card>
       ) : null}
 
-      {/* ---- المخاطرة ---- */}
+      {/* ---- تفاصيل الأسبوع ---- */}
       {r !== null ? (
-        <Card testID="risk-card" title={t.home.risk}>
-          <RiskMeter
-            testID="risk-meter-daily"
-            label="اليوم"
-            usedLabel={r.risk_used_today}
-            remainingLabel={r.risk_remaining_today}
-            ratio={riskRatio}
-          />
-          <Divider />
-          <Field label="الأسبوع — المستهلك" value={r.risk_used_week} />
-          <Field label="الأسبوع — المتبقي" value={r.risk_remaining_week} />
+        <Card testID="risk-week-card" title="الأسبوع">
+          <Field label="المستهلَك" value={r.risk_used_week} />
+          <Field label="المتبقّي" value={r.risk_remaining_week} />
           <Field
             label="المسافة إلى قاطع الطوارئ"
             value={r.distance_to_kill_switch}
             tone="caution"
           />
-          {r.two_loss_lock_active ? (
-            <Banner tone="negative" title="قفل الخسارتين مُفعَّل" body="لا دخول جديد اليوم." />
-          ) : null}
         </Card>
       ) : null}
 
@@ -223,45 +295,12 @@ export default function HomeScreen(): React.JSX.Element {
             value={d.score === null ? null : `${d.score.total} / ${d.score.max}`}
             large
           />
-          {d.explanation_ar !== null ? (
-            <Text variant="caption" tone="secondary" testID="decision-explanation">
-              {d.explanation_ar}
-            </Text>
-          ) : null}
           <NavRow
             testID="nav-decision"
             label={t.nav.decision}
             hint={t.decision.descriptiveOnly}
             href="/(app)/decision"
           />
-        </Card>
-      ) : null}
-
-      {/* ---- سبب الامتناع ---- */}
-      {(s !== null && s.no_trade_reason_ar !== null) ||
-      (d !== null && d.blocking_reasons_ar.length > 0) ? (
-        <Card testID="no-trade-card" title={t.home.noTrade}>
-          {s !== null && s.no_trade_reason_ar !== null ? (
-            <Text variant="body" testID="no-trade-reason">
-              {s.no_trade_reason_ar}
-            </Text>
-          ) : null}
-          {d?.blocking_reasons_ar.map((reason, index) => (
-            <View
-              key={`${index}-${reason}`}
-              style={{ flexDirection: 'row', gap: theme.spacing.sm }}
-              accessible
-              accessibilityRole="text"
-              accessibilityLabel={reason}
-            >
-              <Text variant="caption" tone="tertiary">
-                ·
-              </Text>
-              <Text variant="caption" tone="secondary" style={{ flex: 1 }}>
-                {reason}
-              </Text>
-            </View>
-          ))}
         </Card>
       ) : null}
 
@@ -307,12 +346,35 @@ export default function HomeScreen(): React.JSX.Element {
           <>
             <Field label={t.position.instrument} value={pos.instrument_ar ?? pos.instrument} />
             <Field label={t.position.direction} value={pos.direction_ar} />
-            <Field
-              label={t.position.unrealised}
-              value={pos.unrealised_pnl}
-              tone={presentPnlTone(pos.unrealised_pnl_sign)}
-              large
-            />
+            {/*
+              الربح غير المحقّق: الرقم الوحيد في التطبيق الذي يتحرّك لحظياً.
+              يأخذ الإشارة `+` أو `−` مع اللون — فاللون يعطي السرعة، والإشارة
+              تضمن أن المعنى لا يضيع في التدرّج الرمادي ولا عند عمى الألوان.
+            */}
+            <View style={{ gap: theme.spacing.xs }}>
+              <Text variant="caption" tone="secondary">
+                {t.position.unrealised}
+              </Text>
+              {unrealised !== null ? (
+                <AnimatedNumber
+                  value={unrealised}
+                  decimals={2}
+                  unit="دولار"
+                  variant="numericLarge"
+                  signed
+                  testID="unrealised-pnl"
+                />
+              ) : (
+                <Text
+                  variant="numericLarge"
+                  tone={presentPnlTone(pos.unrealised_pnl_sign)}
+                  tabular
+                  testID="unrealised-pnl"
+                >
+                  {pos.unrealised_pnl ?? '—'}
+                </Text>
+              )}
+            </View>
             <NavRow
               testID="nav-position"
               label={t.nav.position}
@@ -327,29 +389,7 @@ export default function HomeScreen(): React.JSX.Element {
         )}
       </Card>
 
-      {/* ---- التنقّل ---- */}
-      <Card testID="nav-card" title="الشاشات">
-        <NavRow testID="nav-intelligence" label={t.nav.intelligence} href="/(app)/intelligence" />
-        <NavRow testID="nav-history" label={t.nav.history} href="/(app)/history" />
-        <NavRow testID="nav-performance" label={t.nav.performance} href="/(app)/performance" />
-        <NavRow testID="nav-providers" label={t.nav.providers} href="/(app)/providers" />
-        <NavRow
-          testID="nav-notifications"
-          label={t.nav.notifications}
-          href="/(app)/notifications"
-        />
-        <NavRow testID="nav-audit" label={t.nav.audit} href="/(app)/audit" />
-        <NavRow testID="nav-system" label={t.nav.system} href="/(app)/system" />
-        <NavRow testID="nav-settings" label={t.nav.settings} href="/(app)/settings" />
-        <NavRow
-          testID="nav-emergency"
-          label={t.nav.emergency}
-          hint={t.emergency.intro}
-          href="/(app)/emergency"
-          badge="تقليل المخاطرة"
-          badgeTone="negative"
-        />
-      </Card>
+      {/* التنقّل صار في شريط التبويبات أسفل الشاشة — لا قائمةً مرسومة كبطاقة. */}
 
       <Text variant="micro" tone="tertiary" testID="home-no-execution">
         {t.common.noExecution}

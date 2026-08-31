@@ -1,0 +1,634 @@
+<title>مآثر — مقترح الشاشات</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=IBM+Plex+Mono:wght@400;500&family=Reem+Kufi:wght@400;600;700&family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=Newsreader:opsz,wght@6..72,300;6..72,400;6..72,500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink900:#16161A; --ink700:#33322F; --ink500:#4F4D48; --ink300:#6B6963;
+  --paper0:#FFFFFF; --paper50:#F3F2F0; --paper100:#EAE8E5; --paper200:#DEDCD8; --paper300:#CBC8C3;
+  --night950:#100F0E; --night900:#181716; --night800:#201F1D; --night700:#3A3734; --night600:#57534E;
+  --glow0:#F4F2EE; --glow200:#D6D3CD; --glow400:#A5A19A; --glow600:#807C74;
+  --jamr:#B85A26; --jamrDark:#D97B3C;
+  --nakhl:#1B7A4B; --nakhlDark:#4BD08D;
+  --rumman:#B32B31; --rummanDark:#F0736F;
+  --kathib:#8A6A1F; --kathibDark:#D8B45A;
+
+  --ar:'IBM Plex Sans Arabic', 'SF Arabic', 'Geeza Pro', system-ui, sans-serif;
+  /* أميري — خط العناوين وجُمل الحكم. هو المعتمَد في صفحة الاتجاهات، وأُعيد هنا. */
+  --disp:'Amiri', 'Times New Roman', serif;
+  /* ريم كوفي: اللوجو وحده. متغيّر مستقل حتى لا يتسرّب إلى أي شيء آخر. */
+  --kufi:'Reem Kufi', var(--ar);
+  --num:'Newsreader', Georgia, serif;
+  --mono:'IBM Plex Mono', ui-monospace, monospace;
+
+  --page:#EFEDEA; --pageInk:var(--ink900); --pageMute:var(--ink500); --pageLine:#D8D5D0; --card:#fff;
+}
+:root[data-theme="dark"]{ --page:#0C0B0A; --pageInk:var(--glow0); --pageMute:var(--glow400); --pageLine:#2A2825; --card:#181716; }
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){ --page:#0C0B0A; --pageInk:var(--glow0); --pageMute:var(--glow400); --pageLine:#2A2825; --card:#181716; } }
+
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--pageInk);font-family:var(--ar);direction:rtl;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding:56px 24px 96px}
+
+h1{font-family:var(--disp);font-weight:700;font-size:clamp(30px,4.4vw,46px);line-height:1.18;margin:0 0 10px;letter-spacing:-.01em}
+h2{font-family:var(--disp);font-weight:600;font-size:clamp(20px,2.6vw,27px);margin:0 0 6px}
+h3{font-family:var(--disp);font-weight:600;font-size:17px;margin:0 0 4px}
+p{line-height:1.75;margin:0 0 12px;color:var(--pageMute);font-size:15px}
+.lede{font-size:17px;color:var(--pageInk);max-width:68ch}
+.eyebrow{font-family:var(--mono);font-size:11.5px;letter-spacing:.14em;color:var(--pageMute);margin:0 0 14px;font-weight:500}
+hr.sep{border:0;border-top:1px solid var(--pageLine);margin:64px 0 40px}
+.sec-head{display:flex;align-items:baseline;gap:14px;margin-bottom:8px}
+.sec-num{font-family:var(--num);font-size:13px;color:var(--jamr);letter-spacing:.08em}
+:root[data-theme="dark"] .sec-num{color:var(--jamrDark)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .sec-num{color:var(--jamrDark)}}
+
+/* ---------- verdict ---------- */
+.verdict{border:1px solid var(--pageLine);background:var(--card);padding:26px 28px;margin:28px 0 12px}
+.verdict .grade{font-family:var(--disp);font-size:15px;letter-spacing:.1em;color:var(--rumman);font-weight:700}
+:root[data-theme="dark"] .verdict .grade{color:var(--rummanDark)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .verdict .grade{color:var(--rummanDark)}}
+.vgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:2px;background:var(--pageLine);border:1px solid var(--pageLine);margin:22px 0 8px}
+.vcell{background:var(--card);padding:18px 20px}
+.vcell .n{font-family:var(--num);font-size:30px;line-height:1;display:block;margin-bottom:8px}
+.vcell .l{font-size:13px;color:var(--pageMute);line-height:1.6}
+.bad{color:var(--rumman)} .ok{color:var(--nakhl)} .warn{color:var(--kathib)}
+:root[data-theme="dark"] .bad{color:var(--rummanDark)} :root[data-theme="dark"] .ok{color:var(--nakhlDark)} :root[data-theme="dark"] .warn{color:var(--kathibDark)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .bad{color:var(--rummanDark)}:root:not([data-theme="light"]) .ok{color:var(--nakhlDark)}:root:not([data-theme="light"]) .warn{color:var(--kathibDark)}}
+
+/* ---------- laws ---------- */
+.laws{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:2px;background:var(--pageLine);border:1px solid var(--pageLine)}
+.law{background:var(--card);padding:22px 22px 24px}
+.law .k{font-family:var(--num);font-size:12px;color:var(--pageMute);letter-spacing:.1em;display:block;margin-bottom:10px}
+.law h3{margin-bottom:8px}
+.law p{font-size:13.5px;margin:0;line-height:1.7}
+
+/* ---------- the rule (signature) ---------- */
+.ruledemo{border:1px solid var(--pageLine);background:var(--card);padding:30px 28px}
+.rl{margin:0 0 26px}
+.rl:last-child{margin-bottom:0}
+.rl-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:9px}
+.rl-lab{font-size:13px;color:var(--pageMute)}
+.rl-val{font-family:var(--num);font-size:15px}
+.hadd{position:relative;height:14px}
+.hadd .base{position:absolute;top:6px;right:0;left:0;height:1px;background:var(--pageLine)}
+.hadd .fill{position:absolute;top:6px;right:0;height:1px;background:currentColor;opacity:.55}
+.hadd .tick{position:absolute;top:0;width:1.5px;height:13px;background:var(--jamr)}
+:root[data-theme="dark"] .hadd .tick{background:var(--jamrDark)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .hadd .tick{background:var(--jamrDark)}}
+.hadd .mark{position:absolute;top:2px;width:1px;height:5px;background:var(--pageLine)}
+
+/* ---------- phone ---------- */
+.screens{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:44px 32px;margin-top:34px}
+.scr{}
+.scr-meta{margin-bottom:14px}
+.scr-meta .tag{display:inline-block;font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;color:var(--pageMute);border:1px solid var(--pageLine);padding:3px 9px;margin-bottom:9px;border-radius:99px}
+.scr-meta h3{font-size:19px;margin-bottom:6px}
+.scr-meta .was{font-size:13px;line-height:1.7;color:var(--pageMute);margin:0 0 5px;padding-right:14px;border-right:2px solid var(--rumman)}
+.scr-meta .now{font-size:13px;line-height:1.7;color:var(--pageInk);margin:0;padding-right:14px;border-right:2px solid var(--nakhl)}
+:root[data-theme="dark"] .scr-meta .was{border-color:var(--rummanDark)}
+:root[data-theme="dark"] .scr-meta .now{border-color:var(--nakhlDark)}
+
+.phone{width:100%;max-width:340px;aspect-ratio:340/700;background:var(--night950);border:1px solid #2A2825;border-radius:30px;overflow:hidden;display:flex;flex-direction:column;color:var(--glow0);font-size:12px;position:relative}
+.ph-status{display:flex;justify-content:space-between;padding:12px 20px 4px;font-family:var(--num);font-size:10.5px;color:var(--glow600)}
+.ph-head{padding:6px 20px 12px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--night800)}
+.ph-head .t{font-family:var(--disp);font-size:18px;font-weight:700;color:var(--glow0)}
+.ph-head .r{display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--glow400)}
+.dot{width:5px;height:5px;border-radius:50%;background:var(--jamrDark);display:inline-block}
+.dot.off{background:var(--night600)}
+.ph-body{flex:1;overflow:hidden;padding:16px 20px;display:flex;flex-direction:column;gap:14px}
+.ph-tabs{display:flex;border-top:1px solid var(--night800);padding:9px 10px 14px;gap:4px}
+.ph-tabs span{flex:1;text-align:center;font-size:11px;color:var(--glow600);padding:6px 0;border-radius:7px}
+.ph-tabs span.on{color:#fff;background:var(--jamrDark)}
+
+/* phone internals */
+.hero{padding-bottom:2px}
+.hero .k{font-size:10.5px;color:var(--glow600);letter-spacing:.1em;margin-bottom:7px}
+.hero .v{font-family:var(--disp);font-size:27px;font-weight:700;line-height:1.28;color:var(--glow0)}
+.hero .v.num{font-family:var(--num);font-size:38px;font-weight:400;letter-spacing:-.01em}
+.hero .s{font-size:11.5px;color:var(--glow400);line-height:1.65;margin-top:7px}
+.blk{border-top:1px solid var(--night800);padding-top:12px}
+.blk .k{font-size:10.5px;color:var(--glow600);letter-spacing:.08em;margin-bottom:9px}
+.row{display:flex;justify-content:space-between;align-items:baseline;padding:5px 0;font-size:11.5px;color:var(--glow200)}
+.row .v{font-family:var(--num);font-size:12.5px;color:var(--glow0)}
+.row .m{color:var(--glow600)}
+.pos{color:var(--nakhlDark)} .neg{color:var(--rummanDark)} .cau{color:var(--kathibDark)}
+.pill{display:inline-block;font-size:10px;padding:2px 7px;border:1px solid var(--night700);color:var(--glow400);border-radius:2px}
+.pill.live{border-color:var(--jamrDark);color:var(--jamrDark)}
+.pill.stop{border-color:var(--rummanDark);color:var(--rummanDark)}
+.empty{border:1px dashed var(--night700);padding:16px;text-align:center}
+.empty .e1{font-family:var(--disp);font-weight:700;font-size:16px;color:var(--glow200);margin-bottom:6px}
+.empty .e2{font-size:11px;color:var(--glow600);line-height:1.65}
+.btn{display:block;text-align:center;padding:10px;border:1px solid var(--night700);font-size:12px;color:var(--glow200);margin-top:auto}
+.btn.danger{border-color:var(--rummanDark);color:var(--rummanDark)}
+.hadd.d .base{background:var(--night700)}
+.hadd.d .mark{background:var(--night700)}
+.spark{display:flex;align-items:flex-end;gap:2px;height:38px;margin:4px 0}
+.spark i{flex:1;background:var(--night700);display:block}
+.spark i.up{background:var(--nakhlDark);opacity:.8}
+.spark i.dn{background:var(--rummanDark);opacity:.8}
+.wordmark{font-family:var(--kufi);font-weight:700;font-size:34px;color:var(--glow0);position:relative;letter-spacing:.02em}
+
+/* toggle */
+.tog{position:fixed;top:14px;left:14px;z-index:9;display:flex;gap:0;border:1px solid var(--pageLine);background:var(--card)}
+.tog button{font-family:var(--ar);font-size:12px;padding:7px 13px;background:none;border:0;color:var(--pageMute);cursor:pointer}
+.tog button[aria-pressed="true"]{background:var(--jamr);color:#fff}
+
+table{width:100%;border-collapse:collapse;font-size:13.5px;margin:14px 0}
+th,td{text-align:right;padding:10px 12px;border-bottom:1px solid var(--pageLine);vertical-align:top}
+th{font-weight:600;font-size:12px;color:var(--pageMute);letter-spacing:.05em}
+.scrollx{overflow-x:auto}
+ol.next{counter-reset:n;list-style:none;padding:0;margin:16px 0 0}
+ol.next li{counter-increment:n;position:relative;padding:0 34px 16px 0;font-size:14.5px;line-height:1.7}
+ol.next li::before{content:counter(n);position:absolute;right:0;top:1px;font-family:var(--num);font-size:13px;color:var(--jamr);border:1px solid var(--pageLine);width:22px;height:22px;display:grid;place-items:center}
+</style>
+
+<div class="tog" role="group" aria-label="النمط">
+  <button id="bL" aria-pressed="false">فاتح</button>
+  <button id="bD" aria-pressed="false">داكن</button>
+</div>
+
+<div class="wrap">
+
+<p class="eyebrow">بوابة G5 — تجربة وهوية · مراجعة مستقلة · ٣١ أغسطس ٢٠٢٦</p>
+<h1>مآثر — مقترح الشاشات الأربع عشرة</h1>
+<p class="lede">هذا ليس تلميعاً للموجود. الفرق راجعت النسخة المشحونة على جوالك، وحكمها أنها <strong>لا تُعتمد</strong>. ما يلي هو المقترح البديل لكل شاشة، قبل أي نشر.</p>
+
+<div class="verdict">
+  <p class="grade">الحكم: REWORK — الفريقان غير راضيين</p>
+  <p style="margin-top:10px">لسنا غير راضين عن اللون والخط؛ هذان صحيحان. نحن غير راضين لأن <strong>القرار البصري توقّف عند الطبقة السطحية</strong>: طُبّق نسق ألوان وطباعة على هيكل شاشات لم يُعَد التفكير فيه. أربع عشرة شاشة، منها شاشة واحدة أُعيد تصميمها فعلاً (الرئيسية)، وثلاث عشرة لا تزال قوائم بطاقات مرتّبة من الأعلى إلى الأسفل بلا تسلسل ولا حالة صفرية ولا صوت.</p>
+  <p style="margin:0">وهذا هو الفرق بين «تطبيق نظيف» و«منتج له رأي». أنتِ طلبتِ الثاني.</p>
+</div>
+
+<div class="vgrid">
+  <div class="vcell"><span class="n">١٤</span><span class="l">شاشة في التطبيق. أربع منها فقط لها تبويب؛ العشر الباقيات تُبلَغ بالتنقّل الداخلي.</span></div>
+  <div class="vcell"><span class="n bad">١٣</span><span class="l">شاشة بلا حالة صفرية مصمَّمة — وهي الحالة التي سترينها ٩٠٪ من الوقت في أول شهر.</span></div>
+  <div class="vcell"><span class="n bad">٠</span><span class="l">عنصر بصري توقيعي مُنفَّذ. النسق كله بطاقات ومسافات، وهذا لا يُميّز.</span></div>
+  <div class="vcell"><span class="n warn">٣×</span><span class="l">تكرار كلمة «الرئيسية» في شاشة واحدة: الهيدر، والعنوان، والتبويب.</span></div>
+</div>
+
+<hr class="sep">
+
+<div class="sec-head"><span class="sec-num">٠٠</span><h2>الطباعة — عودة إلى المعتمَد</h2></div>
+<p class="lede">النظام الطباعي المعتمَد في صفحة الاتجاهات كان <strong>أربعة وجوه</strong>: أميري للعناوين وجُمل الحكم، وبلكس للمتن، ونيوزريدر للأرقام، وبلكس مونو للوسوم الصغيرة. وفي النسخة الأولى من هذه الورقة استبدلتُ أميري بريم كوفي بلا استئذان — وهو تغيير قرار معتمَد بصمت. أُعيد أميري إلى موضعه الآن، وحُصر ريم كوفي في اللوجو وحده.</p>
+<div class="laws">
+  <div class="law"><span class="k">العناوين والحكم</span><h3 style="font-family:var(--disp);font-weight:700;font-size:25px">أميري — Amiri</h3><p>هو الوجه الذي يحمل الصوت: عناوين الأقسام، واسم الشاشة، وجملة الحكم داخل الجوال. نسخيٌّ مفتوح الحروف، يقرأ عربياً لا مترجَماً.</p></div>
+  <div class="law"><span class="k">نصّ الواجهة</span><h3 style="font-family:var(--ar);font-weight:600;font-size:19px">IBM Plex Sans Arabic</h3><p>المتن والأسطر والتسميات. أربعة أوزان مثبَّتة كملفّات مستقلّة، لأن <code>fontWeight</code> غير موثوق على iOS مع عائلة مخصّصة.</p></div>
+  <div class="law"><span class="k">الأرقام</span><h3 style="font-family:var(--num);font-weight:400;font-size:22px">Newsreader — ٠١٢٣٤٥٦٧٨٩</h3><p>مستقلّ عن نصّ الواجهة عمداً: التطبيق تسعون بالمئة منه أرقام، والفصل بين ٠ و٨ و٦ و٩ أوضح به على الشاشة الصغيرة.</p></div>
+  <div class="law"><span class="k">اللوجو فقط</span><h3 style="font-family:var(--kufi);font-weight:700;font-size:28px;letter-spacing:.02em">مآثر</h3><p><strong>هذا هو الموضع الوحيد في الصفحة كلها الذي يظهر فيه ريم كوفي</strong> — وهو موضعه الوحيد في التطبيق أيضاً: العلامة وشاشة البداية. ولا يدخل واجهةً أبداً.</p></div>
+</div>
+
+<div class="verdict" style="margin-top:26px">
+  <p class="grade">فجوة مثبَّتة: المعتمَد ≠ المنفَّذ</p>
+  <p style="margin:10px 0 0"><strong>أميري غير موجود في التطبيق إطلاقاً.</strong> ملفّات الخطوط المثبَّتة في <code>assets/fonts/</code> هي: بلكس بأوزانه الأربعة، ونيوزريدر، وريم كوفي، وثلاثة نوتو غير مستعملة. <strong>ولا ملفّ أميري واحد.</strong> و<code>tokens.ts</code> يعرّف <code>display: 'ReemKufi'</code> — أي أن الاتجاه الذي اعتمدتِه لم يصل إلى الكود قط، وهذا سبب إضافي لشعورك بأن الهوية لم تُطبَّق على الجوال.</p>
+  <p style="margin:10px 0 0">الإصلاح: تثبيت <code>Amiri-Regular.ttf</code> و<code>Amiri-Bold.ttf</code>، وتغيير <code>display</code> في <code>tokens.ts</code> من ReemKufi إلى Amiri، وإضافة متغيّر <code>logo</code> منفصل يحمل ReemKufi. ويبقى ريم كوفي محمَّلاً — للّوجو وحده.</p>
+</div>
+
+<hr class="sep">
+
+<div class="sec-head"><span class="sec-num">٠١</span><h2>القوانين الخمسة</h2></div>
+<p class="lede" style="margin-bottom:22px">قبل أي شاشة، خمسة قوانين تحكم الأربع عشرة كلها. القانون الذي لا يُطبَّق في كل شاشة ليس قانوناً — وهذا بالضبط ما حصل في النسخة الحالية.</p>
+
+<div class="laws">
+  <div class="law"><span class="k">١</span><h3>الحكم أولاً، الدليل بعده</h3><p>كل شاشة تبدأ بجملة واحدة بالعربية تقول الخلاصة. الأرقام والجداول تأتي تحتها كإسناد. لا شاشة تبدأ بجدول.</p></div>
+  <div class="law"><span class="k">٢</span><h3>«الحدّ» هو التوقيع</h3><p>عنصر واحد يقيس موضع قيمة داخل مدى: خط رفيع + علامة جمرية واحدة. يتكرّر في كل شاشة تحمل حدّاً — فيصير النظام معروفاً من عنصر لا من لون.</p></div>
+  <div class="law"><span class="k">٣</span><h3>الفراغ حالة، لا خطأ</h3><p>«لا صفقات» ليست شاشة فارغة. هي جملة تشرح <em>لماذا</em> لا صفقات وما الشرط الذي سيغيّر ذلك. تُصمَّم كما تُصمَّم الحالة الممتلئة.</p></div>
+  <div class="law"><span class="k">٤</span><h3>صوت واحد: مُدير محفظتك</h3><p>لا لغة مطوّرين. «مراقبة النظام — بلا تنفيذ» تصير «أراقب ولا أنفّذ بعد». المتكلّم هو النظام، والمخاطَب أنتِ.</p></div>
+  <div class="law"><span class="k">٥</span><h3>الجمري = ما هو حيّ</h3><p>التبويب النشط، ونقطة الاتصال، وعلامة «الحدّ». ولا يُلوَّن به رقم أبداً — الأرقام حبر، والربح والخسارة بالنخل والرمّان مع الإشارة دائماً.</p></div>
+</div>
+
+<hr class="sep">
+
+<div class="sec-head"><span class="sec-num">٠٢</span><h2>«الحدّ» — العنصر التوقيعي</h2></div>
+<p class="lede" style="margin-bottom:22px">هذا ما ينقص الهوية. لا شعار ولا زخرفة: أداة قياس واحدة تُستعمل في ستة مواضع مختلفة، فتصير بصمة النظام. الخط الرفيع هو المدى، والجزء المعتم هو المستهلَك، والعلامة الجمرية هي موضعك الآن، والعلامات الباهتة هي العتبات.</p>
+
+<div class="ruledemo">
+  <div class="rl">
+    <div class="rl-top"><span class="rl-lab">مخاطرة اليوم — المتبقّي</span><span class="rl-val">٠٫٧٥ من ٠٫٧٥ دولار</span></div>
+    <div class="hadd"><div class="base"></div><div class="fill" style="width:0%"></div><div class="mark" style="right:60%"></div><div class="mark" style="right:85%"></div><div class="tick" style="right:0%"></div></div>
+  </div>
+  <div class="rl">
+    <div class="rl-top"><span class="rl-lab">المسافة إلى قاطع الطوارئ</span><span class="rl-val">٦٫٠٠ دولار</span></div>
+    <div class="hadd"><div class="base"></div><div class="fill" style="width:8%"></div><div class="mark" style="right:85%"></div><div class="tick" style="right:8%"></div></div>
+  </div>
+  <div class="rl">
+    <div class="rl-top"><span class="rl-lab">اكتمال البيانات</span><span class="rl-val">٠ من ٥ مزوّدين</span></div>
+    <div class="hadd"><div class="base"></div><div class="fill" style="width:0%"></div><div class="mark" style="right:20%"></div><div class="mark" style="right:40%"></div><div class="mark" style="right:60%"></div><div class="mark" style="right:80%"></div><div class="tick" style="right:0%"></div></div>
+  </div>
+  <div class="rl">
+    <div class="rl-top"><span class="rl-lab">العائد إلى المخاطرة — العتبة ١٫٧٥</span><span class="rl-val">١٫٨٥</span></div>
+    <div class="hadd"><div class="base"></div><div class="fill" style="width:62%"></div><div class="mark" style="right:58%"></div><div class="tick" style="right:62%"></div></div>
+  </div>
+</div>
+
+<hr class="sep">
+
+<div class="sec-head"><span class="sec-num">٠٣</span><h2>الشاشات</h2></div>
+<p class="lede" style="margin-bottom:6px">أربع عشرة شاشة. تحت كل واحدة سطران: <span style="color:var(--rumman)">ما المشكلة الآن</span> ثم <span style="color:var(--nakhl)">ما المقترح</span>. المعروض هو الوضع الداكن؛ زر التبديل أعلى الصفحة يريكِ الفاتح.</p>
+
+<div class="screens">
+
+<!-- 1 HOME -->
+<div class="scr">
+  <div class="scr-meta"><span class="tag">تبويب ١ — الرئيسية</span><h3>١. الرئيسية</h3>
+  <p class="was">«الرئيسية» مكتوبة ثلاث مرات. عنوان البطاقة «المخاطرة المستهلكة والمتبقية» يناقض الرقم البطل تحته. المؤشر غير مرئي عند ٠٪.</p>
+  <p class="now">الهيدر يحمل التاريخ وحالة الاتصال فقط. الحكم جملةٌ واحدة. «الحدّ» يظهر حتى عند الصفر لأن العلامة موجودة دائماً. سطر واحد يقول ما الذي سيغيّر الحكم.</p></div>
+  <div class="phone">
+    <div class="ph-status"><span>٩:٤١</span><span>▮▮▮</span></div>
+    <div class="ph-head"><span class="t">الأحد ٣١ أغسطس</span><span class="r"><span class="dot off"></span>لا يتداول</span></div>
+    <div class="ph-body">
+      <div class="hero"><div class="k">حكم اليوم</div><div class="v">لم أدخل السوق اليوم.</div><div class="s">أنتظر أربعة مزوّدين إلزاميين واستراتيجية مُجازة. لا أدخل ببيانات ناقصة.</div></div>
+      <div class="blk"><div class="k">ما يمنعني الآن</div>
+        <div class="row"><span>مزوّدو البيانات</span><span class="v cau">٠ / ٥</span></div>
+        <div class="hadd d" style="margin:4px 0 10px"><div class="base"></div><div class="mark" style="right:20%"></div><div class="mark" style="right:40%"></div><div class="mark" style="right:60%"></div><div class="mark" style="right:80%"></div><div class="tick" style="right:0%"></div></div>
+        <div class="row"><span>استراتيجية مُجازة</span><span class="v cau">لا</span></div>
+        <div class="row"><span>وضع التشغيل</span><span class="pill stop">موقوف محلياً</span></div>
+      </div>
+      <div class="blk"><div class="k">حدودي اليوم</div>
+        <div class="row"><span>المتبقّي من المخاطرة</span><span class="v">٠٫٧٥ دولار</span></div>
+        <div class="hadd d" style="margin:4px 0 10px"><div class="base"></div><div class="mark" style="right:60%"></div><div class="mark" style="right:85%"></div><div class="tick" style="right:0%"></div></div>
+        <div class="row"><span>المسافة إلى القاطع</span><span class="v">٦٫٠٠ دولار</span></div>
+      </div>
+      <a class="btn">لماذا؟ افتحي القرار ←</a>
+    </div>
+    <div class="ph-tabs"><span class="on">الرئيسية</span><span>القرار</span><span>المحفظة</span><span>النظام</span></div>
+  </div>
+</div>
+
+<!-- 2 DECISION -->
+<div class="scr">
+  <div class="scr-meta"><span class="tag">تبويب ٢ — القرار</span><h3>٢. القرار</h3>
+  <p class="was">تبدأ بـ«النتيجة الحتمية» و«من ١٠٠» — لغة محرّك، لا لغة منتج. أسباب المنع قائمة نصّية بلا ترتيب أهمية.</p>
+  <p class="now">النتيجة على «الحدّ» مع العتبة مرسومة، فتُرى المسافة لا الرقم. أسباب المنع مرقّمة بترتيب الحسم، وكلٌّ منها قابل للنقر إلى دليله.</p></div>
+  <div class="phone">
+    <div class="ph-status"><span>٩:٤١</span><span>▮▮▮</span></div>
+    <div class="ph-head"><span class="t">قرار اليوم</span><span class="r">٠٦:٠٠ ص</span></div>
+    <div class="ph-body">
+      <div class="hero"><div class="k">الخلاصة</div><div class="v">امتنعتُ. الجودة كافية، والبيانات ليست.</div></div>
+      <div class="blk"><div class="k">نتيجة الجودة — العتبة ٧٠</div>
+        <div class="row"><span class="m">EUR/USD · شراء</span><span class="v">٧٤ / ١٠٠</span></div>
+        <div class="hadd d" style="margin:6px 0 4px"><div class="base"></div><div class="fill" style="width:74%"></div><div class="mark" style="right:70%"></div><div class="tick" style="right:74%"></div></div>
+      </div>
+      <div class="blk"><div class="k">أسباب المنع — بترتيب الحسم</div>
+        <div class="row"><span>١ · مزوّدون إلزاميون غائبون</span><span class="m">←</span></div>
+        <div class="row"><span>٢ · لا استراتيجية مُجازة</span><span class="m">←</span></div>
+        <div class="row"><span>٣ · التشغيل موقوف محلياً</span><span class="m">←</span></div>
+      </div>
+      <div class="blk"><div class="k">لو ارتفعت الشروط</div>
+        <div class="row"><span>حجم الصفقة</span><span class="v">٠٫٠١ عقد</span></div>
+        <div class="row"><span>الوقف · الهدف</span><span class="v">٢٥ · ٤٦ نقطة</span></div>
+        <div class="row"><span>العائد/المخاطرة</span><span class="v pos">١٫٨٥</span></div>
+      </div>
+    </div>
+    <div class="ph-tabs"><span>الرئيسية</span><span class="on">القرار</span><span>المحفظة</span><span>النظام</span></div>
+  </div>
+</div>
+
+<!-- 3 INTELLIGENCE -->
+<div class="scr">
+  <div class="scr-meta"><span class="tag">تبويب ٢ — القرار</span><h3>٣. القراءة (الأطر والاتجاه)</h3>
+  <p class="was">اسمها «الذكاء» وهي أطول شاشة في التطبيق (٢٤٠ سطراً) بسبع بطاقات متساوية الوزن. لا شيء يقول أين تنظرين أولاً.</p>
+  <p class="now">ثلاثة أطر زمنية في صفٍّ واحد قابل للمقارنة بصرياً. التعارض يُبرَز لأنه المعلومة، والاتفاق يُطوى. «ما هو ناقص» يصعد إلى الأعلى لا إلى الأسفل.</p></div>
+  <div class="phone">
+    <div class="ph-status"><span>٩:٤١</span><span>▮▮▮</span></div>
+    <div class="ph-head"><span class="t">القراءة</span><span class="r">EUR/USD</span></div>
+    <div class="ph-body">
+      <div class="hero"><div class="k">الخلاصة</div><div class="v">الأطر متّفقة صعوداً، وإطار الدخول ناقص.</div></div>
+      <div class="blk"><div class="k">الأطر الثلاثة</div>
+        <div class="row"><span>النظام · يومي</span><span class="v pos">صاعد</span></div>
+        <div class="row"><span>البنية · ٤ ساعات</span><span class="v pos">صاعد</span></div>
+        <div class="row"><span>الدخول · ١٥ دقيقة</span><span class="v cau">ناقص</span></div>
+        <div class="hadd d" style="margin:8px 0 0"><div class="base"></div><div class="fill" style="width:66%"></div><div class="mark" style="right:33%"></div><div class="mark" style="right:66%"></div><div class="tick" style="right:66%"></div></div>
+      </div>
+      <div class="blk"><div class="k">ما هو ناقص</div>
+        <div class="row"><span>شموع ١٥ دقيقة</span><span class="m">٠ من ١٢٠</span></div>
+        <div class="row"><span>التقويم الاقتصادي</span><span class="m">غير مُعدّ</span></div>
+      </div>
+      <div class="blk"><div class="k">التعارضات</div>
+        <div class="empty"><div class="e1">لا تعارض مسجّل</div><div class="e2">حين تختلف مصادري سأعرض الطرفين هنا وأقول أيّهما رجّحت ولماذا.</div></div>
+      </div>
+    </div>
+    <div class="ph-tabs"><span>الرئيسية</span><span class="on">القرار</span><span>المحفظة</span><span>النظام</span></div>
+  </div>
+</div>
+
+<!-- 4 PROFILES -->
+<div class="scr">
+  <div class="scr-meta"><span class="tag">تبويب ٢ — القرار</span><h3>٤. ملفّات المخاطرة</h3>
+  <p class="was">أربعة عشر حدّاً معروضة كقائمة تسميات وأرقام. لا يمكنك المقارنة بين المتحفّظ والمتوازن دون حفظ الأرقام في رأسك.</p>
+  <p class="now">مقارنة عمودية بين الملفات الثلاثة على نفس الأسطر، والفعّال مُعلَّم. وكل حدّ يظهر بـ«الحدّ» فتُرى المسافة بين الملفات لا أرقامها.</p></div>
+  <div class="phone">
+    <div class="ph-status"><span>٩:٤١</span><span>▮▮▮</span></div>
+    <div class="ph-head"><span class="t">ملفّات المخاطرة</span><span class="r">بصمة الدستور ‎a3f9</span></div>
+    <div class="ph-body">
+      <div class="hero"><div class="k">الفعّال</div><div class="v">متحفّظ</div><div class="s">اخترتِه في ٣٠ أغسطس. تغييره لا يمسّ صفقة مفتوحة.</div></div>
+      <div class="blk"><div class="k">مقارنة</div>
+        <div class="row"><span class="m">&nbsp;</span><span class="m" style="font-size:10px">متحفّظ · متوازن · عالٍ</span></div>
+        <div class="row"><span>أقصى مخاطرة للصفقة</span><span class="v">٠٫٥٪ · ١٪ · ٢٪</span></div>
+        <div class="row"><span>أقصى خسارة يومية</span><span class="v">٠٫٧٥ · ١٫٥ · ٣٫٠</span></div>
+        <div class="row"><span>أقصى دخول باليوم</span><span class="v">١ · ٣ · ٥</span></div>
+        <div class="row"><span>أدنى عائد/مخاطرة</span><span class="v">١٫٧٥ · ١٫٥ · ١٫٢</span></div>
+        <div class="row"><span>المبيت</span><span class="v">لا · نعم · نعم</span></div>
+      </div>
+      <div class="blk"><div class="k">أثر التغيير</div>
+        <div class="empty"><div class="e1">لو انتقلتِ إلى «متوازن»</div><div class="e2">صفقات اليوم المسموحة ١ ← ٣، والخسارة القصوى ٠٫٧٥ ← ١٫٥٠ دولار.</div></div>
+      </div>
+      <a class="btn">تغيير الملف الفعّال</a>
+    </div>
+    <div class="ph-tabs"><span>الرئيسية</span><span class="on">القرار</span><span>المحفظة</span><span>النظام</span></div>
+  </div>
+</div>
+
+<!-- 5 POSITION -->
+<div class="scr">
+  <div class="scr-meta"><span class="tag">تبويب ٣ — المحفظة</span><h3>٥. المركز المفتوح</h3>
+  <p class="was">ثلاث بطاقات: المستويات، ملاحظات، الحماية لدى الوسيط. وعند غياب مركز — وهو الحال دائماً حتى الآن — الشاشة شبه فارغة.</p>
+  <p class="now">المسافة بين الوقف والسعر والهدف تُرسم على «الحدّ» بدل ثلاثة أرقام منفصلة. والحماية لدى الوسيط تُعرض كتأكيد صريح لأنها سؤال «هل مالي محميّ؟».</p></div>
+  <div class="phone">
+    <div class="ph-status"><span>٩:٤١</span><span>▮▮▮</span></div>
+    <div class="ph-head"><span class="t">المركز</span><span class="r"><span class="dot"></span>مفتوح</span></div>
+    <div class="ph-body">
+      <div class="hero"><div class="k">غير محقَّق</div><div class="v num pos">+٠٫٤٢</div><div class="s">EUR/USD · شراء ٠٫٠١ · منذ ٥٤ دقيقة</div></div>
+      <div class="blk"><div class="k">أين أنا بين وقفي وهدفي</div>
+        <div class="hadd d" style="margin:2px 0 8px"><div class="base"></div><div class="fill" style="width:38%"></div><div class="mark" style="right:0%"></div><div class="mark" style="right:100%"></div><div class="tick" style="right:38%"></div></div>
+        <div class="row"><span>الوقف</span><span class="v">١٫٠٨٢٥٠</span></div>
+        <div class="row"><span>الحالي</span><span class="v">١٫٠٨٤٩٠</span></div>
+        <div class="row"><span>الهدف</span><span class="v">١٫٠٨٨٩٠</span></div>
+      </div>
+      <div class="blk"><div class="k">الحماية لدى الوسيط</div>
+        <div class="row"><span>وقف مضمون مُسجَّل</span><span class="v pos">نعم ✓</span></div>
+        <div class="row"><span>أقصى خسارة ممكنة</span><span class="v neg">−٠٫٧٥</span></div>
+      </div>
+      <div class="blk"><div class="k">ملاحظات التنفيذ</div><div class="row"><span class="m">نُفِّذ بانزلاق ٠٫١ نقطة عن السعر المتوقَّع.</span></div></div>
+    </div>
+    <div class="ph-tabs"><span>الرئيسية</span><span>القرار</span><span class="on">المحفظة</span><span>النظام</span></div>
+  </div>
+</div>
+
+<!-- 6 POSITION EMPTY -->
+<div class="scr">
+  <div class="scr-meta"><span class="tag">تبويب ٣ — المحفظة</span><h3>٦. المركز — الحالة الصفرية</h3>
+  <p class="was">لا تُوجد. الشاشة تعرض بطاقات فارغة، فتبدو معطوبة بينما هي سليمة. وهذه هي الشاشة التي سترينها كل يوم في الشهر الأول.</p>
+  <p class="now">حالة مصمَّمة: لا مركز، ولماذا، ومتى يُتوقَّع القرار التالي، وآخر مركز مغلق. الفراغ يحمل معلومة بدل أن يحمل شكّاً.</p></div>
+  <div class="phone">
+    <div class="ph-status"><span>٩:٤١</span><span>▮▮▮</span></div>
+    <div class="ph-head"><span class="t">المركز</span><span class="r"><span class="dot off"></span>لا مركز</span></div>
+    <div class="ph-body">
+      <div class="hero"><div class="k">الآن</div><div class="v">لا مركز مفتوح.</div><div class="s">آخر مراجعة قبل ٤٠ ثانية. أراجع كل دقيقة، ولا أفتح إلا حين تكتمل الشروط.</div></div>
+      <div class="blk"><div class="k">القرار التالي</div>
+        <div class="row"><span>عند فتح السوق</span><span class="v">الاثنين ٠٣:٠٠ ص</span></div>
+        <div class="row"><span>السوق الآن</span><span class="v cau">مغلق · نهاية الأسبوع</span></div>
+      </div>
+      <div class="blk"><div class="k">آخر مركز مغلق</div>
+        <div class="empty"><div class="e1">لا صفقات بعد</div><div class="e2">لم يُرسل أي أمر منذ إنشاء الحساب. أول صفقة تحتاج استراتيجية مُجازة وموافقتك المكتوبة.</div></div>
+      </div>
+      <a class="btn">سجلّ الصفقات ←</a>
+    </div>
+    <div class="ph-tabs"><span>الرئيسية</span><span>القرار</span><span class="on">المحفظة</span><span>النظام</span></div>
+  </div>
+</div>
+
+<!-- 7 HISTORY -->
+<div class="scr">
+  <div class="scr-meta"><span class="tag">تبويب ٣ — المحفظة</span><h3>٧. السجلّ</h3>
+  <p class="was">جدول أعمدة: الاتجاه، سعر الدخول، سعر الخروج، الاستراتيجية. قراءته على جوال بالعرض الرأسي متعبة، ولا يُظهر النمط.</p>
+  <p class="now">صفٌّ لكل صفقة يحمل النتيجة أولاً، ثم السبب. وشريط علوي يُظهر التتابع (ربح/خسارة) فيُقرأ النمط قبل التفاصيل.</p></div>
+  <div class="phone">
+    <div class="ph-status"><span>٩:٤١</span><span>▮▮▮</span></div>
+    <div class="ph-head"><span class="t">السجلّ</span><span class="r">٣٠ يوماً</span></div>
+    <div class="ph-body">
+      <div class="hero"><div class="k">النتيجة الصافية</div><div class="v num pos">+٣٫٢٠</div><div class="s">١٢ صفقة · ٧ رابحة · ٥ خاسرة</div>
+        <div class="spark"><i class="up" style="height:60%"></i><i class="dn" style="height:35%"></i><i class="up" style="height:80%"></i><i class="up" style="height:45%"></i><i class="dn" style="height:30%"></i><i class="up" style="height:95%"></i><i class="dn" style="height:40%"></i><i class="up" style="height:55%"></i><i class="up" style="height:70%"></i><i class="dn" style="height:25%"></i><i class="dn" style="height:38%"></i><i class="up" style="height:65%"></i></div>
+      </div>
+      <div class="blk"><div class="k">الصفقات</div>
+        <div class="row"><span>EUR/USD · شراء<br><span class="m" style="font-size:10px">تقاطع اتجاه · ٢٨ أغسطس</span></span><span class="v pos">+٠٫٦٢</span></div>
+        <div class="row"><span>GBP/USD · بيع<br><span class="m" style="font-size:10px">ارتداد من مقاومة · ٢٧ أغسطس</span></span><span class="v neg">−٠٫٣٤</span></div>
+        <div class="row"><span>EUR/USD · شراء<br><span class="m" style="font-size:10px">تقاطع اتجاه · ٢٦ أغسطس</span></span><span class="v pos">+٠٫٨١</span></div>
+      </div>
+      <a class="btn">الأداء التفصيلي ←</a>
+    </div>
+    <div class="ph-tabs"><span>الرئيسية</span><span>القرار</span><span class="on">المحفظة</span><span>النظام</span></div>
+  </div>
+</div>
+
+<!-- 8 PERFORMANCE -->
+<div class="scr">
+  <div class="scr-meta"><span class="tag">تبويب ٣ — المحفظة</span><h3>٨. الأداء</h3>
+  <p class="was">«الملخّص» و«المتوقَّع مقابل المُلاحَظ» بطاقتان متساويتان، مع جملة «العيّنة أصغر من أن تُقرأ» مدفونة في الداخل.</p>
+  <p class="now">صدق العيّنة يصعد إلى أعلى الشاشة كحكم: لا نُري رقماً موثوقاً قبل أن يكون موثوقاً. والمقارنة متوقَّع/ملاحَظ تُرسم كفجوة على «الحدّ».</p></div>
+  <div class="phone">
+    <div class="ph-status"><span>٩:٤١</span><span>▮▮▮</span></div>
+    <div class="ph-head"><span class="t">الأداء</span><span class="r">١٢ صفقة</span></div>
+    <div class="ph-body">
+      <div class="hero"><div class="k">هل يُعتمد هذا الرقم؟</div><div class="v">لا بعد. ١٢ من ٣٠ صفقة.</div><div class="s">أعرض الأرقام للاطّلاع، ولا أبني عليها قراراً حتى تكتمل العيّنة.</div>
+        <div class="hadd d" style="margin:10px 0 0"><div class="base"></div><div class="fill" style="width:40%"></div><div class="mark" style="right:100%"></div><div class="tick" style="right:40%"></div></div>
+      </div>
+      <div class="blk"><div class="k">متوقَّع مقابل مُلاحَظ</div>
+        <div class="row"><span>نسبة الربح</span><span class="v">٥٥٪ · <span class="pos">٥٨٪</span></span></div>
+        <div class="row"><span>متوسط العائد/المخاطرة</span><span class="v">١٫٨٥ · <span class="neg">١٫٦٢</span></span></div>
+        <div class="row"><span>الانزلاق</span><span class="v">٠٫١ · <span class="neg">٠٫٣ نقطة</span></span></div>
+      </div>
+      <div class="blk"><div class="k">أكبر تراجع</div>
+        <div class="row"><span>من القمّة</span><span class="v neg">−١٫١٠ دولار</span></div>
+        <div class="hadd d" style="margin:6px 0 0"><div class="base"></div><div class="fill" style="width:22%"></div><div class="mark" style="right:60%"></div><div class="tick" style="right:22%"></div></div>
+      </div>
+    </div>
+    <div class="ph-tabs"><span>الرئيسية</span><span>القرار</span><span class="on">المحفظة</span><span>النظام</span></div>
+  </div>
+</div>
+
+<!-- 9 SYSTEM -->
+<div class="scr">
+  <div class="scr-meta"><span class="tag">تبويب ٤ — النظام</span><h3>٩. النظام</h3>
+  <p class="was">أربع بطاقات متساوية: الاسم، النوع، قفل التنفيذ، المُطلِق. لا تجيب على السؤال الوحيد المهم: «هل هو بخير؟».</p>
+  <p class="now">حكم صحّة واحد في الأعلى، ثم النبض (متى فكّر آخر مرة) لأنه دليل الحياة، ثم الوسيط بوضوح تجريبي/حقيقي — وهو ما كان مخفياً.</p></div>
+  <div class="phone">
+    <div class="ph-status"><span>٩:٤١</span><span>▮▮▮</span></div>
+    <div class="ph-head"><span class="t">النظام</span><span class="r"><span class="dot"></span>حيّ</span></div>
+    <div class="ph-body">
+      <div class="hero"><div class="k">الصحّة</div><div class="v">يعمل، ولا ينفّذ.</div><div class="s">سببان: الوسيط تجريبي، والتشغيل موقوف محلياً.</div></div>
+      <div class="blk"><div class="k">النبض</div>
+        <div class="row"><span>آخر دورة تفكير</span><span class="v">قبل ٤٠ ثانية</span></div>
+        <div class="row"><span>الفاصل</span><span class="v">٦٠ ثانية · ٢٤/٧</span></div>
+      </div>
+      <div class="blk"><div class="k">الوسيط</div>
+        <div class="row"><span>المزوّد</span><span class="v cau">MOCK — وهمي</span></div>
+        <div class="row"><span>الحساب</span><span class="v cau">تجريبي</span></div>
+        <div class="row"><span>الصلاحية</span><span class="pill">قراءة فقط</span></div>
+      </div>
+      <div class="blk"><div class="k">أقفال التنفيذ</div>
+        <div class="row"><span>قفل التنفيذ</span><span class="v">مُغلق على الخادم</span></div>
+        <div class="row"><span>قاطع الطوارئ</span><span class="v pos">غير مُفعَّل</span></div>
+      </div>
+    </div>
+    <div class="ph-tabs"><span>الرئيسية</span><span>القرار</span><span>المحفظة</span><span class="on">النظام</span></div>
+  </div>
+</div>
+
+<!-- 10 PROVIDERS -->
+<div class="scr">
+  <div class="scr-meta"><span class="tag">تبويب ٤ — النظام</span><h3>١٠. المزوّدون</h3>
+  <p class="was">«مستوفاة / غير مستوفاة» بلا أثر عملي: لا تعرفين ماذا يُعطَّل حين يغيب مزوّد، ولا ما الخطوة لإصلاحه.</p>
+  <p class="now">كل مزوّد يحمل ثلاثة أشياء: حالته، وما الذي يُعطَّل بغيابه، والخطوة التالية. هذه شاشة إصلاح لا شاشة عرض.</p></div>
+  <div class="phone">
+    <div class="ph-status"><span>٩:٤١</span><span>▮▮▮</span></div>
+    <div class="ph-head"><span class="t">المزوّدون</span><span class="r">٠ من ٥</span></div>
+    <div class="ph-body">
+      <div class="hero"><div class="k">اكتمال البيانات</div><div class="v num cau">٠٪</div><div class="s">لا أدخل السوق ببيانات ناقصة. خمسة مزوّدين إلزاميون، ولا واحد منهم مُعدّ.</div>
+        <div class="hadd d" style="margin:10px 0 0"><div class="base"></div><div class="mark" style="right:20%"></div><div class="mark" style="right:40%"></div><div class="mark" style="right:60%"></div><div class="mark" style="right:80%"></div><div class="tick" style="right:0%"></div></div>
+      </div>
+      <div class="blk"><div class="k">الإلزاميون</div>
+        <div class="row"><span>بيانات السوق<br><span class="m" style="font-size:10px">بغيابه: لا قرار أصلاً</span></span><span class="v cau">غير مُعدّ</span></div>
+        <div class="row"><span>التقويم الاقتصادي<br><span class="m" style="font-size:10px">بغيابه: لا يُتجنَّب خبر عالي الأثر</span></span><span class="v cau">غير مُعدّ</span></div>
+        <div class="row"><span>البيانات الكلّية<br><span class="m" style="font-size:10px">بغيابه: لا سياق اتجاه</span></span><span class="v cau">غير مُعدّ</span></div>
+        <div class="row"><span>الأخبار المتحقَّقة<br><span class="m" style="font-size:10px">بغيابه: لا فلترة صدمات</span></span><span class="v cau">غير مُعدّ</span></div>
+      </div>
+      <a class="btn">ما الخطوة؟ ←</a>
+    </div>
+    <div class="ph-tabs"><span>الرئيسية</span><span>القرار</span><span>المحفظة</span><span class="on">النظام</span></div>
+  </div>
+</div>
+
+<!-- 11 AUDIT -->
+<div class="scr">
+  <div class="scr-meta"><span class="tag">تبويب ٤ — النظام</span><h3>١١. سجلّ التدقيق</h3>
+  <p class="was">بطاقة واحدة بعمود «الوقت». سجلّ خام بلا تصنيف، فلا يُقرأ ولا يُبحَث فيه.</p>
+  <p class="now">مجموعات يومية، وأيقونة نصّية لنوع الحدث، وتصفية بثلاث كلمات. الأحداث الحاسمة (قاطع، تغيير ملف، أمر) تُميَّز بحدّ جانبي.</p></div>
+  <div class="phone">
+    <div class="ph-status"><span>٩:٤١</span><span>▮▮▮</span></div>
+    <div class="ph-head"><span class="t">سجلّ التدقيق</span><span class="r">٨٤ حدثاً</span></div>
+    <div class="ph-body">
+      <div class="hero"><div class="k">اليوم</div><div class="v" style="font-size:19px">٤ أحداث · لا شيء حرج.</div></div>
+      <div class="blk"><div class="k">تصفية</div>
+        <div class="row"><span><span class="pill live">الكل</span> <span class="pill">قرارات</span> <span class="pill">أقفال</span></span><span></span></div>
+      </div>
+      <div class="blk"><div class="k">الأحد ٣١ أغسطس</div>
+        <div class="row"><span>دورة قرار — امتنع<br><span class="m" style="font-size:10px">مزوّدون ناقصون</span></span><span class="m">٠٩:٤٠</span></div>
+        <div class="row"><span>فحص اتصال الوسيط<br><span class="m" style="font-size:10px">MOCK · ناجح</span></span><span class="m">٠٩:٣٩</span></div>
+        <div class="row"><span>بدء النبض<br><span class="m" style="font-size:10px">فاصل ٦٠ ثانية</span></span><span class="m">٠٣:٠٠</span></div>
+      </div>
+      <div class="blk"><div class="k">السبت ٣٠ أغسطس</div>
+        <div class="row"><span>تغيير ملف المخاطرة<br><span class="m" style="font-size:10px">← متحفّظ · بموافقة مكتوبة</span></span><span class="m">٢١:١٢</span></div>
+      </div>
+    </div>
+    <div class="ph-tabs"><span>الرئيسية</span><span>القرار</span><span>المحفظة</span><span class="on">النظام</span></div>
+  </div>
+</div>
+
+<!-- 12 NOTIFICATIONS -->
+<div class="scr">
+  <div class="scr-meta"><span class="tag">تبويب ٤ — النظام</span><h3>١٢. التنبيهات</h3>
+  <p class="was">الشاشة الوحيدة بلا نصّ عربي أصلاً — أي أنها لم تُصمَّم بعد. ومع ذلك هي الشاشة التي تحدّد متى يزعجك النظام.</p>
+  <p class="now">ثلاث درجات فقط: يوقظني · يخبرني · يُسجَّل. وكل حدث يُسنَد لدرجة. الإعدادات هنا تُقاس بأثرها لا بعددها.</p></div>
+  <div class="phone">
+    <div class="ph-status"><span>٩:٤١</span><span>▮▮▮</span></div>
+    <div class="ph-head"><span class="t">التنبيهات</span><span class="r">٣ درجات</span></div>
+    <div class="ph-body">
+      <div class="hero"><div class="k">القاعدة</div><div class="v" style="font-size:19px">لا أزعجك إلا حين يلزم قرارك.</div></div>
+      <div class="blk"><div class="k">يوقظني — فوراً</div>
+        <div class="row"><span>قاطع الطوارئ اشتعل</span><span class="pill live">مُفعَّل</span></div>
+        <div class="row"><span>أمر رُفض من الوسيط</span><span class="pill live">مُفعَّل</span></div>
+        <div class="row"><span>خسارتان متتاليتان</span><span class="pill live">مُفعَّل</span></div>
+      </div>
+      <div class="blk"><div class="k">يخبرني — تجميع يومي</div>
+        <div class="row"><span>فُتح مركز أو أُغلق</span><span class="pill">٢١:٠٠</span></div>
+        <div class="row"><span>خلاصة اليوم</span><span class="pill">٢١:٠٠</span></div>
+      </div>
+      <div class="blk"><div class="k">يُسجَّل فقط</div>
+        <div class="row"><span>دورات القرار والامتناع</span><span class="m">سجلّ التدقيق</span></div>
+      </div>
+    </div>
+    <div class="ph-tabs"><span>الرئيسية</span><span>القرار</span><span>المحفظة</span><span class="on">النظام</span></div>
+  </div>
+</div>
+
+<!-- 13 SETTINGS -->
+<div class="scr">
+  <div class="scr-meta"><span class="tag">تبويب ٤ — النظام</span><h3>١٣. الإعدادات</h3>
+  <p class="was">خمس بطاقات تخلط الستر والخصوصية والنمط والبوابة المحلية في مستوى واحد. و«لا يرسل هذا التطبيق أي قياس…» جملة ممتازة مدفونة في الأسفل.</p>
+  <p class="now">قسمان لا خمسة: ما تتحكّمين فيه، وما هو مضمون لكِ. وعهد الخصوصية يصعد إلى الأعلى — لأنه أقوى ما في هذا التطبيق، ولا يُدفَن.</p></div>
+  <div class="phone">
+    <div class="ph-status"><span>٩:٤١</span><span>▮▮▮</span></div>
+    <div class="ph-head"><span class="t">الإعدادات</span><span class="r">مآثر ١٫٠</span></div>
+    <div class="ph-body">
+      <div class="hero"><div class="k">عهدي</div><div class="v" style="font-size:18px">لا قياس، ولا تتبّع، ولا طرف ثالث.</div><div class="s">لا توجد في هذا التطبيق مكتبة تحليلات أصلاً. أرقامك لا تغادر جهازك وخادمك.</div></div>
+      <div class="blk"><div class="k">ما تتحكّمين فيه</div>
+        <div class="row"><span>الستر — إخفاء الأرقام</span><span class="pill live">مُفعَّل</span></div>
+        <div class="row"><span>النمط</span><span class="v">داكن</span></div>
+        <div class="row"><span>ملف المخاطرة</span><span class="v">متحفّظ ←</span></div>
+      </div>
+      <div class="blk"><div class="k">ما هو مضمون</div>
+        <div class="row"><span>بوابة الوصول المحلية</span><span class="m">تُضبط عند البناء</span></div>
+        <div class="row"><span>الستر قبل لقطة النظام</span><span class="v pos">نعم</span></div>
+        <div class="row"><span>الاسم على الجهاز</span><span class="v">مقنَّع دائماً</span></div>
+      </div>
+      <a class="btn danger">الطوارئ ←</a>
+    </div>
+    <div class="ph-tabs"><span>الرئيسية</span><span>القرار</span><span>المحفظة</span><span class="on">النظام</span></div>
+  </div>
+</div>
+
+<!-- 14 EMERGENCY -->
+<div class="scr">
+  <div class="scr-meta"><span class="tag">تبويب ٤ — النظام</span><h3>١٤. الطوارئ</h3>
+  <p class="was">«ثلاثة إجراءات فقط» — الفكرة صحيحة، لكن الأزرار الثلاثة متساوية الوزن البصري، وأخطرها يبدو كأقلّها.</p>
+  <p class="now">تدرّج صريح: عكسه سهل، عكسه ممكن، لا عكس له. وكل إجراء يقول أثره <em>قبل</em> اللمس، وأخطرها وحده يطلب تأكيداً مكتوباً.</p></div>
+  <div class="phone">
+    <div class="ph-status"><span>٩:٤١</span><span>▮▮▮</span></div>
+    <div class="ph-head"><span class="t">الطوارئ</span><span class="r"><span class="dot off"></span>لا مركز مفتوح</span></div>
+    <div class="ph-body">
+      <div class="hero"><div class="k">الآن</div><div class="v" style="font-size:19px">لا شيء يحتاج تدخّلك.</div><div class="s">لا مركز مفتوح، ولا أمر معلّق. هذه الشاشة جاهزة لو احتجتِها.</div></div>
+      <div class="blk"><div class="k">١ · يُعكَس فوراً</div>
+        <div class="row"><span>إيقاف الدخول الجديد<br><span class="m" style="font-size:10px">المراكز المفتوحة تبقى محميّة بوقفها</span></span><span class="m">←</span></div>
+      </div>
+      <div class="blk"><div class="k">٢ · يُعكَس بموافقة</div>
+        <div class="row"><span>إشعال قاطع الطوارئ<br><span class="m" style="font-size:10px">يوقف كل شيء. لا يُطفأ إلا بموافقتك المكتوبة</span></span><span class="m">←</span></div>
+      </div>
+      <div class="blk" style="border-color:var(--rummanDark)"><div class="k" style="color:var(--rummanDark)">٣ · لا يُعكَس</div>
+        <div class="row"><span>إغلاق كل المراكز بسعر السوق<br><span class="m" style="font-size:10px">يُثبِّت الخسارة الحالية. يتطلّب كتابة «أغلق»</span></span><span class="neg">←</span></div>
+      </div>
+    </div>
+    <div class="ph-tabs"><span>الرئيسية</span><span>القرار</span><span>المحفظة</span><span class="on">النظام</span></div>
+  </div>
+</div>
+
+</div><!-- /screens -->
+
+<hr class="sep">
+
+<div class="sec-head"><span class="sec-num">٠٤</span><h2>ما الذي يتغيّر فعلياً</h2></div>
+<div class="scrollx">
+<table>
+<tr><th>البند</th><th>الآن</th><th>المقترح</th><th>الكلفة</th></tr>
+<tr><td>عنوان الشاشة</td><td>مكرّر ٣ مرات في الرئيسية</td><td>الهيدر للتاريخ والحالة؛ العنوان يملكه التبويب وحده</td><td>ملف واحد</td></tr>
+<tr><td>الحالات الصفرية</td><td>غير مصمَّمة في ١٣ شاشة</td><td>مكوّن <code>EmptyState</code> واحد بثلاثة حقول: ماذا · لماذا · ما التالي</td><td>مكوّن + ١٣ استدعاء</td></tr>
+<tr><td>العنصر التوقيعي</td><td>لا يوجد</td><td>مكوّن <code>Hadd</code> يُستعمل في ٦ مواضع</td><td>مكوّن واحد</td></tr>
+<tr><td>عناوين البطاقات</td><td>وصفية («المخاطرة المستهلكة والمتبقية»)</td><td>سؤالية بصوت النظام («حدودي اليوم»)</td><td>نصوص فقط</td></tr>
+<tr><td>شاشة التنبيهات</td><td>لم تُصمَّم</td><td>ثلاث درجات: يوقظني · يخبرني · يُسجَّل</td><td>شاشة جديدة</td></tr>
+<tr><td>الطوارئ</td><td>٣ أزرار متساوية الوزن</td><td>تدرّج عكوسية + تأكيد مكتوب للثالث</td><td>ملف واحد</td></tr>
+<tr><td>خط العناوين</td><td>غير مثبَّت — <code>display</code> يشير إلى ReemKufi</td><td>تثبيت أميري، و<code>display: 'Amiri'</code>، ومتغيّر <code>logo</code> منفصل لريم كوفي</td><td>ملفّان + سطران</td></tr>
+<tr><td>اللوجو «النقاط تقيس»</td><td>معتمد ولم يُنفَّذ</td><td>مسارات حقيقية + أيقونات التطبيق</td><td>سكربت + أصول</td></tr>
+</table>
+</div>
+
+<hr class="sep">
+
+<div class="sec-head"><span class="sec-num">٠٥</span><h2>القرارات المطلوبة منكِ</h2></div>
+<ol class="next">
+<li><strong>هل تعتمدين القوانين الخمسة؟</strong> هي التي تجعل الأربع عشرة شاشة تبدو نظاماً واحداً. لو رفضتِ واحداً منها قولي أيّه.</li>
+<li><strong>هل «الحدّ» هو التوقيع؟</strong> إن نعم، أبنيه مكوّناً واحداً وأمرّره على الست مواضع. وإن لا، أعرض بديلين آخرين.</li>
+<li><strong>الترتيب:</strong> رأيي أن نُنفّذ الواجهة أولاً هذه المرة — لأن نشر النبض بلا هذه الشاشات يعني أنك ستراقبين نظاماً حياً عبر شاشات لا تشرح ما يفعله. والفارق يومٌ واحد لا أكثر.</li>
+<li><strong>ما بقي خارج هذا المقترح:</strong> شاشة الربط (<code>enrol</code>) — وفيها ملف مكرّر <code>enrol 2.tsx</code> يجب حذفه. أحتاج إذنك للحذف.</li>
+</ol>
+
+<p style="margin-top:34px;font-size:13px;color:var(--pageMute);border-top:1px solid var(--pageLine);padding-top:18px">مراجعة مستقلة — Product Design Critic + Brand Critic. لم يشارك في هذا الحكم أيّ دور نفّذ الشاشات الحالية. الحكم: <strong class="bad">REWORK</strong>. مقترح، لم يُنفَّذ بعد، ولم يُنشر شيء.</p>
+
+</div>
+
+<script>
+(function(){
+  var r=document.documentElement,L=document.getElementById('bL'),D=document.getElementById('bD');
+  function set(m){r.setAttribute('data-theme',m);L.setAttribute('aria-pressed',m==='light');D.setAttribute('aria-pressed',m==='dark');}
+  L.onclick=function(){set('light')};D.onclick=function(){set('dark')};
+  set(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
+})();
+</script>

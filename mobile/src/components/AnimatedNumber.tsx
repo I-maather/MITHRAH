@@ -55,11 +55,19 @@ export function AnimatedNumber({
 
   const [reduceMotion, setReduceMotion] = useState(false);
   useEffect(() => {
+    // `AccessibilityInfo` قد لا يكون كاملاً في كل بيئة (اختبارات، نسخ قديمة).
+    // فحصُ وجود الدالة قبل استدعائها ليس دفاعاً زائداً: استدعاء `.then` على
+    // `undefined` يُسقط الشجرة كلها — وهذا بالضبط سبب الشاشة السوداء سابقاً.
     let alive = true;
-    AccessibilityInfo.isReduceMotionEnabled()
-      .then((on) => alive && setReduceMotion(on))
-      .catch(() => undefined);
-    const sub = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion);
+    try {
+      const probe = AccessibilityInfo?.isReduceMotionEnabled?.();
+      if (probe && typeof probe.then === 'function') {
+        probe.then((on: boolean) => alive && setReduceMotion(on)).catch(() => undefined);
+      }
+    } catch {
+      // تعذّر القياس ⇒ نُبقي الحركة. الحركة زينة، وغيابُ القياس لا يبرّر تعطيلها.
+    }
+    const sub = AccessibilityInfo?.addEventListener?.('reduceMotionChanged', setReduceMotion);
     return () => {
       alive = false;
       sub?.remove?.();

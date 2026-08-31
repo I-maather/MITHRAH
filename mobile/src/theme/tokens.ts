@@ -131,20 +131,36 @@ export const typography = {
 /**
  * الخطوط.
  *
- * **الأرقام خطٌّ مستقلّ عن نصّ الواجهة.** هذا قرار، لا تفصيلة: قياس 69 لقطة
- * من 18 تطبيقاً لم يجد تطبيقاً واحداً يعامل الأرقام كقرار تصميمي — والتطبيق
- * هنا تسعون بالمئة منه أرقام.
+ * **العربية خطٌّ أصلي لا خط نظام.** خط النظام (SF Arabic) ممتاز — ولهذا
+ * تحديداً يجعل التطبيق يشبه كل تطبيق آخر على الجهاز. وبحث المنافسين رصد
+ * الفراغ: لا تطبيق في الـ69 يعامل شكل الحرف العربي كعنصر هوية.
  *
- * `numeric` سيريفي: أوضح في الفصل بين 0 و8 و6 و9 على الشاشة الصغيرة، ويعطي
- * الرقم وقاراً لا يعطيه الـsans. و`Georgia` مشحونة مع iOS فلا تحتاج ملفاً؛
- * حين يتوفّر `Newsreader` كملف يُستبدَل الاسم هنا وحده ولا يتغيّر شيء آخر.
+ * **والأرقام خطٌّ مستقلّ عن نصّ الواجهة.** قرارٌ لا تفصيلة: التطبيق تسعون
+ * بالمئة منه أرقام، ولا أحد من الثمانية عشر عاملها كقرار تصميمي.
  *
- * `arabic: undefined` يعني **خط النظام** — وهو SF Arabic على iOS، وأفضل ما
- * يُعرض عربياً على المنصّة. لا يُستبدَل إلا بخط أفضل منه فعلاً، لا بخط مختلف.
+ * ## لماذا عائلة لكل وزن
+ *
+ * على iOS، تحديد `fontFamily` مخصّصة يجعل `fontWeight` **غير موثوق**: النظام
+ * إمّا يتجاهله أو يصطنع وزناً ثقيلاً مشوّهاً. فالوزن يُختار بالملفّ لا بالخاصية،
+ * و`Text` تُسقط `fontWeight` حين تستعمل عائلة مخصّصة.
  */
+export const fontFamilies = {
+  arabic: {
+    '300': 'IBMPlexSansArabic-Regular',
+    '400': 'IBMPlexSansArabic-Regular',
+    '500': 'IBMPlexSansArabic-Medium',
+    '600': 'IBMPlexSansArabic-SemiBold',
+    '700': 'IBMPlexSansArabic-Bold',
+  } as Record<string, string>,
+  /** الأرقام — سيريفي. أوضح في الفصل بين 0 و8 و6 و9 على الشاشة الصغيرة. */
+  numeric: 'Newsreader',
+  /** العلامة وشاشة البداية فقط. لا يُستعمل في نصّ الواجهة. */
+  display: 'ReemKufi',
+} as const;
+
 export const fonts = {
-  arabic: undefined as string | undefined,
-  numeric: 'Georgia',
+  arabic: fontFamilies.arabic['400'],
+  numeric: fontFamilies.numeric,
 } as const;
 
 export type TypographyKey = keyof typeof typography;

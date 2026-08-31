@@ -1,8 +1,9 @@
+import { View } from 'react-native';
 import React, { useEffect } from 'react';
 import { Redirect, Stack } from 'expo-router';
 
 import { useSession } from '@/auth/SessionProvider';
-import { LoadingState } from '@/components';
+import { LoadingState, TabBar } from '@/components';
 import { t } from '@/i18n';
 import { useTheme } from '@/theme';
 
@@ -33,6 +34,7 @@ export default function AuthenticatedLayout(): React.JSX.Element {
   }
 
   return (
+    <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
     <Stack
       screenOptions={{
         headerShown: true,
@@ -60,5 +62,7 @@ export default function AuthenticatedLayout(): React.JSX.Element {
       <Stack.Screen name="settings" options={{ title: t.nav.settings }} />
       <Stack.Screen name="emergency" options={{ title: t.nav.emergency }} />
     </Stack>
+    <TabBar />
+    </View>
   );
 }

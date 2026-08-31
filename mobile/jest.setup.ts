@@ -104,6 +104,15 @@ jest.mock('expo-router', () => {
 });
 
 // -- expo-status-bar --------------------------------------------------------
+// الخطوط: تُعاد «مُحمَّلة» فوراً. الاختبارات تفحص السلوك لا شكل الحرف،
+// وبوابة الخطوط لا يجوز أن تحجب الشجرة عن الاختبار.
+jest.mock('expo-font', () => ({
+  __esModule: true,
+  useFonts: () => [true, null],
+  loadAsync: jest.fn().mockResolvedValue(undefined),
+  isLoaded: () => true,
+}));
+
 jest.mock('expo-status-bar', () => ({ __esModule: true, StatusBar: () => null }));
 
 // -- react-native-safe-area-context -----------------------------------------

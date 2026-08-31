@@ -21,7 +21,11 @@ from .clock import format_riyadh, now_utc, us_market_status
 from .config import get_settings
 from .eligibility.allowlist import ALLOWLIST, EXPLICIT_DENYLIST
 from .killswitch.engine import TRIGGER_LABELS_AR, KillSwitchTrigger
+from contextlib import asynccontextmanager
+import logging
+
 from .killswitch.store import record_reset
+from .runtime import Heartbeat, register_runtime_jobs
 from .money import D
 from .risk.constitution import (
     CONSTITUTION_VERSION,
@@ -56,7 +60,31 @@ from .profiles import (
 )
 from .profiles.manager import SystemGuardState
 
-app = FastAPI(title="Maather Autonomous Trader", version="0.7.0")
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    """
+    النبض يبدأ مع الخادم ويتوقف معه.
+
+    **لا يُسقط الإقلاع.** فشل بدء النبض يُسجَّل ويستمرّ الخادم: واجهةٌ حيّة
+    بلا نبض أفضل من خادمٍ لا يُقلع — لأن الأولى تُظهر العطل، والثانية تخفيه.
+    """
+    beat = None
+    try:
+        state = system()
+        register_runtime_jobs(state)
+        beat = Heartbeat(state)
+        beat.start()
+        _app.state.heartbeat = beat
+    except Exception as exc:  # noqa: BLE001
+        logging.getLogger(__name__).warning("تعذّر بدء النبض: %s", type(exc).__name__)
+    try:
+        yield
+    finally:
+        if beat is not None:
+            await beat.stop()
+
+
+app = FastAPI(title="Maather Autonomous Trader", version="0.7.0", lifespan=_lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
