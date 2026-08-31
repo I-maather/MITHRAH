@@ -28,6 +28,27 @@
 أربعة أخطاء في اثني عشر سطراً — وكلّها من كتابةٍ عن ظنٍّ بلا تشغيل. وهذا
 سبب وجود الملاحظة هنا: **سكربتٌ لم يُشغَّل ليس كوداً، بل نيّة.**
 
+## العطل الذي كشفه أوّل تشغيل — وكان صامتاً تماماً
+
+أعطى المسح **صفر صفقة على 1711 شمعة يومية** (نحو سبع سنوات)، وعلى 1699
+ساعية، وعلى 1631 ربع ساعية. وقال التقرير: «العمق المتاح لا يكفي للحكم».
+
+والسبب لم يكن العمق. أوّل سطر في `TrendPullbackV1.evaluate`:
+
+    if symbol not in self.metadata.markets:   # ("SPY", "QQQ", "IVV")
+        return None
+
+**الاستراتيجية ترفض النظر إلى EURUSD أصلاً.** كُتبت لمؤشرات أسهم أمريكية
+يومية — ونصّها يقول ذلك: «عمولة IBKR Pro»، والأسواق ثلاثة صناديق مؤشرات.
+ثم تحوّل المنتج إلى فوركس ولم ينتقل معه شيء.
+
+أُثبت بالقياس: على **نفس الشموع** بالضبط، الرمز `SPY` يولّد ٥ إشارات
+و`EURUSD` يولّد صفراً. الفرق كله في قائمة الأسواق.
+
+فصار الرفض يُقال بالاسم: `DECLINED_INSTRUMENT`. وحكمٌ يقول «لا يكفي
+العمق» عن استراتيجية لم تنظر إلى البيانات أصلاً هو نفس صنف العطل الذي
+نطارده — تشخيصٌ يشير إلى المكان الخطأ.
+
 ## أداةٌ واحدة عمداً
 
 EUR/USD وحده. نموذج التكلفة الوحيد المعرَّف في المشروع
@@ -49,6 +70,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -68,10 +90,34 @@ PAGE = 200  # سقف الوسيط لكل نداء
 #: الأداة الوحيدة التي يملك المشروع لها نموذج تكلفة. انظري الشرح أعلاه.
 PRICED_EPICS = ("EURUSD",)
 
+#: فاصلٌ بين نداءات الأسعار. أوّل تشغيل نجح، والثاني بعده مباشرةً أعاد
+#: `CapitalTransportError` على ثلاث دقّات — الوسيط يحدّ المعدّل.
+PAGE_PAUSE_SECONDS = 0.6
+
 #: حدّ التعادل المحسوب عند R:R صافٍ 1.75 — مصدره §5 في `PROJECT-TRUTH`.
 BREAKEVEN_WIN_RATE = 0.364
 
 OK, BAD, WARN, DIM, END = "\033[32m", "\033[31m", "\033[33m", "\033[2m", "\033[0m"
+
+
+def transplanted(strategy_class, epic: str):
+    """
+    نسخةٌ من الاستراتيجية تقبل أداةً خارج أسواقها المُعلَنة.
+
+    **تُستعمل بعلم وبعلامة.** الفرضية كُتبت لمؤشرات أسهم يومية، ونقلُها إلى
+    زوج عملات ليس ترقيةً بل **فرضية جديدة تُختبَر من الصفر**. فلا يُغيَّر
+    ملف الاستراتيجية — يُبنى صنفٌ مشتقّ لهذا التشغيل وحده، ويُوسَم التقرير.
+    """
+    from dataclasses import replace
+
+    class Transplanted(strategy_class):  # type: ignore[misc, valid-type]
+        metadata = replace(
+            strategy_class.metadata,
+            markets=tuple(strategy_class.metadata.markets) + (epic,),
+        )
+
+    Transplanted.__name__ = f"{strategy_class.__name__}Transplanted"
+    return Transplanted()
 
 
 def fetch_window(adapter, epic: str, resolution: str, start, end):
@@ -106,6 +152,7 @@ def sweep(adapter, epic: str, resolution: str) -> list:
         got = fetch_window(adapter, epic, resolution, start, end)
         if not got:
             break
+        time.sleep(PAGE_PAUSE_SECONDS)
         out = list(got) + out
         end = start
     return out
@@ -137,6 +184,10 @@ def main() -> int:
     ap.add_argument("--stop-pips", default="30")
     ap.add_argument("--tp-pips", default="60")
     ap.add_argument("--size", default="100")
+    ap.add_argument(
+        "--transplant", action="store_true",
+        help="اسمحي للاستراتيجية بأداة خارج أسواقها المُعلَنة — فرضية جديدة تُختبَر.",
+    )
     ap.add_argument("--report", default=str(REPO / "data" / "history-sweep.json"))
     a = ap.parse_args()
 
@@ -186,11 +237,38 @@ def main() -> int:
             "size": a.size, "stop_pips": a.stop_pips, "tp_pips": a.tp_pips,
             "breakeven_win_rate": BREAKEVEN_WIN_RATE,
             "cost_model": "PROVISIONAL_EURUSD",
+            "transplanted": bool(a.transplant),
         },
         "runs": [],
     }
 
+    declared = tuple(TrendPullbackV1.metadata.markets)
     for epic in a.epics:
+        # **يُسأل أوّلاً: هل تنظر الاستراتيجية إلى هذه الأداة أصلاً؟**
+        # صفرُ صفقة من استراتيجية رفضت الأداة ليس «لا حافّة» ولا «عيّنة
+        # صغيرة» — هو لا شيء. وقولُ غير ذلك يُرسل القارئ إلى المكان الخطأ.
+        if epic not in declared:
+            if not a.transplant:
+                print(
+                    f"  {BAD}⛔{END} {epic:<8} الاستراتيجية لا تقبل هذه الأداة.\n"
+                    f"     {TrendPullbackV1.metadata.name} أسواقها المُعلَنة: "
+                    f"{'، '.join(declared)}\n"
+                    f"     وهي فرضية كُتبت لمؤشرات أسهم أمريكية يومية، لا لزوج عملات.\n"
+                    f"     لتشغيلها على {epic} بوصفها **فرضية جديدة**: أضيفي --transplant"
+                )
+                report["runs"].append({
+                    "epic": epic, "verdict": "DECLINED_INSTRUMENT",
+                    "declared_markets": list(declared),
+                })
+                continue
+            print(
+                f"  {WARN}⚠️{END}  فرضية منقولة: {TrendPullbackV1.metadata.name} كُتبت لـ"
+                f"{'، '.join(declared)} وتُختبَر هنا على {epic}.\n"
+                f"     النتيجة **بحثٌ من الصفر** لا امتداد لنتيجة سابقة.\n"
+            )
+        strategy = (
+            transplanted(TrendPullbackV1, epic) if epic not in declared else TrendPullbackV1()
+        )
         for resolution in a.resolutions:
             if resolution not in LADDER:
                 print(f"  {WARN}○{END} {resolution} — دقّة غير معروفة، تُخطّى")
@@ -207,7 +285,7 @@ def main() -> int:
 
             bars = to_bars(candles, epic)
             try:
-                result = engine.run(TrendPullbackV1(), bars, symbol=epic)
+                result = engine.run(strategy, bars, symbol=epic)
             except InsufficientData as exc:
                 print(f"  {WARN}○{END} {epic:<8} {resolution:<10} {exc}")
                 report["runs"].append({
@@ -260,11 +338,15 @@ def main() -> int:
     conclusive = [r for r in report["runs"] if r["verdict"] in
                   ("ABOVE_BREAKEVEN", "BELOW_BREAKEVEN")]
     above = [r for r in conclusive if r["verdict"] == "ABOVE_BREAKEVEN"]
+    declined = [r for r in report["runs"] if r["verdict"] == "DECLINED_INSTRUMENT"]
 
     print(f"\n{DIM}   التقرير: {a.report}{END}")
-    if not conclusive:
+    if declined:
+        print(f"\n{BAD}⛔ لم يُقَس شيء: الاستراتيجية لا تقبل الأداة المطلوبة.{END}")
+        print(f"{DIM}  ليست «لا حافّة» ولا «عيّنة صغيرة» — هي أنها لم تنظر إلى البيانات.{END}\n")
+    elif not conclusive:
         print(f"\n{WARN}○ لا نتيجة حاسمة: لم تبلغ أي دقّة الحدّ الأدنى للصفقات.{END}")
-        print(f"{DIM}  وهذا ليس فشلاً — هو أن العمق المتاح لا يكفي للحكم بعد.{END}\n")
+        print(f"{DIM}  الشموع وصلت وقُرئت، لكن الإشارات أقلّ من أن يُحكَم عليها.{END}\n")
     elif above:
         print(f"\n{OK}✅ {len(above)} من {len(conclusive)} إعداد فوق حدّ التعادل.{END}")
         print(f"{DIM}  إشارة أوّلية لا اعتماد. البوابة التالية: Walk-forward ثم Shadow.{END}\n")
