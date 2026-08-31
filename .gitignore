@@ -58,3 +58,7 @@ mobile/assets/fonts/*.zip
 
 # حزمة الهوية المفكوكة — مصدرها المحادثة لا المستودع
 _identity_bundle/
+
+# تقارير التغطية — تُولَّد ولا تُودَع
+.coverage
+htmlcov/
