@@ -108,11 +108,33 @@ class SystemState:
         market = forex_market_status()
         details.append(f"حالة السوق: {market.reason_ar}")
 
+        if not broker_ok and self.broker_note_ar:
+            details.append(f"سبب انقطاع الوسيط: {self.broker_note_ar}")
+
+        # **`scheduler_ok` كان مثبَّتاً على `True`.** أي أنه يقول «المجدول
+        # سليم» عن مجدولٍ فارغ لم يُسجَّل فيه شيء، وعن مهامٍّ تُخفق في كل
+        # نبضة. وهذا هو صنف العطل الحاكم: حقلٌ يُعرَض ولا يُقاس من مصدره.
+        #
+        # وقد كلّفنا ذلك الآن بالضبط: الوسيط «غير متصل»، والمجدول «سليم»،
+        # ولا سبيل لمعرفة أسُجِّلت مهمّة إبقاء الجلسة أصلاً أم لا.
+        jobs = self.scheduler.status()
+        scheduler_ok = bool(jobs) and all(j.get("last_error") is None for j in jobs)
+        if not jobs:
+            details.append("المجدول فارغ — لم تُسجَّل أي مهمة. النبض لم يبدأ.")
+        for job in jobs:
+            if job.get("last_error"):
+                details.append(
+                    f"المهمة «{job['name']}» أخفقت: {job['last_error']} "
+                    f"({job.get('failures', 0)} إخفاقاً من {job.get('runs', 0)} تشغيلاً)."
+                )
+            elif job.get("runs", 0) == 0:
+                details.append(f"المهمة «{job['name']}» مسجَّلة ولم تُشغَّل بعد.")
+
         return HealthReport(
             broker_connected=broker_ok,
             market_data_ok=broker_ok and market.is_open,
             database_ok=db_ok,
-            scheduler_ok=True,
+            scheduler_ok=scheduler_ok,
             clock_ok=True,
             audit_chain_ok=chain_ok,
             kill_switch_active=self.kill_switch.is_active,
