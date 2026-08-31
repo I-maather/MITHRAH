@@ -423,7 +423,7 @@ class FredMacroDataProvider(MacroDataProvider):
             if not result.usable_for_decision or not result.records:
                 out[key] = Sourced(
                     value=UNKNOWN, source=PROVIDER_NAME,
-                    reliability=SourceReliability.UNRELIABLE,
+                    reliability=SourceReliability.UNVERIFIED,
                     observed_at_utc=as_of_utc,
                     note_ar=result.detail_ar or "غير متاح.",
                 )
@@ -431,7 +431,7 @@ class FredMacroDataProvider(MacroDataProvider):
             latest = result.records[0]
             out[key] = Sourced(
                 value=D(latest["value"]), source=PROVIDER_NAME,
-                reliability=SourceReliability.OFFICIAL,
+                reliability=SourceReliability.OFFICIAL_PROVIDER,
                 observed_at_utc=as_of_utc,
                 note_ar=f"{SERIES_BY_ID[key].official_title} — {latest['date']}",
             )
