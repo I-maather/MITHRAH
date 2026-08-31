@@ -226,11 +226,23 @@ def verdict(result, minimum: int, breakeven: float) -> tuple[str, str]:
         f"· صافي {result.net_pnl:.2f}$"
     )
 
+    # **الصافي يحكم قبل معدّل الفوز.**
+    #
+    # أعطى أوّل تشغيلٍ صادق أربعة إعدادات معدّل فوزها فوق التعادل وصافيها
+    # **سالب في الأربعة**: ‎−0.70 و‎−3.81 و‎−3.39 و‎−0.17 دولار. ولا تناقض:
+    # حدّ التعادل يفترض أن كل صفقة تنتهي عند الوقف أو الهدف، والمحرّك يُخرج
+    # الصفقة أيضاً بانتهاء المهلة — فيقع خروجٌ ثالث بعائد أسوأ من الهدف،
+    # ولا يدخل في الحساب.
+    #
+    # فمعدّل الفوز مقارنةٌ بنموذج، والصافي هو ما وقع فعلاً. وحين يختلفان
+    # يُصدَّق ما وقع.
+    if result.net_pnl <= 0:
+        return "LOSING", f"**خاسر بالصافي** — {tail}"
     if z >= MIN_Z_FOR_EDGE:
         return "ABOVE_BREAKEVEN", f"فوق التعادل بفارق يُعتدّ به — {tail}"
     if z <= -MIN_Z_FOR_EDGE:
         return "BELOW_BREAKEVEN", f"تحت التعادل بفارق يُعتدّ به — {tail}"
-    return "INDISTINGUISHABLE", f"**لا يُفرَّق عن التعادل** — {tail}"
+    return "INDISTINGUISHABLE", f"**رابح بالصافي، لكن لا يُفرَّق عن التعادل** — {tail}"
 
 
 def main() -> int:
@@ -389,6 +401,7 @@ def main() -> int:
             })
             mark = {"ABOVE_BREAKEVEN": f"{OK}✅{END}",
                     "BELOW_BREAKEVEN": f"{BAD}❌{END}",
+                    "LOSING": f"{BAD}❌{END}",
                     "INDISTINGUISHABLE": f"{WARN}≈{END}"}.get(code, f"{WARN}○{END}")
             print(f"  {mark} {epic:<8} {resolution:<10} {len(bars):>5} شمعة · "
                   f"{result.trade_count:>3} صفقة · {sentence}")
@@ -404,24 +417,34 @@ def main() -> int:
     unclear = [r for r in report["runs"] if r["verdict"] == "INDISTINGUISHABLE"]
     declined = [r for r in report["runs"] if r["verdict"] == "DECLINED_INSTRUMENT"]
 
+    losing = [r for r in report["runs"] if r["verdict"] == "LOSING"]
+    measured = [r for r in report["runs"]
+                if r["verdict"] in ("ABOVE_BREAKEVEN", "BELOW_BREAKEVEN",
+                                    "INDISTINGUISHABLE", "LOSING")]
+
     print(f"\n{DIM}   التقرير: {a.report}{END}")
+    # الترتيب مقصود: الأخصّ أوّلاً. وكان «لا نتيجة حاسمة» يسبق الجميع فيبتلع
+    # أحكاماً وقعت فعلاً — أربعة إعدادات حُكم عليها، والخلاصة تقول «لم يُبلَغ
+    # الحدّ الأدنى». خلاصةٌ تناقض سطورها التي فوقها.
     if declined:
         print(f"\n{BAD}⛔ لم يُقَس شيء: الاستراتيجية لا تقبل الأداة المطلوبة.{END}")
         print(f"{DIM}  ليست «لا حافّة» ولا «عيّنة صغيرة» — هي أنها لم تنظر إلى البيانات.{END}\n")
-    elif not conclusive:
-        print(f"\n{WARN}○ لا نتيجة حاسمة: لم تبلغ أي دقّة الحدّ الأدنى للصفقات.{END}")
-        print(f"{DIM}  الشموع وصلت وقُرئت، لكن الإشارات أقلّ من أن يُحكَم عليها.{END}\n")
+    elif losing and not above:
+        print(f"\n{BAD}❌ {len(losing)} من {len(measured)} إعداد **خاسر بالصافي**.{END}")
+        print(f"{DIM}  معدّل الفوز فوق التعادل لا ينفع حين يكون المال الخارج أكثر من الداخل.{END}")
+        print(f"{DIM}  وهذا **جوابٌ نافع**: لا تُبنى بنية إطلاق فوق حافّة غير موجودة.{END}\n")
     elif above:
-        print(f"\n{OK}✅ {len(above)} إعداد فوق التعادل بفارق يُعتدّ به.{END}")
+        print(f"\n{OK}✅ {len(above)} إعداد فوق التعادل بفارق يُعتدّ به وبصافٍ موجب.{END}")
         print(f"{DIM}  إشارة أوّلية لا اعتماد — والقياس داخل العيّنة.{END}")
         print(f"{DIM}  البوابة التالية: Walk-forward خارج العيّنة، ثم Shadow.{END}\n")
     elif unclear:
-        print(f"\n{WARN}≈ {len(unclear)} إعداد **لا يُفرَّق عن التعادل**.{END}")
-        print(f"{DIM}  ليس ربحاً ولا خسارة: العيّنة أصغر من أن تُظهر فارقاً بهذا الحجم.{END}")
-        print(f"{DIM}  والبناء على هذا بناءٌ على ضجيج — يلزم عمقٌ أكبر أو فرضية أقوى.{END}\n")
+        print(f"\n{WARN}≈ {len(unclear)} إعداد رابح بالصافي ولا يُفرَّق عن التعادل.{END}")
+        print(f"{DIM}  العيّنة أصغر من أن تُظهر فارقاً بهذا الحجم — والبناء عليه بناءٌ على ضجيج.{END}\n")
+    elif not measured:
+        print(f"\n{WARN}○ لا نتيجة: لم تبلغ أي دقّة الحدّ الأدنى للصفقات.{END}")
+        print(f"{DIM}  الشموع وصلت وقُرئت، لكن الإشارات أقلّ من أن يُحكَم عليها.{END}\n")
     else:
-        print(f"\n{BAD}❌ لا إعداد فوق حدّ التعادل بعد التكلفة الحقيقية.{END}")
-        print(f"{DIM}  وهذا **جوابٌ نافع**: لا تُبنى بنية إطلاق فوق حافّة غير موجودة.{END}\n")
+        print(f"\n{BAD}❌ لا إعداد فوق حدّ التعادل بعد التكلفة الحقيقية.{END}\n")
 
     print(f"{DIM}   لم يُرسل أمر، ولم يُفتح قفل.{END}\n")
     return 0
