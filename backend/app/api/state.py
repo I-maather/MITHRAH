@@ -166,8 +166,11 @@ def build_system(settings: Settings | None = None) -> SystemState:
         source="build_system",
     )
 
+    # على الماك تُقرأ الأسرار من سلسلة المفاتيح؛ وعلى الخادم لا سلسلة مفاتيح،
+    # فالملف هو المصدر الوحيد. المسار من الإعدادات لا مثبَّتاً هنا — لأن تثبيته
+    # كان يجعل مفتاحاً كُتب على الخادم في ملف آخر «موجوداً وغير مقروء».
     secret_provider = build_secret_provider(
-        env_file=REPO_ROOT / "secrets" / "capital.env", allow_process_env=False
+        env_file=settings.secrets_file, allow_process_env=False
     )
     return SystemState(
         settings=settings, broker=broker, audit=audit, kill_switch=kill_switch,

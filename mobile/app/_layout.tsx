@@ -109,6 +109,8 @@ function FontGate({ children }: { children: React.ReactNode }): React.JSX.Elemen
     'IBMPlexSansArabic-Bold': require('../assets/fonts/IBMPlexSansArabic-Bold.ttf'),
     Newsreader: require('../assets/fonts/Newsreader.ttf'),
     ReemKufi: require('../assets/fonts/ReemKufi.ttf'),
+    Amiri: require('../assets/fonts/Amiri-Regular.ttf'),
+    'Amiri-Bold': require('../assets/fonts/Amiri-Bold.ttf'),
   });
   if (!loaded && !error) {
     return null;

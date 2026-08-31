@@ -1,0 +1,343 @@
+<title>مآثر — دورة الصفقة</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=Newsreader:opsz,wght@6..72,300;6..72,400;6..72,500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --night950:#100F0E; --night900:#181716; --night800:#201F1D; --night700:#3A3734; --night600:#57534E;
+  --glow0:#F4F2EE; --glow200:#D6D3CD; --glow400:#A5A19A; --glow600:#807C74;
+  --jamr:#B85A26; --jamrDark:#D97B3C;
+  --nakhl:#1B7A4B; --nakhlDark:#4BD08D;
+  --rumman:#B32B31; --rummanDark:#F0736F;
+  --kathib:#8A6A1F; --kathibDark:#D8B45A;
+  --ar:'IBM Plex Sans Arabic','SF Arabic','Geeza Pro',system-ui,sans-serif;
+  --disp:'Amiri','Times New Roman',serif;
+  --num:'Newsreader',Georgia,serif;
+  --mono:'IBM Plex Mono',ui-monospace,monospace;
+  --page:#EFEDEA; --pageInk:#16161A; --pageMute:#4F4D48; --pageLine:#D8D5D0; --card:#fff;
+}
+:root[data-theme="dark"]{--page:#0C0B0A;--pageInk:var(--glow0);--pageMute:var(--glow400);--pageLine:#2A2825;--card:#181716}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--page:#0C0B0A;--pageInk:var(--glow0);--pageMute:var(--glow400);--pageLine:#2A2825;--card:#181716}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--pageInk);font-family:var(--ar);direction:rtl;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding:52px 24px 90px}
+h1{font-family:var(--disp);font-weight:700;font-size:clamp(30px,4.4vw,48px);line-height:1.14;margin:0 0 10px}
+h2{font-family:var(--disp);font-weight:700;font-size:clamp(21px,2.7vw,29px);margin:0 0 6px}
+p{line-height:1.75;margin:0 0 12px;color:var(--pageMute);font-size:15px}
+.lede{font-size:17px;color:var(--pageInk);max-width:70ch}
+.eyebrow{font-family:var(--mono);font-size:11.5px;letter-spacing:.14em;color:var(--pageMute);margin:0 0 14px}
+hr.sep{border:0;border-top:1px solid var(--pageLine);margin:58px 0 34px}
+.sec-head{display:flex;align-items:baseline;gap:14px;margin-bottom:8px}
+.sec-num{font-family:var(--num);font-size:13px;color:var(--jamr)}
+
+.warnbox{border:1px solid var(--kathib);background:var(--card);padding:20px 22px;margin:26px 0 8px}
+.warnbox .h{font-family:var(--disp);font-weight:700;font-size:19px;color:var(--kathib);margin-bottom:8px}
+.warnbox p{margin:0;color:var(--pageInk);font-size:14.5px}
+:root[data-theme="dark"] .warnbox{border-color:var(--kathibDark)}
+:root[data-theme="dark"] .warnbox .h{color:var(--kathibDark)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .warnbox{border-color:var(--kathibDark)}:root:not([data-theme="light"]) .warnbox .h{color:var(--kathibDark)}}
+
+.screens{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:44px 32px;margin-top:30px}
+.scr-meta{margin-bottom:14px}
+.scr-meta .tag{display:inline-block;font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;color:var(--pageMute);border:1px solid var(--pageLine);padding:3px 9px;border-radius:99px;margin-bottom:9px}
+.scr-meta h3{font-family:var(--disp);font-weight:700;font-size:21px;margin:0 0 6px}
+.scr-meta .d{font-size:13.5px;line-height:1.7;color:var(--pageMute);margin:0}
+
+.phone{width:100%;max-width:340px;aspect-ratio:340/700;background:var(--night950);border:1px solid #2A2825;border-radius:30px;overflow:hidden;display:flex;flex-direction:column;color:var(--glow0);font-size:12px}
+.ph-status{display:flex;justify-content:space-between;padding:12px 20px 4px;font-family:var(--num);font-size:10.5px;color:var(--glow600)}
+.ph-head{padding:6px 20px 12px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--night800)}
+.ph-head .t{font-family:var(--disp);font-size:19px;font-weight:700}
+.ph-head .r{display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--glow400)}
+.dot{width:5px;height:5px;border-radius:50%;background:var(--jamrDark);display:inline-block}
+.dot.off{background:var(--night600)}
+.dot.g{background:var(--nakhlDark)}
+.ph-body{flex:1;overflow:hidden;padding:16px 20px;display:flex;flex-direction:column;gap:14px}
+.ph-tabs{display:flex;border-top:1px solid var(--night800);padding:9px 10px 14px;gap:4px}
+.ph-tabs span{flex:1;text-align:center;font-size:11px;color:var(--glow600);padding:6px 0;border-radius:7px}
+.ph-tabs span.on{color:#fff;background:var(--jamrDark)}
+.hero .k{font-family:var(--mono);font-size:9.5px;color:var(--glow600);letter-spacing:.12em;margin-bottom:7px}
+.hero .v{font-family:var(--disp);font-size:27px;font-weight:700;line-height:1.28}
+.hero .v.num{font-family:var(--num);font-size:44px;font-weight:400;letter-spacing:-.01em;line-height:1}
+.hero .s{font-size:11.5px;color:var(--glow400);line-height:1.65;margin-top:8px}
+.blk{border-top:1px solid var(--night800);padding-top:12px}
+.blk .k{font-family:var(--mono);font-size:9.5px;color:var(--glow600);letter-spacing:.1em;margin-bottom:9px}
+.row{display:flex;justify-content:space-between;align-items:baseline;padding:5px 0;font-size:11.5px;color:var(--glow200)}
+.row .v{font-family:var(--num);font-size:12.5px;color:var(--glow0)}
+.row .m{color:var(--glow600)}
+.pos{color:var(--nakhlDark)} .neg{color:var(--rummanDark)} .cau{color:var(--kathibDark)}
+.pill{display:inline-block;font-family:var(--mono);font-size:9.5px;padding:2px 7px;border:1px solid var(--night700);color:var(--glow400)}
+.pill.live{border-color:var(--jamrDark);color:var(--jamrDark)}
+.pill.g{border-color:var(--nakhlDark);color:var(--nakhlDark)}
+.pill.r{border-color:var(--rummanDark);color:var(--rummanDark)}
+.hadd{position:relative;height:14px;margin:6px 0 8px}
+.hadd .base{position:absolute;top:6px;right:0;left:0;height:1px;background:var(--night700)}
+.hadd .fill{position:absolute;top:6px;right:0;height:1px;background:var(--glow400)}
+.hadd .tick{position:absolute;top:0;width:1.5px;height:13px;background:var(--jamrDark)}
+.hadd .mark{position:absolute;top:2px;width:1px;height:5px;background:var(--night700)}
+.hadd .mark.g{background:var(--nakhlDark)} .hadd .mark.r{background:var(--rummanDark)}
+.spark{display:flex;align-items:flex-end;gap:2px;height:44px;margin:6px 0}
+.spark i{flex:1;background:var(--night700);display:block}
+.spark i.up{background:var(--nakhlDark);opacity:.85}
+.spark i.dn{background:var(--rummanDark);opacity:.85}
+.curve{height:56px;margin:8px 0;position:relative}
+.btn{display:block;text-align:center;padding:10px;border:1px solid var(--night700);font-size:12px;color:var(--glow200);margin-top:auto}
+.btn.g{border-color:var(--nakhlDark);color:var(--nakhlDark)}
+.tog{position:fixed;top:14px;left:14px;z-index:9;display:flex;border:1px solid var(--pageLine);background:var(--card)}
+.tog button{font-family:var(--ar);font-size:12px;padding:7px 13px;background:none;border:0;color:var(--pageMute);cursor:pointer}
+.tog button[aria-pressed="true"]{background:var(--jamr);color:#fff}
+.tick-live{animation:flash 1.6s ease-out infinite}
+@keyframes flash{0%,100%{opacity:1}50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.tick-live{animation:none}}
+</style>
+
+<div class="tog" role="group" aria-label="النمط">
+  <button id="bL" aria-pressed="false">فاتح</button>
+  <button id="bD" aria-pressed="false">داكن</button>
+</div>
+
+<div class="wrap">
+
+<p class="eyebrow">مآثر · دورة صفقة كاملة · ٣١ أغسطس ٢٠٢٦</p>
+<h1>الشاشات وهي تتداول</h1>
+<p class="lede">من لحظة تكوّن الإشارة إلى إغلاق المركز وقيده في السجلّ. نفس نسق الشاشات المعتمَد — أميري للحكم، وبلكس للمتن، ونيوزريدر للأرقام، والجمري على التبويب النشط وعلامة «الحدّ» وحدهما.</p>
+
+<div class="warnbox">
+  <div class="h">هذه محاكاة عرض — وليست بيانات حقيقية</div>
+  <p>لم يُرسل من هذا النظام أمرٌ واحد قط، لا على حساب حقيقي ولا تجريبي. كل رقم في الصفحة <strong>موضوع لبيان الشكل لا لبيان النتيجة</strong>: السعر والربح والنِسَب كلها مُختلَقة لغرض التصميم. أيّ عرضٍ لأداء حقيقي لن يظهر إلا بعد Backtest وWalk-forward وShadow، ومصدره سجلّ التنفيذ لا رسمٌ في متصفّح.</p>
+</div>
+
+<hr class="sep">
+<div class="sec-head"><span class="sec-num">٠١</span><h2>الدورة — ثماني لحظات</h2></div>
+<p class="lede" style="margin-bottom:4px">اللحظات مرتّبة زمنياً. لاحظي كيف يتحوّل نفس العنصر — «الحدّ» — من قياس المخاطرة، إلى قياس موضعك بين الوقف والهدف، إلى قياس التراجع. عنصرٌ واحد يحمل النظام كله.</p>
+
+<div class="screens">
+
+<!-- 1 -->
+<div>
+  <div class="scr-meta"><span class="tag">٠٦:٠٢ ص · القرار</span><h3>١. الإشارة تتكوّن</h3>
+  <p class="d">النظام يفحص، والشروط تكتمل واحداً بعد آخر. الشرط الناقص وحده مُبرَز — لأنه المعلومة، لا الشروط التي مرّت.</p></div>
+  <div class="phone">
+    <div class="ph-status"><span>٦:٠٢</span><span>▮▮▮</span></div>
+    <div class="ph-head"><span class="t">قرار اليوم</span><span class="r"><span class="dot"></span>يفحص</span></div>
+    <div class="ph-body">
+      <div class="hero"><div class="k">الخلاصة</div><div class="v">فرصة تتكوّن على اليورو/دولار.</div><div class="s">سبعة شروط من ثمانية اكتملت. أنتظر إغلاق شمعة الربع ساعة.</div></div>
+      <div class="blk"><div class="k">نتيجة الجودة — العتبة ٧٠</div>
+        <div class="row"><span class="m">شراء · إطار ١٥ دقيقة</span><span class="v">٧٨ / ١٠٠</span></div>
+        <div class="hadd"><div class="base"></div><div class="fill" style="width:78%"></div><div class="mark" style="right:70%"></div><div class="tick tick-live" style="right:78%"></div></div>
+      </div>
+      <div class="blk"><div class="k">الشروط</div>
+        <div class="row"><span>اتّفاق الأطر الثلاثة</span><span class="pos">✓</span></div>
+        <div class="row"><span>لا خبر عالي الأثر خلال ساعتين</span><span class="pos">✓</span></div>
+        <div class="row"><span>السيولة ضمن المدى</span><span class="pos">✓</span></div>
+        <div class="row"><span>الفارق ٠٫٧ نقطة ≤ الحدّ</span><span class="pos">✓</span></div>
+        <div class="row"><span>إغلاق شمعة الدخول</span><span class="cau">بعد ٤ دقائق</span></div>
+      </div>
+      <div class="blk"><div class="k">لو دخلت</div>
+        <div class="row"><span>الحجم · الوقف · الهدف</span><span class="v">٠٫٠١ · ٢٥ · ٤٦</span></div>
+        <div class="row"><span>العائد/المخاطرة</span><span class="v pos">١٫٨٥</span></div>
+      </div>
+    </div>
+    <div class="ph-tabs"><span>الرئيسية</span><span class="on">القرار</span><span>المحفظة</span><span>النظام</span></div>
+  </div>
+</div>
+
+<!-- 2 -->
+<div>
+  <div class="scr-meta"><span class="tag">٠٦:٠٦ ص · المحفظة</span><h3>٢. الأمر أُرسل</h3>
+  <p class="d">أخطر عشر ثوانٍ في النظام. الشاشة لا تدّعي نجاحاً: تقول «أُرسل» لا «نُفِّذ»، حتى يعود التأكيد بمرجع الصفقة.</p></div>
+  <div class="phone">
+    <div class="ph-status"><span>٦:٠٦</span><span>▮▮▮</span></div>
+    <div class="ph-head"><span class="t">المركز</span><span class="r"><span class="dot"></span>ينتظر التأكيد</span></div>
+    <div class="ph-body">
+      <div class="hero"><div class="k">الحالة</div><div class="v">أرسلتُ الأمر. أنتظر تأكيد الوسيط.</div><div class="s">لا أُعيد الإرسال مهما تأخّر: طلبٌ قد يكون وصل لا يُرسَل مرّتين.</div></div>
+      <div class="blk"><div class="k">ما أرسلتُه</div>
+        <div class="row"><span>الأداة · الاتجاه</span><span class="v">EUR/USD · شراء</span></div>
+        <div class="row"><span>الحجم</span><span class="v">٠٫٠١ عقد</span></div>
+        <div class="row"><span>وقف مضمون</span><span class="v">٢٥ نقطة</span></div>
+        <div class="row"><span>مرجع الطلب</span><span class="v" style="font-family:var(--mono);font-size:10px">o_8fd21c</span></div>
+      </div>
+      <div class="blk"><div class="k">التأكيد</div>
+        <div class="row"><span>الحالة لدى الوسيط</span><span class="pill live">قيد الانتظار</span></div>
+        <div class="row"><span>مضى</span><span class="v">٣ ثوانٍ</span></div>
+      </div>
+    </div>
+    <div class="ph-tabs"><span>الرئيسية</span><span>القرار</span><span class="on">المحفظة</span><span>النظام</span></div>
+  </div>
+</div>
+
+<!-- 3 -->
+<div>
+  <div class="scr-meta"><span class="tag">٠٧:٤١ ص · المحفظة</span><h3>٣. مركز مفتوح — رابح</h3>
+  <p class="d">الرقم يعدّ صعوداً ويومض عند كل تحديث. و«الحدّ» يريكِ موضعك بين وقفك وهدفك — لا ثلاثة أسعار تحسبينها في رأسك.</p></div>
+  <div class="phone">
+    <div class="ph-status"><span>٧:٤١</span><span>▮▮▮</span></div>
+    <div class="ph-head"><span class="t">المركز</span><span class="r"><span class="dot g"></span>مفتوح</span></div>
+    <div class="ph-body">
+      <div class="hero"><div class="k">غير محقَّق</div><div class="v num pos">+٠٫٤٢</div><div class="s">EUR/USD · شراء ٠٫٠١ · منذ ٩٥ دقيقة</div></div>
+      <div class="blk"><div class="k">بين الوقف والهدف</div>
+        <div class="hadd"><div class="base"></div><div class="fill" style="width:38%"></div><div class="mark r" style="right:0%"></div><div class="mark g" style="right:100%"></div><div class="tick tick-live" style="right:38%"></div></div>
+        <div class="row"><span>الوقف</span><span class="v neg">١٫٠٨٢٥٠</span></div>
+        <div class="row"><span>الحالي</span><span class="v">١٫٠٨٤٩٠</span></div>
+        <div class="row"><span>الهدف</span><span class="v pos">١٫٠٨٨٩٠</span></div>
+      </div>
+      <div class="blk"><div class="k">الحماية</div>
+        <div class="row"><span>وقف مضمون لدى الوسيط</span><span class="pill g">مُسجَّل</span></div>
+        <div class="row"><span>أقصى خسارة ممكنة</span><span class="v neg">−٠٫٧٥</span></div>
+      </div>
+    </div>
+    <div class="ph-tabs"><span>الرئيسية</span><span>القرار</span><span class="on">المحفظة</span><span>النظام</span></div>
+  </div>
+</div>
+
+<!-- 4 -->
+<div>
+  <div class="scr-meta"><span class="tag">٠٨:١٩ ص · المحفظة</span><h3>٤. السعر يرتدّ عليك</h3>
+  <p class="d">الحالة التي يخفيها معظم التطبيقات أو يزيّنها. هنا تُعرض كما هي: كم بقي إلى الوقف بالنقاط وبالدولار، وماذا يحدث حين يُلمَس.</p></div>
+  <div class="phone">
+    <div class="ph-status"><span>٨:١٩</span><span>▮▮▮</span></div>
+    <div class="ph-head"><span class="t">المركز</span><span class="r"><span class="dot g"></span>مفتوح</span></div>
+    <div class="ph-body">
+      <div class="hero"><div class="k">غير محقَّق</div><div class="v num neg">−٠٫٣١</div><div class="s">EUR/USD · شراء ٠٫٠١ · منذ ساعتين و١٣ دقيقة</div></div>
+      <div class="blk"><div class="k">بين الوقف والهدف</div>
+        <div class="hadd"><div class="base"></div><div class="fill" style="width:15%"></div><div class="mark r" style="right:0%"></div><div class="mark g" style="right:100%"></div><div class="tick tick-live" style="right:15%"></div></div>
+        <div class="row"><span>إلى الوقف</span><span class="v neg">٤ نقاط · ٠٫٤٤ دولار</span></div>
+        <div class="row"><span>إلى الهدف</span><span class="v">٣٧ نقطة</span></div>
+      </div>
+      <div class="blk"><div class="k">إن لُمس الوقف</div>
+        <div class="row"><span>الخسارة المقيَّدة</span><span class="v neg">−٠٫٧٥</span></div>
+        <div class="row"><span>يبقى من مخاطرة اليوم</span><span class="v">٠٫٠٠</span></div>
+        <div class="row"><span>أثر ذلك</span><span class="m">لا دخول جديد اليوم</span></div>
+      </div>
+      <div class="blk"><div class="k">هل أتدخّل؟</div>
+        <div class="row"><span class="m">لا. الوقف مضمون لدى الوسيط، وتحريكه يدوياً يكسر الاختبار الذي أُجيزت به الاستراتيجية.</span></div>
+      </div>
+    </div>
+    <div class="ph-tabs"><span>الرئيسية</span><span>القرار</span><span class="on">المحفظة</span><span>النظام</span></div>
+  </div>
+</div>
+
+<!-- 5 -->
+<div>
+  <div class="scr-meta"><span class="tag">١٠:٠٣ ص · المحفظة</span><h3>٥. الوقف يُنقل إلى التعادل</h3>
+  <p class="d">قرار إدارة يتّخذه النظام وحده. الشاشة تقول ماذا فعل ولماذا وما أثره على أسوأ حالة — لا إشعاراً مبهماً.</p></div>
+  <div class="phone">
+    <div class="ph-status"><span>١٠:٠٣</span><span>▮▮▮</span></div>
+    <div class="ph-head"><span class="t">المركز</span><span class="r"><span class="dot g"></span>مفتوح · مؤمَّن</span></div>
+    <div class="ph-body">
+      <div class="hero"><div class="k">غير محقَّق</div><div class="v num pos">+٠٫٦٨</div><div class="s">نقلتُ الوقف إلى سعر الدخول. لم يعد بإمكان هذه الصفقة أن تخسر.</div></div>
+      <div class="blk"><div class="k">بين الوقف والهدف</div>
+        <div class="hadd"><div class="base"></div><div class="fill" style="width:61%"></div><div class="mark" style="right:35%"></div><div class="mark g" style="right:100%"></div><div class="tick tick-live" style="right:61%"></div></div>
+        <div class="row"><span>الوقف الجديد</span><span class="v">١٫٠٨٤٧٥ <span class="m">(الدخول)</span></span></div>
+      </div>
+      <div class="blk"><div class="k">لماذا الآن</div>
+        <div class="row"><span class="m">بلغ الربح ١٫٠ ضعف المخاطرة — وهو الشرط المكتوب في الاستراتيجية المُجازة. القرار آليّ، ومقيَّد في سجلّ التدقيق.</span></div>
+      </div>
+      <div class="blk"><div class="k">أسوأ حالة الآن</div>
+        <div class="row"><span>لو ارتدّ إلى الوقف</span><span class="v">٠٫٠٠ <span class="m">ناقص العمولة</span></span></div>
+      </div>
+    </div>
+    <div class="ph-tabs"><span>الرئيسية</span><span>القرار</span><span class="on">المحفظة</span><span>النظام</span></div>
+  </div>
+</div>
+
+<!-- 6 -->
+<div>
+  <div class="scr-meta"><span class="tag">١٣:٢٧ م · المحفظة</span><h3>٦. أُغلق على الهدف</h3>
+  <p class="d">النتيجة أولاً، ثم المقارنة بما كان متوقَّعاً. الانزلاق يُعرض دائماً — لأنه الفرق بين ما وعدَت به الاستراتيجية وما دفعه السوق.</p></div>
+  <div class="phone">
+    <div class="ph-status"><span>١٣:٢٧</span><span>▮▮▮</span></div>
+    <div class="ph-head"><span class="t">أُغلق</span><span class="r"><span class="dot off"></span>لا مركز</span></div>
+    <div class="ph-body">
+      <div class="hero"><div class="k">محقَّق</div><div class="v num pos">+١٫٣٨</div><div class="s">EUR/USD · شراء ٠٫٠١ · ٧ ساعات و٢١ دقيقة · بلغ الهدف</div></div>
+      <div class="blk"><div class="k">متوقَّع مقابل ما حدث</div>
+        <div class="row"><span>الهدف</span><span class="v">١٫٠٨٨٩٠ · <span class="pos">١٫٠٨٨٨٦</span></span></div>
+        <div class="row"><span>الانزلاق</span><span class="v">٠٫١ · <span class="cau">٠٫٤ نقطة</span></span></div>
+        <div class="row"><span>العائد/المخاطرة</span><span class="v">١٫٨٥ · <span class="pos">١٫٨٤</span></span></div>
+        <div class="row"><span>العمولة والتمويل</span><span class="v neg">−٠٫٠٧</span></div>
+      </div>
+      <div class="blk"><div class="k">أثر اليوم</div>
+        <div class="row"><span>رصيد الحساب</span><span class="v">١٥١٫٣٨ دولار</span></div>
+        <div class="row"><span>دخول متبقٍّ اليوم</span><span class="v">٠ من ١</span></div>
+      </div>
+      <a class="btn g">قُيِّدت في السجلّ ←</a>
+    </div>
+    <div class="ph-tabs"><span>الرئيسية</span><span>القرار</span><span class="on">المحفظة</span><span>النظام</span></div>
+  </div>
+</div>
+
+<!-- 7 -->
+<div>
+  <div class="scr-meta"><span class="tag">١٣:٢٨ م · الرئيسية</span><h3>٧. الرئيسية بعد الصفقة</h3>
+  <p class="d">هذه هي الشاشة التي سترينها أكثر من غيرها بعد أن يشتغل النظام. الحكم يتغيّر من «لم أدخل» إلى ما حدث فعلاً، و«الحدّ» يمتلئ.</p></div>
+  <div class="phone">
+    <div class="ph-status"><span>١٣:٢٨</span><span>▮▮▮</span></div>
+    <div class="ph-head"><span class="t">الأحد ٣١ أغسطس</span><span class="r"><span class="dot g"></span>يعمل</span></div>
+    <div class="ph-body">
+      <div class="hero"><div class="k">حكم اليوم</div><div class="v">صفقة واحدة، أُغلقت على هدفها.</div><div class="s">استهلكتُ مخاطرة اليوم كاملة. لا دخول جديد قبل الغد.</div></div>
+      <div class="blk"><div class="k">اليوم</div>
+        <div class="row"><span>المحقَّق</span><span class="v pos">+١٫٣٨ دولار</span></div>
+        <div class="row"><span>الصفقات</span><span class="v">١ · رابحة</span></div>
+      </div>
+      <div class="blk"><div class="k">حدودي</div>
+        <div class="row"><span>المتبقّي من مخاطرة اليوم</span><span class="v">٠٫٠٠ دولار</span></div>
+        <div class="hadd"><div class="base"></div><div class="fill" style="width:100%"></div><div class="mark" style="right:60%"></div><div class="mark" style="right:85%"></div><div class="tick" style="right:100%"></div></div>
+        <div class="row"><span>المسافة إلى القاطع</span><span class="v">٧٫٣٨ دولار</span></div>
+      </div>
+      <div class="blk"><div class="k">الأسبوع</div>
+        <div class="row"><span>المحقَّق</span><span class="v pos">+٢٫١٤</span></div>
+        <div class="row"><span>الصفقات</span><span class="v">٤ · ٣ رابحة</span></div>
+      </div>
+    </div>
+    <div class="ph-tabs"><span class="on">الرئيسية</span><span>القرار</span><span>المحفظة</span><span>النظام</span></div>
+  </div>
+</div>
+
+<!-- 8 -->
+<div>
+  <div class="scr-meta"><span class="tag">بعد شهر · المحفظة</span><h3>٨. السجلّ والأداء</h3>
+  <p class="d">هنا تُجاب أخيراً «هل يشتغل؟». وحتى هنا، لا يُعرض الرقم بوصفه حكماً قبل أن تكتمل العيّنة — صدق العيّنة أعلى الشاشة لا أسفلها.</p></div>
+  <div class="phone">
+    <div class="ph-status"><span>٩:٤١</span><span>▮▮▮</span></div>
+    <div class="ph-head"><span class="t">الأداء</span><span class="r">٣٠ يوماً</span></div>
+    <div class="ph-body">
+      <div class="hero"><div class="k">هل يُعتمد هذا الرقم؟</div><div class="v">نعم. ٣٤ صفقة من ٣٠ المطلوبة.</div>
+        <div class="hadd" style="margin-top:10px"><div class="base"></div><div class="fill" style="width:100%"></div><div class="mark g" style="right:88%"></div><div class="tick" style="right:100%"></div></div>
+      </div>
+      <div class="blk"><div class="k">الصافي</div>
+        <div class="row"><span>المحقَّق</span><span class="v pos">+١٢٫٦٠ دولار</span></div>
+        <div class="row"><span>على رأس مال ١٥٠</span><span class="v pos">+٨٫٤٪</span></div>
+        <div class="spark"><i class="up" style="height:55%"></i><i class="dn" style="height:30%"></i><i class="up" style="height:72%"></i><i class="up" style="height:40%"></i><i class="dn" style="height:28%"></i><i class="up" style="height:88%"></i><i class="dn" style="height:34%"></i><i class="up" style="height:50%"></i><i class="up" style="height:66%"></i><i class="dn" style="height:26%"></i><i class="up" style="height:78%"></i><i class="up" style="height:44%"></i><i class="dn" style="height:31%"></i><i class="up" style="height:60%"></i></div>
+      </div>
+      <div class="blk"><div class="k">متوقَّع مقابل مُلاحَظ</div>
+        <div class="row"><span>نسبة الربح</span><span class="v">٥٥٪ · <span class="pos">٥٩٪</span></span></div>
+        <div class="row"><span>العائد/المخاطرة</span><span class="v">١٫٨٥ · <span class="neg">١٫٦٦</span></span></div>
+        <div class="row"><span>أكبر تراجع</span><span class="v neg">−٢٫٩٠</span></div>
+      </div>
+      <div class="blk"><div class="k">الحكم</div>
+        <div class="row"><span class="m">يعمل ضمن المدى المتوقَّع، والانزلاق أعلى من المفترَض بمقدار ٠٫٣ نقطة. أوصي بمراجعة عتبة الفارق قبل رفع رأس المال.</span></div>
+      </div>
+    </div>
+    <div class="ph-tabs"><span>الرئيسية</span><span>القرار</span><span class="on">المحفظة</span><span>النظام</span></div>
+  </div>
+</div>
+
+</div>
+
+<hr class="sep">
+<div class="sec-head"><span class="sec-num">٠٢</span><h2>ما بين هذه الصفحة والحقيقة</h2></div>
+<p class="lede">هذه الشاشات جاهزة للبناء. وما يفصل بينها وبين ظهورها على جوالك ببيانات حقيقية أربعة أشياء، لا أكثر:</p>
+<ol style="font-size:15px;line-height:1.85;color:var(--pageMute);padding-right:20px;max-width:70ch">
+<li><strong style="color:var(--pageInk)">ربط الخادم بشبكتك</strong> — أمر واحد على الخادم، بموافقة في المتصفّح.</li>
+<li><strong style="color:var(--pageInk)">تحويل الوسيط من MOCK إلى كابيتال</strong> — قراءة فقط أولاً. عندها تمتلئ الأسعار والرصيد.</li>
+<li><strong style="color:var(--pageInk)">ربط المزوّدين الأربعة بخط القرار</strong> — المفاتيح منك، والربط البرمجي منّي؛ الكود مكتوب ولا شيء يستدعيه.</li>
+<li><strong style="color:var(--pageInk)">إثبات وحدة الوقف بأمر تجريبي واحد</strong> — ثم يُرفع القفل الذي يمنع كل إرسال.</li>
+</ol>
+<p style="margin-top:26px;font-size:13px;color:var(--pageMute);border-top:1px solid var(--pageLine);padding-top:16px">محاكاة عرض. لا رقم في هذه الصفحة مأخوذ من تنفيذ حقيقي، ولم يُرسل من هذا النظام أمرٌ قط.</p>
+
+</div>
+<script>
+(function(){var r=document.documentElement,L=document.getElementById('bL'),D=document.getElementById('bD');
+function set(m){r.setAttribute('data-theme',m);L.setAttribute('aria-pressed',m==='light');D.setAttribute('aria-pressed',m==='dark');}
+L.onclick=function(){set('light')};D.onclick=function(){set('dark')};
+set(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');})();
+</script>

@@ -71,7 +71,7 @@ const config: ExpoConfig = {
   splash: {
     image: './assets/splash.png',
     resizeMode: 'contain',
-    backgroundColor: '#3A0CA3',
+    backgroundColor: '#0B0A0A',
   },
   assetBundlePatterns: ['**/*'],
   platforms: ['ios'],
@@ -121,7 +121,7 @@ const config: ExpoConfig = {
             'expo-notifications',
             {
               icon: './assets/icon.png',
-              color: '#3A0CA3',
+              color: '#0B0A0A',
             },
           ],
         ] as NonNullable<ExpoConfig['plugins']>)
@@ -138,8 +138,8 @@ const config: ExpoConfig = {
       'expo-splash-screen',
       {
         image: './assets/splash.png',
-        backgroundColor: '#3A0CA3',
-        dark: { backgroundColor: '#3A0CA3' },
+        backgroundColor: '#0B0A0A',
+        dark: { backgroundColor: '#0B0A0A' },
         imageWidth: 180,
       },
     ],

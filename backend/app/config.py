@@ -11,7 +11,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-BrokerMode = Literal["MOCK", "IBKR_PAPER", "IBKR_LIVE"]
+BrokerMode = Literal[
+    "MOCK", "IBKR_PAPER", "IBKR_LIVE", "CAPITAL_DEMO", "CAPITAL_LIVE"
+]
 
 
 class Settings(BaseSettings):
@@ -29,6 +31,12 @@ class Settings(BaseSettings):
     broker_mode: BrokerMode = Field(default="MOCK", alias="BROKER_MODE")
     live_approval_file: str = Field(
         default=str(REPO_ROOT / "secrets" / "live_approval.json"), alias="LIVE_APPROVAL_FILE"
+    )
+
+    #: ملف الأسرار على الخادم. على الماك تُقرأ من سلسلة المفاتيح أولاً،
+    #: وهذا الملف هو المصدر الوحيد على لينكس حيث لا سلسلة مفاتيح.
+    secrets_file: str = Field(
+        default=str(REPO_ROOT / "secrets" / "runtime.env"), alias="SECRETS_FILE"
     )
 
     database_url: str = Field(
@@ -71,6 +79,31 @@ class Settings(BaseSettings):
             raise RuntimeError(
                 f"RISK_MODE={self.risk_mode} يتطلب ملف موافقة موقّعاً: {self.live_approval_file}"
             )
+
+    def assert_capital_allowed(self) -> None:
+        """
+        قفل بيئة كابيتال.
+
+        `CAPITAL_DEMO` مسموح دائماً — لا مال فيه.
+
+        `CAPITAL_LIVE` يمرّ من `assert_environment_allowed` في طبقة السلامة،
+        وهي تقرأ `LIVE_API_ENABLED` — ثابتٌ مصدريّ لا يُفتح بمتغيّر بيئة.
+        نستدعيه هنا صراحةً كي يظهر المنع **عند الإقلاع** بسببٍ مقروء، لا عند
+        أوّل طلب شبكة بعد ساعات من العمل.
+
+        وفتح `LIVE_API_ENABLED` لا يفتح التنفيذ: قفل التنفيذ في الناقل مستقلّ،
+        ويمنع كل طلب مُعدِّل سواءٌ كانت البيئة تجريبية أو حقيقية.
+        """
+        if self.broker_mode not in ("CAPITAL_DEMO", "CAPITAL_LIVE"):
+            return
+        from .brokers.capital.endpoints import CapitalEnvironment
+        from .brokers.capital.safety import assert_environment_allowed
+
+        assert_environment_allowed(
+            CapitalEnvironment.LIVE
+            if self.broker_mode == "CAPITAL_LIVE"
+            else CapitalEnvironment.DEMO
+        )
 
     def assert_live_allowed(self) -> None:
         """

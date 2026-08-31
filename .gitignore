@@ -55,3 +55,6 @@ mobile/dist/
 * [0-9].tsx
 * [0-9].md
 mobile/assets/fonts/*.zip
+
+# حزمة الهوية المفكوكة — مصدرها المحادثة لا المستودع
+_identity_bundle/
