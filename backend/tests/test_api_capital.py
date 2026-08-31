@@ -45,7 +45,11 @@ def test_broker_endpoint_reports_the_locks_truthfully(client):
     body = client.get("/api/broker").json()
     assert body["live_api_enabled_in_source"] is LIVE_API_ENABLED
     assert body["is_demo"] is True
-    assert body["base_url"].startswith("https://demo-api-capital")
+    # الوسيط الوهمي بلا جلسة، فلا عنوان له — و`None` هنا صدقٌ لا نقص.
+    # القاعدة: إن وُجد عنوان فهو عنوان بيئة يقرّ بها الوسيط نفسه.
+    if body["base_url"] is not None:
+        assert body["base_url"].startswith("https://")
+        assert body["environment"] in body["base_url"] or body["is_demo"]
     # يبقى شرطاً قاطعاً بلا استثناء: قفل التنفيذ مغلق.
     assert body["execution_lock"]["unlocked"] is False
     assert body["risk_constitution_version"] == "0.2.0"
@@ -169,3 +173,49 @@ def test_cfd_preview_refuses_a_zero_stop(client):
 def test_guaranteed_stop_unavailable_on_provisional_values(client):
     """الوقف المضمون لا يُفترض توفره قبل الاكتشاف."""
     assert client.get("/api/cfd-preview?guaranteed=true").status_code == 400
+
+
+def test_broker_endpoint_never_hardcodes_the_environment():
+    """
+    **هذا الاختبار يحرس ضدّ شاشة تكذب.**
+
+    كانت `is_demo` و`base_url` قيمتين ثابتتين في المسار، و`environment`
+    تعبيراً يُنتج "demo" دائماً. فلمّا صار الوسيط حقيقياً ظلّت الاستجابة
+    تقول «تجريبي» و`adapter_name` يقول `CAPITAL_COM_LIVE` — تناقضٌ داخل
+    استجابة واحدة، ولا اختبار يمسكه.
+
+    الفحص على المصدر لا على القيمة: الحقول الثلاثة يجب أن تُشتقّ من الوسيط،
+    ولا يجوز أن يظهر ثابتٌ مكانها.
+    """
+    from pathlib import Path
+
+    import app.main as main_module
+
+    src = Path(main_module.__file__).read_text(encoding="utf-8")
+    block = src[src.index("def broker_state("):]
+    block = block[: block.index("\n@")] if "\n@" in block else block
+    # تُسقَط التعليقات: التعليق الذي يشرح خطأً قديماً يقتبسه، فيُمسك بنفسه.
+    block = "\n".join(
+        line for line in block.splitlines() if not line.lstrip().startswith("#")
+    )
+
+    for banned in ('"is_demo": True', '"is_demo": False',
+                   '"base_url": DEMO_BASE_URL', '"base_url": LIVE_BASE_URL',
+                   'risk_mode and "demo"'):
+        assert banned not in block, f"قيمة مثبَّتة عادت: {banned}"
+
+    assert '"is_demo": not getattr(sys.broker' in block
+    assert '_broker_environment(sys.broker)' in block
+
+
+def test_broker_endpoint_agrees_with_itself(client):
+    """
+    التناقض الذي حدث فعلاً: `is_demo=true` مع `adapter_name=CAPITAL_COM_LIVE`.
+    الحقلان يصفان الشيء نفسه، فاختلافهما عطلٌ لا تفصيلة عرض.
+    """
+    body = client.get("/api/broker").json()
+    name = (body.get("adapter_name") or "").upper()
+    if "LIVE" in name:
+        assert body["is_demo"] is False
+    elif "DEMO" in name:
+        assert body["is_demo"] is True

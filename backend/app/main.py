@@ -414,6 +414,15 @@ def settings_view(sys: SystemState = Depends(system)):
 # Capital.com — الوسيط والاعتمادات والتشغيل التجريبي
 # ---------------------------------------------------------------------------
 
+def _broker_environment(broker) -> str:
+    """بيئة الوسيط كما يقولها هو. الوسطاء بلا جلسة (الوهمي) يُعلنون أنفسهم."""
+    session = getattr(broker, "session", None)
+    env = getattr(session, "environment", None)
+    if env is not None:
+        return getattr(env, "value", str(env))
+    return getattr(broker, "name", "unknown").lower()
+
+
 @app.get("/api/broker")
 def broker_state(sys: SystemState = Depends(system)):
     """
@@ -423,10 +432,19 @@ def broker_state(sys: SystemState = Depends(system)):
     ks_event = sys.kill_switch.state.current_event
     return {
         "broker": limits.broker.value,
-        "environment": sys.settings.risk_mode and "demo",
-        "is_demo": True,
+        # **تُقرأ من المحوّل القائم، لا تُثبَّت.**
+        #
+        # كانت `is_demo` و`base_url` قيمتين ثابتتين، و`environment` تعبيراً
+        # يبدو ديناميكياً (`risk_mode and "demo"`) ويُنتج "demo" دائماً. فلمّا
+        # صار الوسيط حقيقياً ظلّت الواجهة تقول «تجريبي» بينما `adapter_name`
+        # يقول `CAPITAL_COM_LIVE` — تناقضٌ في الاستجابة نفسها.
+        #
+        # وشاشةٌ تكذب عن بيئة الوسيط أخطر من قفلٍ مفتوح: القفل يُرى ويُغلق،
+        # والكذب يُصدَّق ويُبنى عليه قرار.
+        "environment": _broker_environment(sys.broker),
+        "is_demo": not getattr(sys.broker, "is_live", False),
         "live_api_enabled_in_source": LIVE_API_ENABLED,
-        "base_url": DEMO_BASE_URL,
+        "base_url": getattr(getattr(sys.broker, "session", None), "base_url", None),
         "adapter_name": sys.broker.name,
         "connected": _safe_health(sys),
         "account_masked": None,
