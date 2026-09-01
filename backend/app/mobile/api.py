@@ -50,6 +50,7 @@ READ_ROUTES: tuple[str, ...] = (
     "providers/health",
     "notifications",
     "audit/recent",
+    "scan/latest",
 )
 
 #: مسارات التعديل — **كلها تقلّل المخاطرة**.
@@ -261,6 +262,7 @@ class MobileApi:
             "performance": lambda: state.get("performance", {}),
             "providers/health": lambda: state.get("providers", {}),
             "notifications": lambda: {"notifications": state.get("notifications", [])},
+            "scan/latest": lambda: state.get("scan", {}),
             "audit/recent": lambda: {
                 "entries": [e.as_dict() for e in self.security.audit()]
             },

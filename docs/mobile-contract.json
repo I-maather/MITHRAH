@@ -36,6 +36,10 @@
     "risk.editable_from_device",
     "risk.portfolio",
     "risk.two_loss_lock_active",
+    "scan.faults",
+    "scan.instruments",
+    "scan.scanned",
+    "scan.summary_ar",
     "status.broker",
     "status.broker.connected",
     "status.broker.execution_locked",
@@ -362,5 +366,20 @@
         "success": "boolean"
       }
     ]
+  },
+  "scan": {
+    "instruments": [
+      {
+        "symbol": "EURUSD",
+        "decision": "NO_TRADE",
+        "reason_code": "NO_APPROVED_STRATEGY",
+        "reason_ar": "لا استراتيجية معتمدة تنظر إلى هذه الأداة.",
+        "stage": "strategy",
+        "needs_a_hand": false
+      }
+    ],
+    "scanned": 4,
+    "faults": 0,
+    "summary_ar": "نُظِر في 4 أدوات، ولم تكتمل شروط الدخول في أيٍّ منها."
   }
 }

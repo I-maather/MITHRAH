@@ -259,11 +259,18 @@ def test_there_is_no_trading_route():
             assert token not in route
 
 
-def test_all_eleven_read_routes_are_present():
+def test_every_read_route_is_declared_and_no_other():
+    """
+    ⚠️ صارت اثني عشر في 2026-09-01 بإضافة `scan/latest`.
+
+    والقائمة تُكتب هنا بالكامل عمداً: مسارٌ يُضاف بلا قرار يُسقط هذا
+    الاختبار — وهو الغرض. (كان اسمه «الأحد عشر» فصار عدداً في اسمٍ يكذب
+    مع أوّل إضافة؛ العدد في الجسد لا في العنوان.)
+    """
     assert set(READ_ROUTES) == {
         "status", "intelligence/latest", "decision/latest", "risk", "profiles",
         "positions/current", "trades", "performance", "providers/health",
-        "notifications", "audit/recent",
+        "notifications", "audit/recent", "scan/latest",
     }
 
 

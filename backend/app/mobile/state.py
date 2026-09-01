@@ -464,6 +464,62 @@ def _notifications(sys: Any) -> list[dict[str, Any]]:
 
 # ---------------------------------------------------------------------------
 
+#: أسبابٌ مصدرها عطلٌ عندنا لا حالةُ سوق. تُميَّز في العرض لأن الأولى
+#: تحتاج يداً والثانية عملُ النظام الطبيعي — وخلطهما يرسل المالكة إلى
+#: المكان الخطأ تماماً.
+_NEEDS_A_HAND = frozenset({
+    "INSUFFICIENT_BARS", "BROKER_UNREACHABLE", "MARKET_DATA_STALE",
+    "CALENDAR_UNCONFIRMED", "NO_INSTRUMENT",
+})
+
+
+def _scan(sys: Any) -> dict[str, Any]:
+    """
+    **ماذا رأى النظام في السوق كلّه** — لا ماذا قرّر في أداة واحدة.
+
+    ## لماذا هذه الشاشة أهمّ ما في التطبيق
+
+    بحث المنافسين في هذا المشروع وجد الفراغ الوظيفي بنفسه: لا شاشة في ٦٩
+    لقطة تقول «لماذا لم أتداول». ثم بنينا تطبيقاً يقول «لا تداول: رمزٌ ما»
+    — وهي حقيقة، وليست جواباً.
+
+    الجواب: أيّ أداة نُظِرت، وماذا وُجد فيها، وأيّها اقترب. وذلك محفوظٌ في
+    `last_scan` منذ صار المسح يمرّ على الأدوات كلّها — **ولم تكن أي شاشة
+    تعرضه**. أثمنُ ما في النظام موجودٌ في الذاكرة ولا يصل إلى صاحبته.
+
+    ولا يُختلق ترتيبٌ ولا «قُرب»: تُعرض النتائج كما وقعت، ويُفصل ما يحتاج
+    يداً عمّا هو عملٌ طبيعي.
+    """
+    scan = list(getattr(sys, "last_scan", []) or [])
+    instruments = []
+    for symbol, result in scan:
+        code = getattr(result, "reason_code", None)
+        instruments.append({
+            "symbol": symbol,
+            "decision": getattr(getattr(result, "decision", None), "value", None),
+            "reason_code": code,
+            "reason_ar": getattr(result, "reason_ar", "") or None,
+            "stage": getattr(result, "stage", None),
+            "needs_a_hand": bool(code and code in _NEEDS_A_HAND),
+        })
+    faults = [i for i in instruments if i["needs_a_hand"]]
+    return {
+        "instruments": instruments,
+        "scanned": len(instruments),
+        "faults": len(faults),
+        # جملةٌ واحدة تُقرأ في ثانية. وتُبنى من العدّ لا من التفسير.
+        "summary_ar": (
+            "لم تبدأ دورة مسحٍ بعد."
+            if not instruments
+            else (
+                f"نُظِر في {len(instruments)} أداة، "
+                + (f"و{len(faults)} منها لم تُقرأ بياناتها."
+                   if faults else "ولم تكتمل شروط الدخول في أيٍّ منها.")
+            )
+        ),
+    }
+
+
 def build_mobile_state(sys: Any) -> dict[str, Any]:
     """
     يُستدعى عند كل طلب قراءة. رخيص عمداً: لا شبكة ولا وسيط.
@@ -483,6 +539,7 @@ def build_mobile_state(sys: Any) -> dict[str, Any]:
         "trades": [],
         "performance": _performance(sys),
         "providers": _providers(sys),
+        "scan": _scan(sys),
         "notifications": _notifications(sys),
     }
 

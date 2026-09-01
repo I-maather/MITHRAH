@@ -339,3 +339,84 @@ def test_the_dollar_correlation_is_declared_not_silently_claimed_solved():
     bucket_check = [c for c in checks if c[0] == "EXPOSURE_BUCKET"]
     assert bucket_check, "لا أثر للفحص في سجلّ القرار"
     assert "الدولار" in bucket_check[0][2]
+
+
+# ---------------------------------------------------------------------------
+# ٦ · المسح يصل إلى صاحبته
+#
+# ## الفجوة التي يسدّها هذا القسم
+#
+# بحث المنافسين في هذا المشروع وجد الفراغ الوظيفي بنفسه: **لا شاشة في ٦٩
+# لقطة تقول «لماذا لم أتداول»**. ثم بنينا تطبيقاً يقول «لا تداول: رمزٌ ما»
+# — وهي حقيقة، وليست جواباً.
+#
+# والجواب محفوظٌ في `last_scan` منذ صار المسح يمرّ على الأدوات كلّها، ولم
+# تكن أي شاشة تعرضه: **أثمن ما في النظام في الذاكرة ولا يصل إلى صاحبته.**
+# ---------------------------------------------------------------------------
+
+def test_the_scan_reaches_the_phone_instrument_by_instrument():
+    from app.mobile.state import _scan
+
+    class Sys:
+        last_scan = [
+            ("EURUSD", result(code="NO_APPROVED_STRATEGY")),
+            ("GOLD", result(code="INSUFFICIENT_BARS", stage="runtime")),
+        ]
+
+    view = _scan(Sys())
+    assert view["scanned"] == 2
+    assert [i["symbol"] for i in view["instruments"]] == ["EURUSD", "GOLD"]
+    assert all(i["reason_ar"] for i in view["instruments"]), "أداةٌ بلا سبب مكتوب"
+
+
+def test_a_fault_is_marked_apart_from_a_normal_no_opportunity():
+    """
+    «لم أرَ السوق» عطلٌ يُصلَح، و«رأيتُه ولم أجد فرصة» عملُ النظام الطبيعي.
+    وعرضُهما بلونٍ واحد يجعل المالكة إمّا تقلق كل يوم أو تتجاهل اليوم الذي
+    يهمّ. والتمييز يُحسب من الرمز لا يُكتب بيد.
+    """
+    from app.mobile.state import _scan
+
+    class Sys:
+        last_scan = [
+            ("EURUSD", result(code="NO_SIGNAL")),
+            ("GOLD", result(code="INSUFFICIENT_BARS", stage="runtime")),
+        ]
+
+    view = _scan(Sys())
+    assert view["faults"] == 1
+    marked = {i["symbol"]: i["needs_a_hand"] for i in view["instruments"]}
+    assert marked == {"EURUSD": False, "GOLD": True}
+
+
+def test_an_empty_scan_says_so_and_invents_no_summary():
+    from app.mobile.state import _scan
+
+    class Sys:
+        last_scan: list = []
+
+    view = _scan(Sys())
+    assert view["scanned"] == 0 and view["instruments"] == []
+    assert "لم تبدأ" in view["summary_ar"]
+
+
+def test_the_summary_counts_and_does_not_interpret():
+    """
+    جملةٌ تُقرأ في ثانية — وتُبنى من العدّ لا من التفسير. وتفسيرٌ يُكتب هنا
+    («يبدو أن السوق هادئ») ادّعاءٌ لا يسنده المسح.
+    """
+    from app.mobile.state import _scan
+
+    class Sys:
+        last_scan = [(f"SYM{i}", result(code="NO_SIGNAL")) for i in range(4)]
+
+    summary = _scan(Sys())["summary_ar"]
+    assert "4" in summary
+    assert "لم تكتمل شروط الدخول" in summary
+
+
+def test_the_scan_route_is_a_read_route_not_a_mutation():
+    from app.mobile.api import READ_ROUTES, RISK_INCREASING_ROUTES, RISK_REDUCING_ROUTES
+
+    assert "scan/latest" in READ_ROUTES
+    assert "scan/latest" not in RISK_REDUCING_ROUTES + RISK_INCREASING_ROUTES
