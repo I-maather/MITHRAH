@@ -107,6 +107,38 @@ def _bars(broker, symbol: str) -> list[Bar]:
     ]
 
 
+def _chosen(scan: list[tuple[str, PipelineResult]]) -> Optional[PipelineResult]:
+    """
+    أيّ نتيجةٍ من المسح تُعرَض في الشاشة الواحدة؟
+
+    **التنفيذ أوّلاً** — فإن وُجد فهو الحدث. وإلّا فأكثر الرفوض إفادةً:
+    رفضٌ من مرحلة الاستراتيجية يقول «رأيتُ السوق ولم أجد فرصة»، ورفضٌ من
+    مرحلة البيانات يقول «لم أرَ السوق أصلاً». والثاني عطلٌ يُصلَح، والأول
+    عملُ النظام الطبيعي — وعرضُ أحدهما مكان الآخر يرسل المالكة إلى المكان
+    الخطأ تماماً.
+
+    ولذلك يُقدَّم **العطل** على العمل الطبيعي: ما يحتاج يداً يُعرَض أوّلاً.
+    """
+    if not scan:
+        return None
+    for _, result in scan:
+        if result.decision is Decision.TRADE:
+            return result
+    for _, result in scan:
+        if result.reason_code in _NEEDS_A_HAND:
+            return result
+    return scan[0][1]
+
+
+#: رفوضٌ سببها عطلٌ عندنا لا حالةُ سوق. تُقدَّم في العرض على «لا فرصة».
+_NEEDS_A_HAND = frozenset({
+    "INSUFFICIENT_BARS",
+    "BROKER_UNREACHABLE",
+    "MARKET_DATA_STALE",
+    "CALENDAR_UNCONFIRMED",
+})
+
+
 def _macro() -> MacroAssessment:
     """
     الفيتو الكلي.
@@ -159,31 +191,47 @@ def register_runtime_jobs(state, *, interval_seconds: int = DEFAULT_INTERVAL_SEC
             )
             return
 
-        symbol = next(iter(sorted(state.limits.allowed_instruments)), None)
-        if symbol is None:
+        symbols = sorted(state.limits.allowed_instruments)
+        if not symbols:
+            state.last_scan = []
             state.last_result = _no_trade(
                 "NO_INSTRUMENT", "لا أداة مسموحة في وضع المخاطرة الحالي.", "runtime"
             )
             return
 
-        bars = _bars(state.broker, symbol)
-        if len(bars) < BARS_NEEDED // 2:
-            state.last_result = _no_trade(
-                "INSUFFICIENT_BARS",
-                f"وصلت {len(bars)} شمعة فقط — لا تكفي لتقييم. لا يُقيَّم على بيانات ناقصة.",
-                "runtime",
-            )
-            return
-
-        # حالة المخاطرة تُقرأ من السجل في كل دورة: الخسائر تتراكم بين الدورات.
+        # حالة المخاطرة تُقرأ من السجل مرّة لكل دورة مسح، لا مرّة لكل أداة:
+        # قراءتها بين الأدوات تجعل نتيجة الأداة الثانية تعتمد على أثر الأولى
+        # في المنتصف — وهو ما لا يمكن إعادة إنتاجه ولا تفسيره في التدقيق.
         session_state = load_session_state(
             state.db_session, baseline_equity=state.limits.baseline_equity
         )
         state.session_state = session_state
 
-        state.last_result = state.pipeline.run(
-            symbol=symbol, bars=bars, state=session_state, macro=_macro()
-        )
+        scan: list[tuple[str, PipelineResult]] = []
+        for symbol in symbols:
+            bars = _bars(state.broker, symbol)
+            if len(bars) < BARS_NEEDED // 2:
+                scan.append((symbol, _no_trade(
+                    "INSUFFICIENT_BARS",
+                    f"{symbol}: وصلت {len(bars)} شمعة فقط — لا تكفي لتقييم. "
+                    f"لا يُقيَّم على بيانات ناقصة.",
+                    "runtime",
+                )))
+                continue
+
+            result = state.pipeline.run(
+                symbol=symbol, bars=bars, state=session_state, macro=_macro()
+            )
+            scan.append((symbol, result))
+
+            # **يتوقّف المسح عند أول تنفيذ.** المضيّ بعده يقيّم بقيّة الأدوات
+            # على حالة مخاطرة صارت بائدة في السطر السابق — فيُفتح مركزٌ ثانٍ
+            # بميزانيةٍ أُنفقت. الحالة تُقرأ من جديد في الدورة التالية.
+            if result.decision is Decision.TRADE:
+                break
+
+        state.last_scan = scan
+        state.last_result = _chosen(scan)
 
     state.scheduler.register(
         DECISION_JOB,

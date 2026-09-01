@@ -46,9 +46,18 @@ def test_today_shows_riyadh_12_hour_times(client):
     r = client.get("/api/today").json()
     assert r["live_trading_enabled"] is False
     assert ("ص" in r["now_riyadh"]) or ("م" in r["now_riyadh"])
-    assert r["limits"]["total"] == "7.50"
-    assert r["limits"]["daily"] == "1.50"
-    assert r["limits"]["weekly"] == "4.50"
+    # ⚠️ تغيّرت ثلاث قيم في وضع التحقّق يوم 2026-09-01 **بقرار معلَن**، لا سهواً:
+    #   الحاجز المطلق 7.50 ⇐ 15.00 · اليومي 1.50 ⇐ 3.00 · الأسبوعي 4.50 ⇐ 7.50
+    #
+    # السبب أن الوضع اتّسع إلى ثلاثة مراكز، وثلاثةُ وقوف تُضرب معاً تساوي 2.25 —
+    # فحدٌّ يوميّ عند 1.50 كان **يُخترق قبل أن يعمل**. والثابت الرابط يُفرَض الآن
+    # عند البناء (`IncoherentRiskLimits`)، ويُفحَص في
+    # `test_multi_instrument_scan.py::test_the_daily_cap_can_absorb_every_stop_at_once`.
+    #
+    # والأوضاع الحقيقية **لم تُمَسّ** — وهو ما يفحصه الاختبار التالي لهذا مباشرةً.
+    assert r["limits"]["total"] == "15.00"
+    assert r["limits"]["daily"] == "3.00"
+    assert r["limits"]["weekly"] == "7.50"
     assert r["limits"]["target_risk_per_trade"] == "0.38"
     assert r["limits"]["max_risk_per_trade"] == "0.75"
     assert r["equity"]["baseline"] == "150.00"

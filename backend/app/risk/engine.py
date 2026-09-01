@@ -13,7 +13,13 @@ from typing import Optional
 
 from ..contracts import Balances, Broker, Decision, RiskDecision, Signal, StopKind
 from ..money import D
-from .constitution import PauseScope, RiskLimits, RiskMode, constitution_fingerprint
+from .constitution import (
+    PauseScope,
+    RiskLimits,
+    RiskMode,
+    constitution_fingerprint,
+    exposure_bucket,
+)
 from .costs import CommissionSchedule, CostAssumptions
 from .sizing import size_position
 
@@ -38,6 +44,7 @@ ACCOUNT_SIZE_INSUFFICIENT_FOR_BROKER_MINIMUM = "ACCOUNT_SIZE_INSUFFICIENT"
 CFD_QUANTITY_BELOW_BROKER_MINIMUM = "QUANTITY_BELOW_BROKER_MINIMUM"
 MARGIN_EXCEEDS_AVAILABLE = "MARGIN_EXCEEDS_AVAILABLE_FUNDS"
 NET_REWARD_RISK_TOO_LOW = "NET_REWARD_RISK_TOO_LOW"
+EXPOSURE_BUCKET_OCCUPIED = "EXPOSURE_BUCKET_ALREADY_OCCUPIED"
 
 
 @dataclass(frozen=True)
@@ -56,6 +63,9 @@ class SessionRiskState:
     owner_approved_this_order: bool = False
     in_news_blackout: bool = False
     news_blackout_reason_ar: str = ""
+    #: رموز المراكز المفتوحة الآن. `open_positions` يعدّها ولا يسمّيها —
+    #: والعدد وحده لا يكفي لمنع ثلاثة مراكز على مصدر تعرّض واحد.
+    open_symbols: tuple[str, ...] = ()
 
     @property
     def total_loss(self) -> Decimal:
@@ -210,6 +220,25 @@ class RiskEngine:
                 f"أوامر الدخول اليوم {state.entry_orders_today} بلغت الحد {self.limits.max_entry_orders_per_day}.",
             )
         checks.append(("POSITION_COUNTS", True, "ضمن حدود المراكز وأوامر الدخول اليومية."))
+
+        # --- سقف مصدر التعرّض ------------------------------------------
+        # ثلاثة مراكز على ثلاث أدوات ليست ثلاث فرص إن كانت تتحرّك بالسبب
+        # نفسه: هي **رهانٌ واحد بثلاثة أضعاف الحجم**، وحدود المخاطرة تحسبه
+        # ثلاثة فتكذب بثلاثة أضعاف. والعدّ وحده لا يرى ذلك — يحتاج الأسماء.
+        bucket = exposure_bucket(signal.symbol)
+        same = [sym for sym in state.open_symbols if exposure_bucket(sym) == bucket]
+        if len(same) >= self.limits.max_positions_per_exposure_bucket:
+            return reject(
+                EXPOSURE_BUCKET_OCCUPIED,
+                f"مصدر التعرّض «{bucket}» مشغول بـ{len(same)} مركزاً "
+                f"({'، '.join(same)}) — والحدّ {self.limits.max_positions_per_exposure_bucket}. "
+                f"فتحُ {signal.symbol} فوقه يضاعف الرهان نفسه ولا يوزّعه.",
+            )
+        checks.append((
+            "EXPOSURE_BUCKET", True,
+            f"مصدر التعرّض «{bucket}» غير مشغول. الارتباط عبر الدولار "
+            f"غير مقيس — الفصل على الطرف غير الدولاري وحده.",
+        ))
 
         if (
             self.limits.max_lifetime_entry_orders is not None

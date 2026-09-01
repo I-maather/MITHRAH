@@ -47,19 +47,52 @@ def test_each_trigger_halts_new_entries(trigger):
     assert not ks.allows_new_entries()
 
 
+# الحدود تُقرأ من `limits150` نفسها، لا تُكتب أرقاماً.
+#
+# ## لماذا تغيّر هذا الاختبار في 2026-09-01
+#
+# كانت الأرقام مثبَّتة (142.50 · −1.50 · −4.50) فتُثبت ضمناً **قيم الدستور**
+# لا **عمل القاطع**. ولما اتّسع وضع التحقّق يوم 2026-09-01 سقطت خمسة اختبارات
+# — والقاطع لم يُمَسّ ولا سطراً واحداً.
+#
+# ⚠️ **وهذا ليس إضعافاً، بل تشديد.** الاختبار المثبَّت رقمياً يمرّ لو غُيّر
+# الحدّ في الدستور وفي الاختبار معاً — وهي بالضبط الطريقة التي يُلغى بها
+# حدُّ خسارة بصمت. أمّا هذا فيسأل: **عند الحدّ أياً كان، أيعمل القاطع؟**
+# فلا يمكن إسكاته بتغيير رقم.
+
 def test_hard_total_loss_trigger(limits150):
-    result = evaluate_loss_triggers(picture(current_equity=D("142.50")), limits150)
+    at_the_limit = D("150") - limits150.hard_total_loss
+    result = evaluate_loss_triggers(picture(current_equity=at_the_limit), limits150)
     assert result is not None and result[0] is KillSwitchTrigger.HARD_TOTAL_LOSS
 
 
 def test_daily_loss_trigger(limits150):
-    result = evaluate_loss_triggers(picture(realized_today=D("-1.50")), limits150)
+    result = evaluate_loss_triggers(picture(realized_today=-limits150.daily_loss), limits150)
     assert result is not None and result[0] is KillSwitchTrigger.DAILY_LOSS_LIMIT
 
 
 def test_weekly_loss_trigger(limits150):
-    result = evaluate_loss_triggers(picture(realized_this_week=D("-4.50")), limits150)
+    result = evaluate_loss_triggers(
+        picture(realized_this_week=-limits150.weekly_loss), limits150
+    )
     assert result is not None and result[0] is KillSwitchTrigger.WEEKLY_LOSS_LIMIT
+
+
+def test_one_cent_below_each_limit_does_not_trigger(limits150):
+    """
+    الحدّ حدٌّ: قرشٌ تحته لا يُطلق، وعنده يُطلق. وبلا هذا الفحص يمرّ قاطعٌ
+    يُطلق دائماً — وهو معطوب بقدر قاطعٍ لا يُطلق أبداً.
+    """
+    cent = D("0.01")
+    assert evaluate_loss_triggers(
+        picture(current_equity=D("150") - limits150.hard_total_loss + cent), limits150
+    ) is None
+    assert evaluate_loss_triggers(
+        picture(realized_today=-(limits150.daily_loss - cent)), limits150
+    ) is None
+    assert evaluate_loss_triggers(
+        picture(realized_this_week=-(limits150.weekly_loss - cent)), limits150
+    ) is None
 
 
 def test_three_consecutive_losses_trigger(limits150):
@@ -72,13 +105,19 @@ def test_two_consecutive_losses_do_not_kill(limits150):
 
 
 def test_unrealized_loss_counts_toward_daily_limit(limits150):
-    result = evaluate_loss_triggers(picture(unrealized=D("-1.50")), limits150)
+    """خسارةٌ لم تُحقَّق بعد خسارةٌ كاملة عند الحدّ — وإلا لأُخّر القاطع بالانتظار."""
+    result = evaluate_loss_triggers(picture(unrealized=-limits150.daily_loss), limits150)
     assert result is not None and result[0] is KillSwitchTrigger.DAILY_LOSS_LIMIT
 
 
 def test_hard_loss_takes_priority_over_daily(limits150):
+    """ثلاثة مُطلِقات معاً، والأشدّ هو الذي يُبلَّغ — لا الأوّل في الترتيب."""
     result = evaluate_loss_triggers(
-        picture(current_equity=D("141.00"), realized_today=D("-9.00"), consecutive_losses=5),
+        picture(
+            current_equity=D("150") - limits150.hard_total_loss - D("1.00"),
+            realized_today=-(limits150.daily_loss * D("2")),
+            consecutive_losses=5,
+        ),
         limits150,
     )
     assert result[0] is KillSwitchTrigger.HARD_TOTAL_LOSS

@@ -70,18 +70,30 @@ def test_capital_is_exactly_150():
 
 
 def test_validation_mode_dollar_limits():
+    """
+    ⚠️ **اتّسع وضع التحقّق يوم 2026-09-01 بقرارٍ معلَن** — وهو الوضع الورقي
+    وحده: لا مال حقيقي ولا إرسال أوامر (`test_..._paper_only` أدناه يفرض ذلك).
+
+        الحاجز 5٪ ⇐ 10٪ · اليومي 1٪ ⇐ 2٪ · الأسبوعي 3٪ ⇐ 5٪
+        مركز واحد ⇐ ثلاثة · أمر واحد ⇐ ستة · EURUSD ⇐ الأربع المكتشفة
+
+    السبب: هدف المالكة أن يرصد النظام فرصاً على أكثر من أداة. وهذا هو
+    المكان الوحيد الذي يُختبَر فيه ذلك بلا ثمن. **والوضعان الحقيقيان لم
+    يُمَسّا** — يفرضه `test_the_hard_barrier_holds_for_every_mode_that_can_touch_real_money`.
+    """
     L = RiskLimits.for_mode(RiskMode.VALIDATION, broker=Broker.CAPITAL_COM)
-    assert L.hard_total_loss == D("7.50")
-    assert L.daily_loss == D("1.50")
-    assert L.weekly_loss == D("4.50")
+    assert L.hard_total_loss == D("15.00")
+    assert L.daily_loss == D("3.00")
+    assert L.weekly_loss == D("7.50")
     assert L.max_risk_per_trade == D("0.75")
     assert f"{L.target_risk_per_trade:.2f}" == "0.38"
-    assert L.max_open_positions == 1
-    assert L.max_entry_orders_per_day == 1
+    assert L.max_open_positions == 3
+    assert L.max_entry_orders_per_day == 6
+    assert L.max_positions_per_exposure_bucket == 1
     assert L.consecutive_losses_pause == 2
     assert L.pause_scope is PauseScope.LOCKED_REVIEW
     assert L.consecutive_losses_kill == 3
-    assert L.allowed_instruments == frozenset({"EURUSD"})
+    assert L.allowed_instruments == frozenset({"EURUSD", "GBPUSD", "USDJPY", "GOLD"})
 
 
 def test_conservative_live_mode_dollar_limits():
@@ -142,14 +154,58 @@ def test_real_money_modes_are_exactly_the_two_live_modes():
     assert RiskMode.LOCKED_REVIEW not in REAL_MONEY_MODES
 
 
-def test_no_mode_ever_exceeds_the_hard_total_loss():
-    for mode, spec in MODE_SPECS.items():
+def test_the_hard_barrier_holds_for_every_mode_that_can_touch_real_money():
+    """
+    **الاختبار الذي حلّ محلّ «لا وضع يتجاوز 5٪».**
+
+    كان الأصل يفرض 5٪ ومركزاً واحداً على **كل** الأوضاع بلا استثناء. ولمّا
+    اتّسع وضع التحقّق سقط — وهو سقوطٌ **مطلوب**: لا يجوز أن يُغيَّر حاجزٌ
+    دستوري بلا أن يصرخ اختبار.
+
+    والحدّ الصحيح ليس «كل الأوضاع»، بل **كل وضعٍ يمسّ مالاً حقيقياً**. ووضع
+    التحقّق ورقيّ بنصّ غرضه، ويفرضه الاختبار التالي.
+    """
+    assert REAL_MONEY_MODES, "قائمة أوضاع المال الحقيقي فارغة — الفحص بلا معنى"
+    for mode in REAL_MONEY_MODES:
+        spec = MODE_SPECS[mode]
         assert spec.hard_total_loss_pct == D("0.05"), mode
+        assert spec.max_open_positions == 1, mode
+        assert spec.max_entry_orders_per_day <= 1, mode
+
+
+def test_validation_widened_but_stayed_paper_only():
+    """اتّساعٌ مشروط: يبقى خارج أوضاع المال الحقيقي، وحدوده متماسكة."""
+    spec = MODE_SPECS[RiskMode.VALIDATION]
+    assert RiskMode.VALIDATION not in REAL_MONEY_MODES, (
+        "وضع التحقّق دخل أوضاع المال الحقيقي وحدوده واسعة — هذا هو الخطر بعينه"
+    )
+    assert spec.max_open_positions == 3
+    assert spec.max_entry_orders_per_day == 6
+    assert spec.daily_loss_pct >= spec.max_risk_pct * spec.max_open_positions, (
+        "الحدّ اليومي لا يستوعب ثلاثة وقوف تُضرب معاً — يُخترق قبل أن يعمل"
+    )
+
+
+def test_the_hard_barrier_is_never_fewer_than_five_trades():
+    """
+    **النسبة هي الثابت، لا الرقم.**
+
+    حاجزٌ يساوي ثلاث صفقات يُقفل الحساب في أول سلسلة خسائر عادية (احتمال ثلاث
+    خسائر متتالية في نظامٍ سليم ~16٪)، فيصير قفلاً دورياً لا حاجزَ كارثة.
+    """
+    for mode, spec in MODE_SPECS.items():
+        if spec.max_risk_pct == 0:
+            continue
+        trades = spec.hard_total_loss_pct / spec.max_risk_pct
+        assert trades >= 5, f"{mode}: الحاجز {trades} صفقة فقط"
+
+
+def test_the_ordering_of_the_limits_holds_in_every_mode():
+    """الترتيب صفقة ⇐ يوم ⇐ أسبوع ⇐ الحاجز، وهذا يسري على كل وضع بلا استثناء."""
+    for mode, spec in MODE_SPECS.items():
         assert spec.max_risk_pct <= spec.daily_loss_pct or spec.max_risk_pct == 0, mode
         assert spec.daily_loss_pct <= spec.weekly_loss_pct, mode
         assert spec.weekly_loss_pct <= spec.hard_total_loss_pct, mode
-        assert spec.max_open_positions == 1, mode
-        assert spec.max_entry_orders_per_day <= 1, mode
         assert spec.require_take_profit is True, mode
         assert spec.allow_overnight is False, mode
         assert spec.allow_weekend_hold is False, mode

@@ -80,11 +80,14 @@ def load_session_state(
     ).scalars().all()
     realized_total = sum((D(v) for v in all_time), D(0))
 
-    open_positions = len(
+    # الأسماء لا العدد وحده: بوابة مصدر التعرّض تحتاج أن تعرف **ماذا** فُتح،
+    # لا **كم**. وعدُّ ثلاثة مراكز لا يقول إن ثلاثتها على الدولار نفسه.
+    open_symbols = tuple(
         session.execute(
-            select(TradeRow.id).where(TradeRow.closed_at_utc.is_(None))
+            select(TradeRow.symbol).where(TradeRow.closed_at_utc.is_(None))
         ).scalars().all()
     )
+    open_positions = len(open_symbols)
 
     entries_today = len(
         session.execute(
@@ -105,6 +108,7 @@ def load_session_state(
         open_positions=open_positions,
         entry_orders_today=entries_today,
         consecutive_losses=_consecutive_losses(session),
+        open_symbols=open_symbols,
     )
 
 

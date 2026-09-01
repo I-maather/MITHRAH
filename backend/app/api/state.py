@@ -4,7 +4,7 @@ Runtime state container. One process, one system — تُبنى مرة عند ا
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 from typing import Optional
@@ -76,6 +76,10 @@ class SystemState:
     #: سببُ انقطاع الوسيط بالنصّ. «غير متصل» وحدها ترسل المالكة تبحث.
     broker_note_ar: str = ""
     last_result: Optional[PipelineResult] = None
+    #: آخر مسحٍ كامل — نتيجةٌ لكل أداة مسموحة، بالترتيب الذي مُسحت به.
+    #: `last_result` واحدةٌ منها مختارة للعرض؛ وهذه هي الصورة الكاملة التي
+    #: تجيب «ماذا رأى النظام في السوق كلّه»، لا «ماذا قرّر في أداة واحدة».
+    last_scan: list[tuple[str, PipelineResult]] = field(default_factory=list)
     last_intelligence: Optional[IntelligenceResult] = None
 
     def health(self) -> HealthReport:

@@ -206,14 +206,31 @@ def test_no_setup_when_strategy_conditions_absent():
 
 # --- risk gates through the pipeline ---------------------------------------
 
-def test_open_position_blocks_second_entry():
+def test_the_position_limit_blocks_the_next_entry_whatever_the_limit_is():
+    """
+    العدد يُقرأ من الحدود لا يُكتب رقماً.
+
+    كان الاختبار يثبّت «مركزٌ واحد يمنع الثاني» — وهي **قيمة الوضع** لا
+    **قاعدة المحرّك**. ولما اتّسع وضع التحقّق إلى ثلاثة مراكز يوم 2026-09-01
+    سقط الاختبار، والمحرّك لم يتغيّر. فصار يسأل: عند الحدّ أياً كان، أيمنع؟
+    """
     pipeline, broker, audit, ks, state = build()
+    limit = pipeline.risk.limits.max_open_positions
     busy = SessionRiskState(
         baseline_equity=D("5000"), current_equity=D("5000"), realized_pnl_today=D("0"),
-        realized_pnl_week=D("0"), unrealized_pnl=D("0"), open_positions=1,
+        realized_pnl_week=D("0"), unrealized_pnl=D("0"), open_positions=limit,
         entry_orders_today=0, consecutive_losses=0,
     )
     assert run(pipeline, busy).reason_code == "MAX_OPEN_POSITIONS_REACHED"
+
+    below = SessionRiskState(
+        baseline_equity=D("5000"), current_equity=D("5000"), realized_pnl_today=D("0"),
+        realized_pnl_week=D("0"), unrealized_pnl=D("0"), open_positions=limit - 1,
+        entry_orders_today=0, consecutive_losses=0,
+    )
+    assert run(pipeline, below).reason_code != "MAX_OPEN_POSITIONS_REACHED", (
+        "يمنع تحت الحدّ — بوابةٌ تمنع دائماً معطوبة بقدر بوابةٍ لا تمنع أبداً"
+    )
 
 
 def test_duplicate_run_same_day_is_blocked_and_halts():
@@ -243,12 +260,17 @@ def test_restart_with_open_position_does_not_double_enter():
     """محاكاة إعادة تشغيل: نفس المدخلات، حارس idempotency جديد، لكن مركز مفتوح."""
     pipeline, broker, audit, ks, state = build()
     run(pipeline, state)
+    # **المركز المفتوح يُسمّى الآن، لا يُعدّ فقط.** وهذا ما يمنع الدخول ثانيةً
+    # على SPY نفسها بعد إعادة التشغيل: بوابة مصدر التعرّض تراه بالاسم، بينما
+    # عدّادٌ وحده كان يمرّره ما دام تحت السقف الجديد (ثلاثة).
     after_restart = SessionRiskState(
         baseline_equity=D("5000"), current_equity=D("5000"), realized_pnl_today=D("0"),
         realized_pnl_week=D("0"), unrealized_pnl=D("0"), open_positions=1,
-        entry_orders_today=1, consecutive_losses=0,
+        entry_orders_today=1, consecutive_losses=0, open_symbols=("SPY",),
     )
-    assert run(pipeline, after_restart).decision is Decision.NO_TRADE
+    result = run(pipeline, after_restart)
+    assert result.decision is Decision.NO_TRADE
+    assert result.reason_code == "EXPOSURE_BUCKET_ALREADY_OCCUPIED"
 
 
 def test_audit_chain_stays_valid_across_many_runs():

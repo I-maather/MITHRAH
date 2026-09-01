@@ -120,6 +120,8 @@ class ModeSpec:
     allowed_instruments_by_broker: dict[Broker, frozenset[str]]
     quantity_policy_by_broker: dict[Broker, BrokerQuantityPolicy]
     purpose_ar: str
+    #: أقصى عدد مراكز مفتوحة على **مصدر تعرّض واحد**. انظر `EXPOSURE_BUCKETS`.
+    max_positions_per_exposure_bucket: int = 1
 
 
 _IBKR_COMMISSIONING_QUANTITY = BrokerQuantityPolicy(
@@ -137,20 +139,68 @@ _OPEN_QUANTITY = BrokerQuantityPolicy()
 
 EURUSD_ONLY: frozenset[str] = frozenset({"EURUSD"})
 
+#: أدوات الاكتشاف الأربع — وهي وحدها ما اكتُشفت قواعده من الوسيط.
+#: تُستعمل في وضع التحقّق (بلا مال) لا في الأوضاع الحقيقية.
+DISCOVERED_FOUR: frozenset[str] = frozenset({"EURUSD", "GBPUSD", "USDJPY", "GOLD"})
+
+#: **مصدر التعرّض** لكل أداة — الأصل الذي يحرّكها غير الدولار.
+#:
+#: ## لماذا هذا الجدول موجود
+#:
+#: ثلاثة مراكز على ثلاث أدوات ليست ثلاث فرص مستقلة إن كانت الأدوات تتحرّك
+#: بالسبب نفسه. وفتحُ ثلاثة مراكز مترابطة هو **رهانٌ واحد بثلاثة أضعاف
+#: الحجم** — وحدود المخاطرة تُحسب كأنها ثلاثة، فتكذب بثلاثة أضعاف.
+#:
+#: ## وما لا يدّعيه هذا الجدول
+#:
+#: **الارتباط عبر الدولار غير معالَج، ولم يُقَس.** الأربع كلها مقابل الدولار،
+#: فخبرٌ دولاريّ واحد يحرّكها معاً بدرجةٍ **نجهلها**. الفصل هنا على الطرف
+#: غير الدولاري وحده، وهو أضعف الفصلين.
+#:
+#: ولا يُختلق معامل ارتباط: قياسه يحتاج تاريخاً مشتركاً للأربع لم يُجمَع بعد.
+#: فيُعلَن النقص ويُحدّ أثره (مركز واحد لكل مصدر)، ولا يُموَّه برقم مخترع.
+EXPOSURE_BUCKETS: dict[str, str] = {
+    "EURUSD": "EUR",
+    "GBPUSD": "GBP",
+    "USDJPY": "JPY",
+    "GOLD": "XAU",
+}
+
+
+def exposure_bucket(symbol: str) -> str:
+    """أداةٌ لا نعرف مصدر تعرّضها تُعطى دلواً خاصاً بها — لا دلواً مشتركاً.
+
+    الافتراض الآمن أن المجهول **مستقل** لا أن المجهول **مثل غيره**: خلطُ أداة
+    مجهولة في دلو معلوم يمنع فتحها بلا سبب، وإفرادها يمنع فقط تكرارها نفسها.
+    """
+    return EXPOSURE_BUCKETS.get(symbol.upper(), symbol.upper())
+
+
 
 MODE_SPECS: dict[RiskMode, ModeSpec] = {
     RiskMode.VALIDATION: ModeSpec(
-        hard_total_loss_pct=D("0.05"),          # ٥٪ من رأس المال المرجعي
-        daily_loss_pct=D("0.01"),               # 1.50
-        weekly_loss_pct=D("0.03"),              # 4.50
+        # ---------------------------------------------------------------
+        # وضع التحقّق وحده اتّسع — **ولأنه بلا مال**.
+        #
+        # هدف المالكة المُعلَن: نظام يراقب السوق ويرصد الفرص ويدخل عدّة
+        # مراكز. وهذا الوضع هو المكان الوحيد الذي يُختبَر فيه ذلك بلا ثمن:
+        # لا إرسال، ولا حساب حقيقي، ولا دولار في السوق.
+        #
+        # والأوضاع الحقيقية (`LIVE_COMMISSIONING` و`CONSERVATIVE_LIVE`) **لم
+        # تُمَسّ**: أداة واحدة، مركز واحد، أمر واحد في اليوم — حتى تُقاس
+        # حافّة. توسيعُ الحدود لا يصنع حافّة، ويجعل غيابها أغلى فقط.
+        # ---------------------------------------------------------------
+        hard_total_loss_pct=D("0.10"),          # 15.00 — ورقيّ، لا مال
+        daily_loss_pct=D("0.02"),               # 3.00 — يتّسع لثلاثة وقوف معاً
+        weekly_loss_pct=D("0.05"),              # 7.50
         target_risk_pct=D("0.0025"),            # 0.375 → تُعرض 0.38
         max_risk_pct=D("0.005"),                # 0.75
         max_risk_pct_of_current_equity=None,
         operational_drawdown_stop_usd=None,
         gap_slippage_reserve_usd=None,
         target_risk_usd=None,
-        max_open_positions=1,
-        max_entry_orders_per_day=1,
+        max_open_positions=3,
+        max_entry_orders_per_day=6,
         consecutive_losses_pause=2,
         pause_scope=PauseScope.LOCKED_REVIEW,
         consecutive_losses_kill=3,
@@ -166,7 +216,7 @@ MODE_SPECS: dict[RiskMode, ModeSpec] = {
         allow_weekend_hold=False,
         allows_entries=True,
         allowed_instruments_by_broker={
-            Broker.CAPITAL_COM: EURUSD_ONLY,
+            Broker.CAPITAL_COM: DISCOVERED_FOUR,
             Broker.IBKR: frozenset(),
             Broker.MOCK: frozenset(),
         },
@@ -175,7 +225,10 @@ MODE_SPECS: dict[RiskMode, ModeSpec] = {
             Broker.CAPITAL_COM: BrokerQuantityPolicy(use_broker_minimum_quantity=True),
             Broker.MOCK: _OPEN_QUANTITY,
         },
-        purpose_ar="التحقق الهندسي على بيانات تجريبية. لا مال حقيقي ولا إرسال أوامر.",
+        purpose_ar=(
+            "التحقق الهندسي على بيانات تجريبية. لا مال حقيقي ولا إرسال أوامر. "
+            "أربع أدوات ومسحٌ متعدد — هنا يُختبَر رصد الفرص، لا على الحساب الحقيقي."
+        ),
     ),
     RiskMode.LIVE_COMMISSIONING: ModeSpec(
         hard_total_loss_pct=D("0.05"),          # ٥٪ من رأس المال المرجعي
@@ -329,6 +382,10 @@ CFD_REQUIRE_BROKER_STOP = True
 CFD_REQUIRE_BROKER_TAKE_PROFIT = True
 
 
+class IncoherentRiskLimits(ValueError):
+    """إعدادُ مخاطرة يناقض نفسه — يُرفَض عند البناء لا عند أول خسارة."""
+
+
 @dataclass(frozen=True)
 class RiskLimits:
     """القيم المحسوبة بالدولار لوضع ووسيط وBaseline محددين."""
@@ -363,6 +420,33 @@ class RiskLimits:
     allows_entries: bool
     allowed_instruments: frozenset[str]
     quantity_policy: BrokerQuantityPolicy
+    max_positions_per_exposure_bucket: int = 1
+
+    def __post_init__(self) -> None:
+        """
+        **ثابتٌ رابط بين حدّين كانا مستقلّين، فكذبا معاً.**
+
+        حدّ الخسارة اليومي يفترض أنه يستطيع التصرّف قبل أن يُتجاوَز. وثلاثةُ
+        مراكز مفتوحة يمكن أن تُضرب وقوفها **في اللحظة نفسها** — فالخسارة
+        الممكنة دفعةً واحدة هي `عدد المراكز × المخاطرة في الصفقة`.
+
+        فإن كان الحدّ اليومي أصغر من ذلك، فهو حدٌّ **يُخترَق قبل أن يعمل**:
+        يُقرأ في التقارير ويُطمئن، ولا يمنع شيئاً. وهذا صنف العطل الحاكم
+        لهذا المشروع بعينه — حدٌّ يُعرَض ولا يقدر على ما يدّعيه.
+
+        ولذلك يُرفَض الإعداد **عند البناء**، لا عند أول خسارة. والإعداد
+        المتناقض يجب أن يمنع الإقلاع، لا أن ينتظر السوق ليكشفه.
+        """
+        worst_simultaneous = self.max_risk_per_trade * self.max_open_positions
+        if self.daily_loss < worst_simultaneous:
+            raise IncoherentRiskLimits(
+                f"حدود متناقضة في وضع {self.mode.value}: حدّ الخسارة اليومي "
+                f"{self.daily_loss} أصغر من أسوأ خسارة متزامنة "
+                f"{worst_simultaneous} ({self.max_open_positions} مركزاً × "
+                f"{self.max_risk_per_trade}). الحدّ اليومي يُخترق قبل أن يعمل."
+            )
+        if self.max_positions_per_exposure_bucket < 1:
+            raise IncoherentRiskLimits("سقف مصدر التعرّض لا يقلّ عن واحد.")
 
     # --- توافق مع 0.1.0 (تُستعمل في مسار IBKR فقط) ---------------------
     @property
@@ -423,6 +507,7 @@ class RiskLimits:
             allows_entries=spec.allows_entries,
             allowed_instruments=spec.allowed_instruments_by_broker.get(broker, frozenset()),
             quantity_policy=policy,
+            max_positions_per_exposure_bucket=spec.max_positions_per_exposure_bucket,
         )
 
     @staticmethod

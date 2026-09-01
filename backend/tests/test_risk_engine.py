@@ -32,8 +32,19 @@ def signal(entry="640", stop="630.40", target="659.20", now=None):
     )
 
 
+#: الحدود تُقرأ مرّة وتُستعمل في كل اختبار بدل أن تُكتب أرقاماً.
+#:
+#: كانت الأرقام مثبَّتة (50.00 · 150.00 · 4750 · مركز واحد · أمر واحد)، فكانت
+#: تثبّت **قيم وضع التحقّق** لا **قواعد المحرّك**. ولما اتّسع الوضع يوم
+#: 2026-09-01 سقطت ستّة اختبارات والمحرّك لم يتغيّر سطراً.
+#:
+#: ⚠️ وهذا تشديد لا تخفيف: اختبارٌ برقمٍ مثبَّت يمرّ لو غُيّر الحدّ في الدستور
+#: وفي الاختبار معاً — وتلك هي الطريقة التي يُلغى بها حدٌّ بصمت.
+LIMITS = RiskLimits.from_baseline(D("5000.00"), Broker.IBKR)
+
+
 def big_engine():
-    return RiskEngine(RiskLimits.from_baseline(D("5000.00"), Broker.IBKR))
+    return RiskEngine(LIMITS)
 
 
 def big_state(**kw):
@@ -86,7 +97,7 @@ def test_viable_trade_on_adequate_capital(assumptions, schedule, now):
 def test_daily_loss_limit_blocks(assumptions, schedule, now):
     d = big_engine().evaluate(
         signal=signal(now=now),
-        state=big_state(realized_pnl_today=D("-50.00")),  # الحد اليومي 50.00
+        state=big_state(realized_pnl_today=-LIMITS.daily_loss),
         balances=make_balances("5000.00", at=now), schedule=schedule, assumptions=assumptions,
         fractional_allowed=True, kill_switch_active=False, now=now,
     )
@@ -96,7 +107,7 @@ def test_daily_loss_limit_blocks(assumptions, schedule, now):
 def test_weekly_loss_limit_blocks(assumptions, schedule, now):
     d = big_engine().evaluate(
         signal=signal(now=now),
-        state=big_state(realized_pnl_week=D("-150.00")),  # 3% من 5000
+        state=big_state(realized_pnl_week=-LIMITS.weekly_loss),
         balances=make_balances("5000.00", at=now), schedule=schedule, assumptions=assumptions,
         fractional_allowed=True, kill_switch_active=False, now=now,
     )
@@ -106,8 +117,8 @@ def test_weekly_loss_limit_blocks(assumptions, schedule, now):
 def test_total_loss_limit_blocks(assumptions, schedule, now):
     d = big_engine().evaluate(
         signal=signal(now=now),
-        state=big_state(current_equity=D("4750")),  # خسارة 250 = 5%
-        balances=make_balances("4750.00", at=now), schedule=schedule, assumptions=assumptions,
+        state=big_state(current_equity=D("5000") - LIMITS.hard_total_loss),
+        balances=make_balances(str(D("5000") - LIMITS.hard_total_loss), at=now), schedule=schedule, assumptions=assumptions,
         fractional_allowed=True, kill_switch_active=False, now=now,
     )
     assert not d.approved and d.reason_code == TOTAL_LOSS_EXHAUSTED
@@ -124,7 +135,7 @@ def test_two_consecutive_losses_pause(assumptions, schedule, now):
 
 def test_one_open_position_max(assumptions, schedule, now):
     d = big_engine().evaluate(
-        signal=signal(now=now), state=big_state(open_positions=1),
+        signal=signal(now=now), state=big_state(open_positions=LIMITS.max_open_positions),
         balances=make_balances("5000.00", at=now), schedule=schedule, assumptions=assumptions,
         fractional_allowed=True, kill_switch_active=False, now=now,
     )
@@ -133,7 +144,8 @@ def test_one_open_position_max(assumptions, schedule, now):
 
 def test_one_entry_order_per_day(assumptions, schedule, now):
     d = big_engine().evaluate(
-        signal=signal(now=now), state=big_state(entry_orders_today=1),
+        signal=signal(now=now),
+        state=big_state(entry_orders_today=LIMITS.max_entry_orders_per_day),
         balances=make_balances("5000.00", at=now), schedule=schedule, assumptions=assumptions,
         fractional_allowed=True, kill_switch_active=False, now=now,
     )
@@ -163,9 +175,10 @@ def test_news_blackout_blocks(assumptions, schedule, now):
 def test_risk_budget_shrinks_with_remaining_daily_budget(now):
     engine = big_engine()
     fresh = engine.risk_budget_for_next_trade(big_state())
-    used = engine.risk_budget_for_next_trade(big_state(realized_pnl_today=D("-45.00")))
+    spent = LIMITS.daily_loss - D("5.00")
+    used = engine.risk_budget_for_next_trade(big_state(realized_pnl_today=-spent))
     assert used < fresh
-    assert used == D("5.00")  # 50 - 45
+    assert used == D("5.00"), "الميزانية المتبقية = الحد اليومي ناقص ما أُنفق"
 
 
 def test_risk_budget_never_negative():
