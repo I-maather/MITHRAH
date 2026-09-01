@@ -191,6 +191,7 @@ def test_contract_covers_every_declared_read_route():
         "notifications": "notifications",
         "audit/recent": "audit",
         "scan/latest": "scan",
+        "market/candles": "candles",
     }
     assert set(route_to_section) == set(READ_ROUTES), (
         "تغيّرت مسارات القراءة ولم يُحدَّث الربط بالعقد."

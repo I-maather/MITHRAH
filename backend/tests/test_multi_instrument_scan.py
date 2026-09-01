@@ -189,6 +189,7 @@ class FakeState:
         self.scheduler = FakeScheduler()
         self.last_result = None
         self.last_scan = []
+        self.last_bars: dict = {}
         self.session_state = None
 
 

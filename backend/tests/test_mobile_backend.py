@@ -270,7 +270,7 @@ def test_every_read_route_is_declared_and_no_other():
     assert set(READ_ROUTES) == {
         "status", "intelligence/latest", "decision/latest", "risk", "profiles",
         "positions/current", "trades", "performance", "providers/health",
-        "notifications", "audit/recent", "scan/latest",
+        "notifications", "audit/recent", "scan/latest", "market/candles",
     }
 
 

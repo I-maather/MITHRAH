@@ -42,6 +42,22 @@ def _money(value: Decimal | None) -> str | None:
     return f"{value:.2f}" if value is not None else None
 
 
+def _price(value: Any) -> str | None:
+    """
+    سعرٌ لا مبلغ — **بكامل خاناته**.
+
+    `_money` يقرّب إلى منزلتين لأنه للمبالغ بالدولار. واستعمالُه على سعر صرف
+    يحوّل `1.10105` إلى `"1.10"`: خمس خانات تصير اثنتين، فتُرسم الشموع كلها
+    على مستوىً واحد ويختفي التحرّك تماماً.
+
+    وهو نفس صنف الخطأ الذي طاردناه اليوم في `stopDistance`: **مقياسٌ صحيح في
+    مكانه، مستعملٌ في غير مكانه.**
+    """
+    if value is None:
+        return None
+    return format(value, "f") if isinstance(value, Decimal) else str(value)
+
+
 def _iso(value: Any) -> str | None:
     return value.isoformat() if value is not None else None
 
@@ -520,6 +536,60 @@ def _scan(sys: Any) -> dict[str, Any]:
     }
 
 
+def _candles(sys: Any) -> dict[str, Any]:
+    """
+    الشموع كما رآها النظام — **من الذاكرة لا من الشبكة**.
+
+    ## لماذا من الذاكرة
+
+    بناء حالة الجوال يُستدعى عند **كل طلب قراءة**. وجلبُ شموعٍ فيه يحوّل
+    تصفّحاً عادياً إلى عشرات النداءات على الوسيط، فتُستهلَك حدوده ويُحرَم
+    منها القرار نفسه. فالشموع تُحفَظ في دورة المسح وتُقرأ هنا.
+
+    ⇒ وهذا يعني أن ما تراه المالكة هو **الصورة التي رآها النظام حين قرّر**،
+    لا صورةً أحدث منها. وذلك أصدق: شمعةٌ أحدث من القرار تجعل السبب المكتوب
+    يبدو خاطئاً وهو صحيح على بياناته.
+
+    ## وما لا يُرسَل
+
+    لا مؤشرات محسوبة: حسابُها هنا يعني تنفيذاً ثانياً لمنطق الاستراتيجية،
+    فتختلف الشاشة عن القرار في العدد نفسه. والشاشة ترسم السعر ومستويات
+    المركز، والباقي يأتي من `scan/latest` بنصّه.
+    """
+    stored = dict(getattr(sys, "last_bars", {}) or {})
+    instruments: dict[str, Any] = {}
+    for symbol, bars in stored.items():
+        rows = []
+        for bar in bars:
+            rows.append({
+                "t": _iso(getattr(bar, "start_utc", None)),
+                "o": _price(getattr(bar, "open", None)),
+                "h": _price(getattr(bar, "high", None)),
+                "l": _price(getattr(bar, "low", None)),
+                "c": _price(getattr(bar, "close", None)),
+            })
+        instruments[symbol] = rows
+
+    position = _position(sys)
+    return {
+        "instruments": instruments,
+        "symbols": sorted(instruments),
+        "levels": {
+            # مستويات المركز المفتوح — تُرسَم على السعر. و`None` تعني
+            # «لا مركز»، لا «صفر».
+            "symbol": position.get("instrument"),
+            "entry": position.get("entry_price"),
+            "stop": position.get("stop_price"),
+            "target": position.get("take_profit_price"),
+        },
+        "note_ar": (
+            "لم تُقرأ شموعٌ بعد — دورة المسح لم تكتمل."
+            if not instruments
+            else "الشموع كما رآها النظام في آخر دورة مسح، لا أحدث منها."
+        ),
+    }
+
+
 def build_mobile_state(sys: Any) -> dict[str, Any]:
     """
     يُستدعى عند كل طلب قراءة. رخيص عمداً: لا شبكة ولا وسيط.
@@ -540,6 +610,7 @@ def build_mobile_state(sys: Any) -> dict[str, Any]:
         "performance": _performance(sys),
         "providers": _providers(sys),
         "scan": _scan(sys),
+        "candles": _candles(sys),
         "notifications": _notifications(sys),
     }
 

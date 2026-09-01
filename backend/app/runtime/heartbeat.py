@@ -81,6 +81,10 @@ BROKER_KEEPALIVE_SECONDS = 240
 #: عدد الشموع المطلوبة لأطول استراتيجية (30 + 14 + 2 = 46) بهامش.
 BARS_NEEDED = 120
 
+#: كم شمعة تُحفَظ للعرض. ستّون تكفي لقراءة السياق على الشاشة،
+#: وحفظُ المئة والعشرين كلها يضخّم حمولة الجوال بلا فائدة بصرية.
+CHART_BARS = 60
+
 
 def _no_trade(code: str, reason_ar: str, stage: str) -> PipelineResult:
     return PipelineResult(Decision.NO_TRADE, code, reason_ar, stage, at_utc=now_utc())
@@ -218,6 +222,10 @@ def register_runtime_jobs(state, *, interval_seconds: int = DEFAULT_INTERVAL_SEC
                     "runtime",
                 )))
                 continue
+
+            # الشموع تُحفَظ **قبل** التقييم: أداةٌ رُفضت لسببٍ ما تبقى
+            # شموعها مرئية، فتُرى الصورة التي رآها النظام حين قرّر.
+            state.last_bars[symbol] = list(bars[-CHART_BARS:])
 
             result = state.pipeline.run(
                 symbol=symbol, bars=bars, state=session_state, macro=_macro()

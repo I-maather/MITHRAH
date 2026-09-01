@@ -1,6 +1,10 @@
 {
   "__comment_ar__": "الشكل المرجعي لعقد الجوال. يُفحَص من الطرفين: الخادم في backend/tests/test_mobile_contract.py، والتطبيق في mobile/__tests__/contract.test.ts. تغييرُ طرفٍ وحده يُسقط اختباراً.",
   "__non_nullable_paths__": [
+    "candles.instruments",
+    "candles.levels",
+    "candles.note_ar",
+    "candles.symbols",
     "decision.authorises_execution",
     "decision.blocking_reasons_ar",
     "decision.decision",
@@ -381,5 +385,28 @@
     "scanned": "number",
     "faults": "number",
     "summary_ar": "string"
+  },
+  "candles": {
+    "instruments": {
+      "EURUSD": [
+        {
+          "t": "string",
+          "o": "string",
+          "h": "string",
+          "l": "string",
+          "c": "string"
+        }
+      ]
+    },
+    "symbols": [
+      "string"
+    ],
+    "levels": {
+      "symbol": "nullable",
+      "entry": "nullable",
+      "stop": "nullable",
+      "target": "nullable"
+    },
+    "note_ar": "string"
   }
 }

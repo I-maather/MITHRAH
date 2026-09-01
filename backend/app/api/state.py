@@ -80,6 +80,12 @@ class SystemState:
     #: `last_result` واحدةٌ منها مختارة للعرض؛ وهذه هي الصورة الكاملة التي
     #: تجيب «ماذا رأى النظام في السوق كلّه»، لا «ماذا قرّر في أداة واحدة».
     last_scan: list[tuple[str, PipelineResult]] = field(default_factory=list)
+    #: آخر الشموع لكل أداة، كما وصلت من الوسيط في دورة المسح.
+    #:
+    #: تُحفَظ هنا كي تخدم شاشة الشموع **بلا نداء شبكة**: بناء حالة الجوال
+    #: يُستدعى عند كل طلب قراءة، وجلبُ شموعٍ فيه يحوّل تصفّحاً عادياً إلى
+    #: عشرات النداءات على الوسيط — وحدودُه تُستهلَك فيُحرَم القرار منها.
+    last_bars: dict = field(default_factory=dict)
     last_intelligence: Optional[IntelligenceResult] = None
 
     def health(self) -> HealthReport:

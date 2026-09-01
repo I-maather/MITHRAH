@@ -58,6 +58,11 @@ def build_state(monkeypatch, **over):
         kill_switch=over.pop("kill_switch", ks),
         limits=SimpleNamespace(allowed_instruments=frozenset({"EURUSD"}), baseline_equity=D("140")),
         db_session=None,
+        # ⚠️ **مزيّفٌ يتخلّف عن الحقيقي ينكسر صامتاً.** أُضيف `last_bars`
+        # إلى `SystemState` في 2026-09-01 لتخدم شاشة الشموع، فصار غيابه هنا
+        # يرفع `AttributeError` **داخل المجدول** — ويُبتلع في سجلّ تحذير،
+        # فتبدو الحلقة كأنها لم تُستدعَ أصلاً.
+        last_bars=over.pop("last_bars", {}),
         pipeline=FakePipeline(),
         scheduler=SafeScheduler(),
         session_state=None,
