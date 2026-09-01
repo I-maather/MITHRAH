@@ -281,15 +281,29 @@ def test_only_three_mutation_routes_and_all_reduce_risk():
     }
 
 
-def test_exactly_one_route_increases_risk_and_it_is_named_as_such():
+def test_every_risk_increasing_route_is_named_and_carries_a_phrase():
     """
-    الفئة الثالثة مقفلة على مسارٍ واحد. وتوسيعها لاحقاً يجب أن يُسقط هذا
-    الاختبار — فلا يمرّ مسارٌ يزيد المخاطرة بلا قرارٍ مكتوب.
-    """
-    from app.mobile.api import RESUME_PHRASE, RISK_INCREASING_ROUTES
+    ⚠️ صارت اثنين في 2026-09-01: أُضيف `broker/environment` بقرارٍ معلَن.
 
-    assert set(RISK_INCREASING_ROUTES) == {"pause/resume"}
-    assert RESUME_PHRASE, "مسارٌ يزيد المخاطرة بلا عبارة تأكيد"
+    والفحص هو الغرض: توسيع هذه الفئة **يُسقط الاختبار دائماً**، فلا يمرّ
+    مسارٌ يزيد المخاطرة بلا أن يُكتب قرارُه هنا. وقد أوقفني هو نفسه حين
+    أضفتُ المسار الثاني — وهذا ما وُضع له.
+
+    **ولا واحد منهما يفتح تداولاً:** الاستئناف يرفع الإيقاف المحلي وحده،
+    والتبديل يغيّر الحساب المقروء منه. و`LIVE_TRADING` وقفل التنفيذ ورفض
+    `is_live` ثلاثة أقفال مستقلّة لا يمسّها أيٌّ منهما.
+    """
+    from app.mobile.api import (
+        LIVE_ENVIRONMENT_PHRASE,
+        RESUME_PHRASE,
+        RISK_INCREASING_ROUTES,
+    )
+
+    assert set(RISK_INCREASING_ROUTES) == {"pause/resume", "broker/environment"}
+    for phrase in (RESUME_PHRASE, LIVE_ENVIRONMENT_PHRASE):
+        assert phrase and len(phrase.split()) >= 2, (
+            "عبارةٌ من كلمة واحدة تُكتب بالخطأ — والغرض أن تُكتب بقصد"
+        )
 
 
 def test_prefix_is_versioned():

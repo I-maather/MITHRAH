@@ -78,14 +78,14 @@ def resume(api, token, **payload):
 
 def test_the_resume_route_is_declared_in_its_own_named_category():
     """**لا توسيع صامت.** الاسم `RISK_REDUCING` يجب أن يبقى صادقاً."""
-    assert RISK_INCREASING_ROUTES == ("pause/resume",)
+    assert "pause/resume" in RISK_INCREASING_ROUTES
     assert "pause/resume" not in RISK_REDUCING_ROUTES
     assert "pause/resume" not in READ_ROUTES
 
 
 def test_the_published_description_admits_the_new_category():
     described = describe_api()
-    assert described["risk_increasing_routes"] == ["pause/resume"]
+    assert "pause/resume" in described["risk_increasing_routes"]
     assert described["trading_routes"] == [], "ظهر مسار تداول في مجال الجوال"
     assert "قاطع الطوارئ" in described["note_ar"]
 

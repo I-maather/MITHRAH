@@ -79,7 +79,26 @@ RISK_REDUCING_ROUTES: tuple[str, ...] = (
 #: ويحتاج الخادم. والاستئناف يُرفَض ما دام القاطع مفعّلاً.
 RISK_INCREASING_ROUTES: tuple[str, ...] = (
     "pause/resume",
+    "broker/environment",
 )
+
+#: عبارة تأكيد الانتقال إلى الحساب الحقيقي.
+#:
+#: ## لماذا هذا المسار مقبولٌ من الهاتف أصلاً
+#:
+#: **لأنه ليس مفتاح التداول.** يغيّر الحساب الذي **يُقرأ منه ويُتصل به**، ولا
+#: يفتح الإرسال: `LIVE_TRADING` يبقى في بيئة الخادم بيد المالكة وحدها، وقفل
+#: التنفيذ مستقلّ عنه، ورفض `is_live` في `place_order` مستقلّ عن الاثنين.
+#:
+#: ⇒ جهازٌ مسروق يستطيع التبديل إلى الحساب الحقيقي، ولا يستطيع إرسال أمرٍ
+#: واحد. أقصى ما يفعله أن يرى رصيداً.
+#:
+#: وبصمة الوجه تحمي من **شخصٍ آخر** يمسك الهاتف — لا من ضغطةٍ خاطئة واليد
+#: يد المالكة. فالعبارة تحرس ما لا تحرسه البصمة.
+#:
+#: والاتجاه المعاكس (حقيقي ⇐ تجريبي) **يقلّل المخاطرة**، فلا يطلب عبارة:
+#: حارسٌ يعرقل التراجع عن الخطر ليس حارساً.
+LIVE_ENVIRONMENT_PHRASE = "أنتقل إلى الحساب الحقيقي"
 
 #: عبارة التأكيد. تُكتب بالكامل، ولا تُقبَل قريبةً منها.
 #: زرٌّ يُضغط بالخطأ في الجيب لا يكتب جملة.
@@ -167,6 +186,8 @@ class MobileActions:
 
     pause: Optional[Callable[[str], None]] = None
     activate_kill_switch: Optional[Callable[[str], None]] = None
+    #: يبدّل بيئة الوسيط ويعيد وصفها. لا يفتح تداولاً.
+    switch_environment: Optional[Callable[[str], dict]] = None
     #: يعيد `locally_paused` إلى False. يرفع `KillSwitchIsActive` إن كان
     #: القاطع مفعّلاً — والرفض من عند المصدر لا من عند الواجهة.
     resume: Optional[Callable[[str], None]] = None
@@ -185,6 +206,11 @@ class MobileActions:
         if self.resume is None:
             raise MobileActionUnavailable("استئناف التداول")
         self.resume(reason_ar)
+
+    def do_switch_environment(self, target: str) -> dict:
+        if self.switch_environment is None:
+            raise MobileActionUnavailable("تبديل الحساب")
+        return self.switch_environment(target)
 
 
 @dataclass
@@ -365,6 +391,52 @@ class MobileApi:
                 ),
             }
 
+        if route == "broker/environment":
+            target = str(payload.get("target") or "").upper()
+            if target not in ("DEMO", "LIVE"):
+                raise MobileApiError(
+                    "الوجهة يجب أن تكون DEMO أو LIVE.", status=400
+                )
+            # الانتقال إلى الحقيقي وحده يطلب عبارة. والعودة إلى التجريبي
+            # تقلّل المخاطرة، وحارسٌ يعرقل التراجع عن الخطر ليس حارساً.
+            if target == "LIVE" and (
+                str(payload.get("confirm") or "").strip() != LIVE_ENVIRONMENT_PHRASE
+            ):
+                self.security._audit_log(
+                    "MOBILE_ENVIRONMENT_REFUSED", device_id=device.device_id,
+                    detail_ar="طُلب الانتقال إلى الحقيقي بلا عبارة — لم يقع شيء.",
+                    success=False,
+                )
+                raise MobileApiError(
+                    f"الانتقال إلى الحساب الحقيقي يحتاج كتابة: "
+                    f"«{LIVE_ENVIRONMENT_PHRASE}».",
+                    status=400,
+                )
+            try:
+                described = self.actions.do_switch_environment(target)
+            except MobileApiError:
+                self.security._audit_log(
+                    "MOBILE_ENVIRONMENT_FAILED", device_id=device.device_id,
+                    detail_ar=f"تعذّر التبديل إلى {target} — لم تتغيّر البيئة.",
+                    success=False,
+                )
+                raise
+            self.security._audit_log(
+                "MOBILE_ENVIRONMENT_SWITCHED", device_id=device.device_id,
+                detail_ar=f"بُدِّل حساب الوسيط إلى {target}.", success=True,
+            )
+            return {
+                "action": "ENVIRONMENT_SWITCHED", "accepted": True,
+                "environment": described.get("environment"),
+                "is_demo": described.get("is_demo"),
+                "broker_name": described.get("broker_name"),
+                "at_utc": now.isoformat(),
+                "note_ar": (
+                    "بُدِّل الحساب المقروء منه. **ولم يُفتح تداول**: مفتاح "
+                    "التداول الحقيقي في بيئة الخادم، وقفل التنفيذ مستقلّ عنه."
+                ),
+            }
+
         raise MobileApiError("مسار غير معروف.", status=404)
 
 
@@ -388,7 +460,7 @@ def describe_api() -> dict:
 
 __all__ = [
     "API_PREFIX", "READ_ROUTES", "RISK_REDUCING_ROUTES",
-    "RISK_INCREASING_ROUTES", "RESUME_PHRASE",
+    "RISK_INCREASING_ROUTES", "RESUME_PHRASE", "LIVE_ENVIRONMENT_PHRASE",
     "FORBIDDEN_ROUTE_TOKENS", "FORBIDDEN_RESPONSE_TOKENS",
     "MobileApi", "MobileApiError", "MobileResponse",
     "MobileActions", "MobileActionUnavailable",

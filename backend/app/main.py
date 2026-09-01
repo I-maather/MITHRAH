@@ -188,6 +188,61 @@ def _mobile_resume(reason_ar: str) -> None:
     )
 
 
+def _mobile_switch_environment(target: str) -> dict:
+    """
+    يبدّل حساب الوسيط المقروء منه — **ولا يفتح تداولاً**.
+
+    ## ما يتغيّر وما لا يتغيّر
+
+    يتغيّر: الحساب الذي تُقرأ منه الأسعار والرصيد والمراكز.
+
+    ولا يتغيّر: `LIVE_TRADING` في بيئة الخادم · قفل التنفيذ · رفض `is_live`
+    داخل `place_order`. ثلاثة أقفال مستقلّة، ولا يمسّها هذا المسار.
+
+    ⇒ جهازٌ مسروق يبدّل إلى الحقيقي ولا يرسل أمراً واحداً.
+
+    ## ويفشل مغلقاً
+
+    الوسيط الجديد يُبنى ويُوصَل **قبل** أن يحلّ محلّ القديم. فإن أخفق الوصل
+    بقيت البيئة كما هي وأُبلغ السبب — بدل نظامٍ بلا وسيطٍ أصلاً، وهو أسوأ
+    من نظامٍ على الحساب الخطأ.
+    """
+    from .brokers.capital.endpoints import CapitalEnvironment
+    from .brokers.factory import build_capital_adapter
+    from .secretstore.provider import build_secret_provider
+
+    sys_state = system()
+    environment = (
+        CapitalEnvironment.LIVE if target == "LIVE" else CapitalEnvironment.DEMO
+    )
+    try:
+        secrets = build_secret_provider(
+            env_file=sys_state.settings.secrets_file, allow_process_env=False
+        )
+        candidate = build_capital_adapter(environment, secrets=secrets)
+        candidate.connect()
+    except Exception as exc:  # noqa: BLE001
+        raise MobileApiError(
+            f"تعذّر الوصل بحساب {target}: {type(exc).__name__}. "
+            "لم تتغيّر البيئة — ما زال النظام على الحساب السابق.",
+            status=502,
+        ) from exc
+
+    sys_state.broker = candidate
+    sys_state.broker_note_ar = ""
+    sys_state.audit.record(
+        actor=Actor.OWNER, action=AuditAction.CONFIG_CHANGE,
+        decision=f"BROKER_ENVIRONMENT_{target}",
+        reason_ar=f"بُدِّل حساب الوسيط إلى {target} من الجوال. لا يفتح تداولاً.",
+        source="mobile",
+    )
+    return {
+        "environment": target,
+        "is_demo": not candidate.is_live,
+        "broker_name": candidate.name,
+    }
+
+
 def _mobile_kill(reason_ar: str) -> None:
     """يفعّل قاطع الطوارئ **فعلاً**. كان الزرّ يسجّل ولا يفعّل."""
     sys_state = system()
@@ -201,6 +256,7 @@ mobile_runtime = MobileRuntime(
         pause=_mobile_pause,
         activate_kill_switch=_mobile_kill,
         resume=_mobile_resume,
+        switch_environment=_mobile_switch_environment,
     ),
 )
 set_runtime(mobile_runtime)
