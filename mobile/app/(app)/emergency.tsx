@@ -9,20 +9,27 @@ import { t } from '@/i18n';
 import { useTheme } from '@/theme';
 
 /**
- * الطوارئ — ثلاثة إجراءات، كلها **تقلّل** المخاطرة.
+ * الطوارئ — ثلاثة إجراءات تقلّل المخاطرة، وواحدٌ يستأنف.
  *
- *     pause/request         إيقاف مؤقت
- *     killswitch/activate   قاطع الطوارئ
- *     device/revoke         إلغاء الجهاز
+ *     pause/request         إيقاف مؤقت          ↓ يقلّل
+ *     killswitch/activate   قاطع الطوارئ         ↓ يقلّل
+ *     device/revoke         إلغاء الجهاز         ↓ يقلّل
+ *     pause/resume          استئناف التداول      ↑ **يزيد**
  *
- * لا يوجد في هذه الشاشة — ولا في التطبيق كله — أي إجراء يفتح شيئاً: لا إلغاء
+ * لا يوجد في هذه الشاشة — ولا في التطبيق كله — إجراءٌ يفتح قفلاً: لا إلغاء
  * للقاطع، ولا إعادة تفعيل لمفتاح وسيط، ولا رفع لملف المخاطرة، ولا إغلاق مركز.
- * أسوأ ما يفعله مهاجم يمسك هذا الهاتف مفتوحاً هو **إيقاف التداول**.
  *
- * ولذلك لا يوجد تحدٍّ إضافي على أي منها: التأكيد بخطوتين هنا يحمي من الضغط
- * الخاطئ لا من المهاجم، لأن الإجراء نفسه ليس ما يُهاجَم به.
+ * والاستئناف يرفع **الإيقاف المحلي وحده**. فأسوأ ما يفعله مهاجم يمسك هذا
+ * الهاتف مفتوحاً أن يعيد النظام من «موقوف» إلى «يقيّم» — ولا يستطيع بعدها
+ * إرسال أمرٍ واحد، لأن الأقفال الأربعة الباقية لا تُمسّ من هنا.
+ *
+ * ## لماذا التأكيد على الثلاثة يختلف عن التأكيد على الرابع
+ *
+ * التأكيد بخطوتين على المقلِّلات يحمي من **الضغط الخاطئ** لا من المهاجم،
+ * لأن الإجراء نفسه ليس ما يُهاجَم به. أمّا الاستئناف فيطلب فوقه **عبارةً
+ * كاملة يفرضها الخادم**: زرٌّ يُضغط بالخطأ في الجيب لا يكتب جملة.
  */
-type ActionKey = 'pause' | 'kill' | 'revoke';
+type ActionKey = 'pause' | 'kill' | 'revoke' | 'resume';
 
 export default function EmergencyScreen(): React.JSX.Element {
   const theme = useTheme();
@@ -50,6 +57,15 @@ export default function EmergencyScreen(): React.JSX.Element {
           ok: response.data.accepted,
           messageAr: response.data.accepted
             ? `${t.emergency.killDone} ${response.data.note_ar}`
+            : t.emergency.failed,
+        });
+      } else if (key === 'resume') {
+        const response = await client.resumeTrading();
+        setResult({
+          key,
+          ok: response.data.accepted,
+          messageAr: response.data.accepted
+            ? `${t.emergency.resumeDone} ${response.data.note_ar}`
             : t.emergency.failed,
         });
       } else {
@@ -149,6 +165,31 @@ export default function EmergencyScreen(): React.JSX.Element {
           confirmLabel={t.emergency.revokeConfirm}
           onConfirm={() => {
             void run('revoke');
+          }}
+        />
+      </Card>
+
+      {/*
+        الاستئناف آخر البطاقات عمداً: الترتيب في هذه الشاشة يقرأ من الأخفّ
+        أثراً إلى الأثقل، ثم الوحيد الذي **يزيد** المخاطرة في النهاية —
+        فلا تقع اليد عليه وهي تبحث عن الإيقاف.
+      */}
+      <Card testID="resume-card" title={t.emergency.resume}>
+        <Text variant="caption" tone="secondary">
+          {t.emergency.resumeBody}
+        </Text>
+        <ConfirmButton
+          testID="resume-action"
+          label={t.emergency.resume}
+          tone="caution"
+          busy={busy === 'resume'}
+          accessibilityLabel={t.emergency.resume}
+          accessibilityHint={t.emergency.resumeBody}
+          confirmTitle={t.emergency.resumeConfirmTitle}
+          confirmBody={t.emergency.resumeConfirmBody}
+          confirmLabel={t.emergency.resumeConfirm}
+          onConfirm={() => {
+            void run('resume');
           }}
         />
       </Card>

@@ -1,5 +1,12 @@
 import { API_BASE_URL, API_PREFIX, SESSION_REFRESH_PATH, verifyBaseUrl } from './config';
-import { READ_ROUTES, RISK_REDUCING_ROUTES, type ReadRoute, type RiskReducingRoute } from './routes';
+import {
+  READ_ROUTES,
+  RESUME_PHRASE,
+  RISK_INCREASING_ROUTES,
+  RISK_REDUCING_ROUTES,
+  type MutatingRoute,
+  type ReadRoute,
+} from './routes';
 import type {
   AuditData,
   DecisionData,
@@ -9,6 +16,7 @@ import type {
   MobileEnvelope,
   NotificationsData,
   PauseResult,
+  ResumeResult,
   PerformanceData,
   PositionData,
   ProfilesData,
@@ -175,11 +183,24 @@ export class MobileApiClient {
     return this.read<AuditData>('audit/recent');
   }
 
-  // -- الإجراءات الثلاثة المُقلِّلة للمخاطرة ---------------------------------
+  // -- الإجراءات: ثلاثةٌ تقلّل المخاطرة وواحدٌ يستأنف --------------------
 
   /** طلب إيقاف مؤقت. يقلّل المخاطرة ولا يفتح شيئاً. */
   requestPause(): Promise<MobileEnvelope<PauseResult>> {
     return this.mutate<PauseResult>('pause/request', {});
+  }
+
+  /**
+   * استئناف التداول — **يرفع الإيقاف المحلي وحده**.
+   *
+   * يحتاج العبارة كاملةً: الخادم يرفض أي شيء سواها. وزرٌّ يُضغط بالخطأ في
+   * الجيب لا يكتب جملة.
+   *
+   * ويُرفَض ما دام قاطع الطوارئ مفعّلاً — والرفض يأتي من الخادم بنصّه،
+   * فلا يُقلَّد هنا ولا يُخمَّن.
+   */
+  resumeTrading(): Promise<MobileEnvelope<ResumeResult>> {
+    return this.mutate<ResumeResult>('pause/resume', { confirm: RESUME_PHRASE });
   }
 
   /**
@@ -212,13 +233,15 @@ export class MobileApiClient {
   }
 
   private mutate<T>(
-    route: RiskReducingRoute,
+    route: MutatingRoute,
     payload: Record<string, unknown>,
   ): Promise<MobileEnvelope<T>> {
-    if (!RISK_REDUCING_ROUTES.includes(route)) {
+    const reducing = (RISK_REDUCING_ROUTES as readonly string[]).includes(route);
+    const increasing = (RISK_INCREASING_ROUTES as readonly string[]).includes(route);
+    if (!reducing && !increasing) {
       throw new ApiError(
         'FORBIDDEN',
-        'لا يملك التطبيق أي إجراء عدا ثلاثة تقلّل المخاطرة — رُفض في العميل.',
+        'لا يملك التطبيق أي إجراء عدا ثلاثة تقلّل المخاطرة وواحدٍ يستأنف — رُفض في العميل.',
       );
     }
     return this.request<T>('POST', route, payload);

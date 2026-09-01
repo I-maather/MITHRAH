@@ -253,7 +253,15 @@ describe('لا واجهة تداول في العميل', () => {
     expect(methodNames).not.toContain(name);
   });
 
-  it('الدوال العامة على العميل هي القراءة والثلاثة فقط', () => {
+  it('الدوال العامة على العميل هي القراءة والثلاثة والاستئناف', () => {
+    // ⚠️ كُبِّرت القائمة بواحد في 2026-09-01: `resumeTrading`.
+    //
+    // وهو **المسار الوحيد الذي يزيد المخاطرة** في التطبيق، وقد أُضيف بقرار
+    // معلَن في فئة `RISK_INCREASING_ROUTES` المُسمّاة على الجانبين.
+    //
+    // ويبقى الحدّ الحقيقي كما هو: لا `closePosition` ولا `submitOrder` ولا
+    // `deactivateKillSwitch` ولا `setLeverage` — والقائمة أعلاه (`forbiddenMethods`)
+    // تفحصها بالاسم. وأي دالة عامة جديدة تُسقط هذا الاختبار، وهو الغرض.
     // الخاصة بالاسم الدقيق، فلا يختفي شيء عام خلف بادئة مشتركة.
     const privateMethods = ['constructor', 'read', 'mutate', 'request', 'refreshOnce'];
     const publicMethods = methodNames.filter((name) => !privateMethods.includes(name));
@@ -273,6 +281,7 @@ describe('لا واجهة تداول في العميل', () => {
         'getStatus',
         'getTrades',
         'requestPause',
+        'resumeTrading',
         'revokeDevice',
       ].sort(),
     );

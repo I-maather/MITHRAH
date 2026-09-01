@@ -439,6 +439,19 @@ export interface PauseResult {
   note_ar: string;
 }
 
+/**
+ * نتيجة الاستئناف — **المسار الوحيد في هذا المجال الذي يزيد المخاطرة**.
+ *
+ * ولا يفتح إلا الإيقاف المحلي: الأقفال الأربعة الباقية لا يمسّها، وقاطع
+ * الطوارئ لا يُلغى من الجهاز أبداً. `note_ar` يقول ذلك للمالكة بنصّه.
+ */
+export interface ResumeResult {
+  action: 'RESUMED';
+  accepted: boolean;
+  at_utc: string;
+  note_ar: string;
+}
+
 export interface KillSwitchResult {
   action: 'KILL_SWITCH_ACTIVATED';
   accepted: boolean;

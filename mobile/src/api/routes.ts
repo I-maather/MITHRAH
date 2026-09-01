@@ -38,6 +38,27 @@ export const RISK_REDUCING_ROUTES = [
 export type RiskReducingRoute = (typeof RISK_REDUCING_ROUTES)[number];
 
 /**
+ * **المسار الوحيد الذي يزيد المخاطرة** — في فئةٍ خاصة به، مطابقةً للخادم.
+ *
+ * ولو أُضيف إلى `RISK_REDUCING_ROUTES` لبقي اسمها وصار كاذباً — وذلك أخطر من
+ * مسارٍ مفتوح، لأن القارئ يثق بالاسم لا بالمحتوى.
+ *
+ * ولا يفتح إلا الإيقاف المحلي: أسوأ ما يفعله جهازٌ مسروق أن يعيد النظام من
+ * «موقوف» إلى «يقيّم» — ولا يستطيع بعدها إرسال أمرٍ واحد.
+ */
+export const RISK_INCREASING_ROUTES = ['pause/resume'] as const;
+
+export type RiskIncreasingRoute = (typeof RISK_INCREASING_ROUTES)[number];
+
+export type MutatingRoute = RiskReducingRoute | RiskIncreasingRoute;
+
+/**
+ * عبارة التأكيد كما يطلبها الخادم حرفاً بحرف.
+ * تُكتب هنا مرّة واحدة كي لا تتفرّق نسخُها في الشاشات فتنحرف إحداها.
+ */
+export const RESUME_PHRASE = 'أستأنف التداول';
+
+/**
  * كلمات لا يجوز أن تظهر في أي مسار. نسخة من قائمة الخادم كي يُكتشف الانحراف
  * على الجانبين معاً لا على جانب واحد.
  */
@@ -80,7 +101,7 @@ export const NEVER_ON_DEVICE = [
 ] as const;
 
 const assertNoForbiddenToken = (): void => {
-  for (const route of [...READ_ROUTES, ...RISK_REDUCING_ROUTES]) {
+  for (const route of [...READ_ROUTES, ...RISK_REDUCING_ROUTES, ...RISK_INCREASING_ROUTES]) {
     for (const token of FORBIDDEN_ROUTE_TOKENS) {
       if (route.includes(token)) {
         throw new Error(`مسار محظور تسلّل إلى العميل: ${route}`);

@@ -120,7 +120,18 @@ describe('تدفّق قاطع الطوارئ', () => {
     expect(screen.getByTestId('kill-no-undo')).toHaveTextContent(/لا يُلغى/);
   });
 
-  it('لا يوجد زر لإلغاء القاطع في الشاشة', () => {
+  it('لا يوجد زر لإلغاء قاطع الطوارئ في الشاشة', () => {
+    /**
+     * ⚠️ ضاقت العبارة المرفوضة في 2026-09-01، وهذا **تدقيقٌ لا تخفيف**.
+     *
+     * كانت تمنع «استئناف» أيضاً، فتخلط شيئين مختلفين تماماً:
+     *
+     *   إلغاء قاطع الطوارئ  — يرفع **حكماً** بأن شيئاً خطيراً وقع.  ممنوع.
+     *   استئناف الإيقاف     — يرفع **قراراً** اتخذته المالكة.        مسموح.
+     *
+     * والاستئناف لا يمسّ القاطع: الخادم يرفضه ما دام مفعّلاً، ويرفضه من
+     * عند المصدر لا من عند الواجهة. فمنعُه هنا كان يمنع الصواب باسم الخطأ.
+     */
     const view = renderWithHarness(<EmergencyScreen />, {
       status: 'UNLOCKED',
       fetchImpl: makeFetch() as unknown as typeof fetch,
@@ -128,10 +139,21 @@ describe('تدفّق قاطع الطوارئ', () => {
     const buttons = view.UNSAFE_root.findAll(
       (node: ReactTestInstance) => node.props?.accessibilityRole === 'button',
     );
+    expect(buttons.length).toBeGreaterThan(0);
     for (const button of buttons) {
       const label = String(button.props.accessibilityLabel);
-      expect(label).not.toMatch(/إلغاء القاطع|تعطيل القاطع|استئناف|تفعيل التداول/);
+      expect(label).not.toMatch(/إلغاء القاطع|تعطيل القاطع|إيقاف القاطع|رفع القاطع/);
     }
+  });
+
+  it('زرّ الاستئناف موجود، ويقول صراحةً إنه لا يفتح شيئاً آخر', () => {
+    const view = renderWithHarness(<EmergencyScreen />, {
+      status: 'UNLOCKED',
+      fetchImpl: makeFetch() as unknown as typeof fetch,
+    });
+    expect(view.getByTestId('resume-action')).toBeTruthy();
+    expect(view.getByTestId('resume-card')).toHaveTextContent(/لا يفتح أي قفل آخر/);
+    expect(view.getByTestId('resume-card')).toHaveTextContent(/لا يُلغي قاطع الطوارئ/);
   });
 });
 
