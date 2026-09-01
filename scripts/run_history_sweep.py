@@ -369,7 +369,7 @@ def run_one_strategy(
         # صفرُ صفقة من استراتيجية رفضت الأداة ليس «لا حافّة» ولا «عيّنة
         # صغيرة» — هو لا شيء. وقولُ غير ذلك يُرسل القارئ إلى المكان الخطأ.
         if epic not in declared:
-            if not a.transplant:
+            if not transplant:
                 print(
                     f"  {BAD}⛔{END} {epic:<8} الاستراتيجية لا تقبل هذه الأداة.\n"
                     f"     {strategy_name} أسواقها المُعلَنة: "
@@ -391,7 +391,7 @@ def run_one_strategy(
         strategy = (
             transplanted(strategy_class, epic) if epic not in declared else strategy_class()
         )
-        for resolution in a.resolutions:
+        for resolution in resolutions:
             if resolution not in LADDER:
                 print(f"  {WARN}○{END} {resolution} — دقّة غير معروفة، تُخطّى")
                 continue
