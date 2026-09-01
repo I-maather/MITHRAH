@@ -432,6 +432,31 @@ export interface AuditData {
 // الإجراءات الثلاثة المُقلِّلة للمخاطرة
 // ---------------------------------------------------------------------------
 
+/** صفٌّ لكل أداة نُظِر فيها هذه الدورة. */
+export interface ScanInstrument {
+  symbol: string;
+  decision: string | null;
+  reason_code: string | null;
+  reason_ar: string | null;
+  stage: string | null;
+  /** عطلٌ عندنا لا حالةُ سوق — يُعرض مميَّزاً لأنه يحتاج يداً. */
+  needs_a_hand: boolean;
+}
+
+/**
+ * **ماذا رأى النظام في السوق كلّه** — لا ماذا قرّر في أداة واحدة.
+ *
+ * وهي الوظيفة التي لم يجدها بحث المنافسين في ٦٩ لقطة: لا شاشة تقول «لماذا
+ * لم أتداول». والأربعة هنا غير قابلة للغياب (`__non_nullable_paths__`):
+ * تُقرأ في كل عرض بلا حارس.
+ */
+export interface ScanData {
+  instruments: ScanInstrument[];
+  scanned: number;
+  faults: number;
+  summary_ar: string;
+}
+
 export interface PauseResult {
   action: 'PAUSE_REQUESTED';
   accepted: boolean;

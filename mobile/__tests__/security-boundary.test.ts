@@ -197,6 +197,10 @@ describe('لا ذكر لقناة نفق عامة', () => {
 
 describe('سطح المسارات', () => {
   it('مسارات القراءة مطابقة لعقد الخادم حرفاً', () => {
+    // ⚠️ صارت اثني عشر في 2026-09-01 بإضافة `scan/latest`.
+    // والقائمة مكتوبةٌ بالكامل على الجانبين عمداً: انحرافُ أحدهما
+    // وحده يُسقط اختباراً — وهو ما كان ناقصاً حين انهار التطبيق
+    // إلى شاشة سوداء لأن الخادم يرسل مفتاحاً والتطبيق يقرأ آخر.
     expect([...READ_ROUTES]).toEqual([
       'status',
       'intelligence/latest',
@@ -209,6 +213,7 @@ describe('سطح المسارات', () => {
       'providers/health',
       'notifications',
       'audit/recent',
+      'scan/latest',
     ]);
   });
 
@@ -280,6 +285,7 @@ describe('لا واجهة تداول في العميل', () => {
         'getRisk',
         'getStatus',
         'getTrades',
+        'getScan',
         'requestPause',
         'resumeTrading',
         'revokeDevice',

@@ -17,6 +17,7 @@ import type {
   NotificationsData,
   PauseResult,
   ResumeResult,
+  ScanData,
   PerformanceData,
   PositionData,
   ProfilesData,
@@ -177,6 +178,11 @@ export class MobileApiClient {
 
   getNotifications(): Promise<MobileEnvelope<NotificationsData>> {
     return this.read<NotificationsData>('notifications');
+  }
+
+  /** ماذا رأى النظام في السوق كلّه هذه الدورة. */
+  getScan(): Promise<MobileEnvelope<ScanData>> {
+    return this.read<ScanData>('scan/latest');
   }
 
   getAudit(): Promise<MobileEnvelope<AuditData>> {

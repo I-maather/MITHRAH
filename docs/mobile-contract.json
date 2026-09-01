@@ -370,16 +370,16 @@
   "scan": {
     "instruments": [
       {
-        "symbol": "EURUSD",
-        "decision": "NO_TRADE",
-        "reason_code": "NO_APPROVED_STRATEGY",
-        "reason_ar": "لا استراتيجية معتمدة تنظر إلى هذه الأداة.",
-        "stage": "strategy",
-        "needs_a_hand": false
+        "symbol": "string",
+        "decision": "string",
+        "reason_code": "string",
+        "reason_ar": "string",
+        "stage": "string",
+        "needs_a_hand": "boolean"
       }
     ],
-    "scanned": 4,
-    "faults": 0,
-    "summary_ar": "نُظِر في 4 أدوات، ولم تكتمل شروط الدخول في أيٍّ منها."
+    "scanned": "number",
+    "faults": "number",
+    "summary_ar": "string"
   }
 }

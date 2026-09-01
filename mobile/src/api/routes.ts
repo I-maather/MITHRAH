@@ -7,7 +7,7 @@
  * asserts that these two tuples are exactly what the API client can reach.
  */
 
-/** مسارات القراءة. أحد عشر، بالترتيب نفسه في الخادم. */
+/** مسارات القراءة، بالترتيب نفسه في الخادم. */
 export const READ_ROUTES = [
   'status',
   'intelligence/latest',
@@ -20,6 +20,7 @@ export const READ_ROUTES = [
   'providers/health',
   'notifications',
   'audit/recent',
+  'scan/latest',
 ] as const;
 
 export type ReadRoute = (typeof READ_ROUTES)[number];

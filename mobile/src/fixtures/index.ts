@@ -8,6 +8,7 @@ import type {
   PositionData,
   ProfilesData,
   ProvidersData,
+  ScanData,
   RiskData,
   StatusData,
   TradesData,
@@ -308,6 +309,34 @@ const performance: PerformanceData = {
   period_end_utc: T0,
 };
 
+const scan: ScanData = {
+  instruments: [
+    {
+      symbol: 'EURUSD', decision: 'NO_TRADE', reason_code: 'NO_APPROVED_STRATEGY',
+      reason_ar: 'لا استراتيجية معتمدة — الثلاث ما زالت قيد البحث.',
+      stage: 'strategy', needs_a_hand: false,
+    },
+    {
+      symbol: 'GBPUSD', decision: 'NO_TRADE', reason_code: 'NO_APPROVED_STRATEGY',
+      reason_ar: 'لا استراتيجية معتمدة — الثلاث ما زالت قيد البحث.',
+      stage: 'strategy', needs_a_hand: false,
+    },
+    {
+      symbol: 'GOLD', decision: 'NO_TRADE', reason_code: 'INSUFFICIENT_BARS',
+      reason_ar: 'GOLD: وصلت 41 شمعة فقط — لا تكفي لتقييم.',
+      stage: 'runtime', needs_a_hand: true,
+    },
+    {
+      symbol: 'USDJPY', decision: 'NO_TRADE', reason_code: 'NO_APPROVED_STRATEGY',
+      reason_ar: 'لا استراتيجية معتمدة — الثلاث ما زالت قيد البحث.',
+      stage: 'strategy', needs_a_hand: false,
+    },
+  ],
+  scanned: 4,
+  faults: 1,
+  summary_ar: 'نُظِر في 4 أداة، و1 منها لم تُقرأ بياناتها.',
+};
+
 const providers: ProvidersData = {
   providers: [
     { kind: 'MARKET_DATA', name: 'market-data', name_ar: 'بيانات السوق', configured: false, healthy: null, mandatory: true, last_success_utc: null, note_ar: 'غير مُعدّ. (معاينة)' },
@@ -364,6 +393,7 @@ export const fixtures = {
   trades,
   performance,
   providers,
+  scan,
   notifications,
   audit,
 } as const;
