@@ -457,6 +457,22 @@ export interface ScanData {
   summary_ar: string;
 }
 
+/**
+ * نتيجة تبديل الحساب.
+ *
+ * `note_ar` يقول صراحةً إن **التداول لم يُفتح**: شاشةٌ تقول «انتقلتِ إلى
+ * الحقيقي» بلا أكثر تُقرأ «صار يتداول بمالي».
+ */
+export interface EnvironmentSwitchResult {
+  action: 'ENVIRONMENT_SWITCHED';
+  accepted: boolean;
+  environment: 'DEMO' | 'LIVE' | null;
+  is_demo: boolean | null;
+  broker_name: string | null;
+  at_utc: string;
+  note_ar: string;
+}
+
 export interface PauseResult {
   action: 'PAUSE_REQUESTED';
   accepted: boolean;

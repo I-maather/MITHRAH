@@ -2,6 +2,7 @@ import type { ReactTestInstance } from 'react-test-renderer';
 import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 
 import EmergencyScreen from '../app/(app)/emergency';
+import SystemScreen from '../app/(app)/system';
 import { RISK_REDUCING_ROUTES } from '@/api/routes';
 import { tokenStore } from '@/auth/tokenStore';
 import { envelope, renderWithHarness } from './helpers';
@@ -188,5 +189,35 @@ describe('سطح الإجراءات مغلق', () => {
     for (const route of RISK_REDUCING_ROUTES) {
       expect(route).toMatch(/^(pause|killswitch|device)\//);
     }
+  });
+});
+
+/**
+ * تبديل الحساب — من شاشة النظام.
+ *
+ * ## لماذا هو مقبولٌ من هاتفٍ قد يُسرق
+ *
+ * لأنه **ليس مفتاح التداول**: يغيّر الحساب المقروء منه، وثلاثة أقفال في
+ * الخادم تبقى خارج متناوله. أقصى ما يفعله جهازٌ مسروق أن يرى رصيداً.
+ */
+describe('تبديل الحساب', () => {
+  it('يعرض بطاقة الحساب المستعمَل', async () => {
+    const view = renderWithHarness(<SystemScreen />, {
+      status: 'UNLOCKED',
+      fetchImpl: makeFetch() as unknown as typeof fetch,
+    });
+    expect(await view.findByTestId('environment-card')).toBeTruthy();
+  });
+
+  it('البطاقة تقول صراحةً إن التبديل لا يفتح تداولاً', async () => {
+    /**
+     * شاشةٌ تقول «انتقلتِ إلى الحقيقي» بلا أكثر تُقرأ «صار يتداول بمالي».
+     * والحقيقة أنه يقرأ فقط — وقولها في البطاقة لا في وثيقةٍ جانبية.
+     */
+    const view = renderWithHarness(<SystemScreen />, {
+      status: 'UNLOCKED',
+      fetchImpl: makeFetch() as unknown as typeof fetch,
+    });
+    expect(await view.findByTestId('environment-card')).toHaveTextContent(/لا يفتح تداولاً/);
   });
 });

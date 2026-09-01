@@ -1,5 +1,6 @@
 import { API_BASE_URL, API_PREFIX, SESSION_REFRESH_PATH, verifyBaseUrl } from './config';
 import {
+  LIVE_ENVIRONMENT_PHRASE,
   READ_ROUTES,
   RESUME_PHRASE,
   RISK_INCREASING_ROUTES,
@@ -15,6 +16,7 @@ import type {
   KillSwitchResult,
   MobileEnvelope,
   NotificationsData,
+  EnvironmentSwitchResult,
   PauseResult,
   ResumeResult,
   ScanData,
@@ -207,6 +209,23 @@ export class MobileApiClient {
    */
   resumeTrading(): Promise<MobileEnvelope<ResumeResult>> {
     return this.mutate<ResumeResult>('pause/resume', { confirm: RESUME_PHRASE });
+  }
+
+  /**
+   * تبديل الحساب المقروء منه — **ولا يفتح تداولاً**.
+   *
+   * `LIVE_TRADING` وقفل التنفيذ ورفض `is_live` ثلاثة أقفال في الخادم لا
+   * يمسّها هذا النداء. وأقصى ما يفعله جهازٌ مسروق أن يرى رصيداً.
+   *
+   * والعبارة تُرسَل مع الاتجاه الخطر وحده؛ الخادم يفرضها ولا يُكتفى بحارس
+   * الواجهة — حارسٌ في الواجهة وحدها يمرّ أي نداءٍ من حوله.
+   */
+  switchEnvironment(target: 'DEMO' | 'LIVE'): Promise<MobileEnvelope<EnvironmentSwitchResult>> {
+    const payload: Record<string, unknown> = { target };
+    if (target === 'LIVE') {
+      payload.confirm = LIVE_ENVIRONMENT_PHRASE;
+    }
+    return this.mutate<EnvironmentSwitchResult>('broker/environment', payload);
   }
 
   /**

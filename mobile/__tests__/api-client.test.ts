@@ -1,5 +1,6 @@
 import { ApiError, MobileApiClient, type RefreshOutcome, type TokenSource } from '@/api/client';
 import { verifyBaseUrl } from '@/api/config';
+import { LIVE_ENVIRONMENT_PHRASE } from '@/api/routes';
 import { envelope } from './helpers';
 
 /**
@@ -259,5 +260,49 @@ describe('المسارات المطلوبة', () => {
     expect(headers.authorization).toBe('Bearer access-token');
     // مجموعة الترويسات مغلقة: لا مجال لترويسة وسيط أن تتسلّل.
     expect(Object.keys(headers).sort()).toEqual(['accept', 'authorization']);
+  });
+});
+
+describe('عبارة الانتقال إلى الحقيقي تُرسَل في اتجاهٍ واحد', () => {
+  /**
+   * **الاتجاهان ليسا متماثلين فلا يُعاملان بالتماثل.**
+   *
+   * الانتقال إلى الحقيقي يزيد المخاطرة فيطلب عبارة. والعودة إلى التجريبي
+   * تقلّلها — وحارسٌ يعرقل التراجع عن الخطر ليس حارساً، هو عقبةٌ في أسوأ
+   * لحظة ممكنة.
+   */
+  const capture = () => {
+    const seen: unknown[] = [];
+    const fetchImpl = jest.fn(async (_url: string, init?: RequestInit) => {
+      seen.push(JSON.parse(String(init?.body ?? '{}')));
+      return {
+        ok: true,
+        status: 200,
+        json: async () => envelope('broker/environment', {
+          action: 'ENVIRONMENT_SWITCHED', accepted: true, environment: 'DEMO',
+          is_demo: true, broker_name: 'CAPITAL_COM_DEMO',
+          at_utc: '2026-09-01T12:00:00+00:00', note_ar: 'لم يُفتح تداول.',
+        }),
+      } as unknown as Response;
+    });
+    return { seen, fetchImpl };
+  };
+
+  const clientWith = (fetchImpl: jest.Mock) =>
+    new MobileApiClient({
+      tokens: makeTokens(),
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+
+  it('العودة إلى التجريبي بلا عبارة', async () => {
+    const { seen, fetchImpl } = capture();
+    await clientWith(fetchImpl).switchEnvironment('DEMO');
+    expect(seen[0]).toEqual({ target: 'DEMO' });
+  });
+
+  it('الانتقال إلى الحقيقي بالعبارة كاملة', async () => {
+    const { seen, fetchImpl } = capture();
+    await clientWith(fetchImpl).switchEnvironment('LIVE');
+    expect(seen[0]).toEqual({ target: 'LIVE', confirm: LIVE_ENVIRONMENT_PHRASE });
   });
 });

@@ -1,12 +1,14 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View } from 'react-native';
 
 import { useEndpoint } from '@/api/useEndpoint';
 import { BUNDLE_IDENTIFIER } from '@/api/config';
 import { useSession } from '@/auth/SessionProvider';
+import { ApiError } from '@/api/client';
 import {
   Banner,
   Card,
+  ConfirmButton,
   Divider,
   ErrorState,
   Field,
@@ -37,6 +39,41 @@ export default function SystemScreen(): React.JSX.Element {
     previewData: previewOr(fixtures.status),
   });
   const verdict = client.endpointVerdict();
+
+  /**
+   * تبديل الحساب المقروء منه.
+   *
+   * النتيجة تُعرض من **نصّ الخادم** (`note_ar`) لا من جملةٍ تُكتب هنا: الخادم
+   * وحده يعرف ماذا وقع، وجملةٌ محلّية تصف نجاحاً قد لا يكون وقع هي بالضبط
+   * العطل الذي أصاب زرّي الإيقاف والقاطع من قبل.
+   */
+  const [switching, setSwitching] = useState(false);
+  const [switchNote, setSwitchNote] = useState<string | null>(null);
+  const [switchOk, setSwitchOk] = useState(false);
+
+  const switchTo = async (target: 'DEMO' | 'LIVE'): Promise<void> => {
+    setSwitching(true);
+    setSwitchNote(null);
+    try {
+      const response = await client.switchEnvironment(target);
+      setSwitchOk(response.data.accepted);
+      setSwitchNote(
+        response.data.accepted
+          ? `${t.system.switchDone} ${response.data.note_ar}`
+          : t.system.switchFailed,
+      );
+      // الحالة تُقرأ من الخادم بعد التبديل، ولا تُخمَّن محلياً: البطاقة أعلاه
+      // تعرض البيئة، وتخمينُها هنا يجعل شاشتين تختلفان على نفس الحقيقة.
+      refresh();
+    } catch (caught) {
+      setSwitchOk(false);
+      setSwitchNote(
+        caught instanceof ApiError ? caught.messageAr : t.system.switchFailed,
+      );
+    } finally {
+      setSwitching(false);
+    }
+  };
 
   if (loading && data === null) {
     return (
@@ -101,6 +138,54 @@ export default function SystemScreen(): React.JSX.Element {
               tone={data.broker.execution_locked ? 'positive' : 'caution'}
               hint="قفل التنفيذ يُدار على الخادم ولا يُفتح من الهاتف."
             />
+          </Card>
+
+          {/*
+            التبديل تحت بطاقة الوسيط مباشرةً: القرار يُتخذ وأنت تنظر إلى
+            الحساب الحالي، لا في شاشةٍ أخرى تُقرأ من الذاكرة.
+          */}
+          <Card testID="environment-card" title={t.system.switchTitle}>
+            <Text variant="caption" tone="secondary">
+              {t.system.switchBody}
+            </Text>
+            {switchNote !== null ? (
+              <Banner
+                testID="environment-result"
+                tone={switchOk ? 'positive' : 'negative'}
+                title={switchNote}
+              />
+            ) : null}
+            {data.broker.is_demo ? (
+              <ConfirmButton
+                testID="switch-to-live"
+                label={t.system.switchToLive}
+                tone="caution"
+                busy={switching}
+                accessibilityLabel={t.system.switchToLive}
+                accessibilityHint={t.system.switchToLiveConfirmBody}
+                confirmTitle={t.system.switchToLiveConfirmTitle}
+                confirmBody={t.system.switchToLiveConfirmBody}
+                confirmLabel={t.system.switchToLiveConfirm}
+                onConfirm={() => {
+                  void switchTo('LIVE');
+                }}
+              />
+            ) : (
+              <ConfirmButton
+                testID="switch-to-demo"
+                label={t.system.switchToDemo}
+                tone="neutral"
+                busy={switching}
+                accessibilityLabel={t.system.switchToDemo}
+                accessibilityHint={t.system.switchToDemoBody}
+                confirmTitle={t.system.switchToDemo}
+                confirmBody={t.system.switchToDemoBody}
+                confirmLabel={t.system.switchToDemoConfirm}
+                onConfirm={() => {
+                  void switchTo('DEMO');
+                }}
+              />
+            )}
           </Card>
 
           <Card testID="killswitch-card" title={t.system.killSwitch}>

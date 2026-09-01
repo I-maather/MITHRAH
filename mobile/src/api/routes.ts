@@ -47,7 +47,7 @@ export type RiskReducingRoute = (typeof RISK_REDUCING_ROUTES)[number];
  * ولا يفتح إلا الإيقاف المحلي: أسوأ ما يفعله جهازٌ مسروق أن يعيد النظام من
  * «موقوف» إلى «يقيّم» — ولا يستطيع بعدها إرسال أمرٍ واحد.
  */
-export const RISK_INCREASING_ROUTES = ['pause/resume'] as const;
+export const RISK_INCREASING_ROUTES = ['pause/resume', 'broker/environment'] as const;
 
 export type RiskIncreasingRoute = (typeof RISK_INCREASING_ROUTES)[number];
 
@@ -58,6 +58,14 @@ export type MutatingRoute = RiskReducingRoute | RiskIncreasingRoute;
  * تُكتب هنا مرّة واحدة كي لا تتفرّق نسخُها في الشاشات فتنحرف إحداها.
  */
 export const RESUME_PHRASE = 'أستأنف التداول';
+
+/**
+ * عبارة الانتقال إلى الحساب الحقيقي.
+ *
+ * والعودة إلى التجريبي **لا تطلب عبارة**: حارسٌ يعرقل التراجع عن الخطر ليس
+ * حارساً. والاتجاهان ليسا متماثلين فلا يُعاملان بالتماثل.
+ */
+export const LIVE_ENVIRONMENT_PHRASE = 'أنتقل إلى الحساب الحقيقي';
 
 /**
  * كلمات لا يجوز أن تظهر في أي مسار. نسخة من قائمة الخادم كي يُكتشف الانحراف

@@ -258,11 +258,14 @@ describe('لا واجهة تداول في العميل', () => {
     expect(methodNames).not.toContain(name);
   });
 
-  it('الدوال العامة على العميل هي القراءة والثلاثة والاستئناف', () => {
+  it('الدوال العامة على العميل هي القراءة والثلاثة وما يزيد المخاطرة', () => {
     // ⚠️ كُبِّرت القائمة بواحد في 2026-09-01: `resumeTrading`.
     //
     // وهو **المسار الوحيد الذي يزيد المخاطرة** في التطبيق، وقد أُضيف بقرار
     // معلَن في فئة `RISK_INCREASING_ROUTES` المُسمّاة على الجانبين.
+    //
+    // وصارت `switchEnvironment` الثانية في 2026-09-01: تبدّل الحساب المقروء
+    // منه ولا تفتح تداولاً — ثلاثة أقفال في الخادم خارج متناولها.
     //
     // ويبقى الحدّ الحقيقي كما هو: لا `closePosition` ولا `submitOrder` ولا
     // `deactivateKillSwitch` ولا `setLeverage` — والقائمة أعلاه (`forbiddenMethods`)
@@ -288,6 +291,7 @@ describe('لا واجهة تداول في العميل', () => {
         'getScan',
         'requestPause',
         'resumeTrading',
+        'switchEnvironment',
         'revokeDevice',
       ].sort(),
     );
