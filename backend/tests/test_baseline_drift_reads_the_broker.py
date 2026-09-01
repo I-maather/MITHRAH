@@ -132,3 +132,48 @@ def test_a_non_positive_balance_is_not_a_divergence_verdict():
     """صفرٌ أو سالب من الوسيط عطلُ قراءة لا حكمٌ على المرجع."""
     drift = check_baseline_against_broker(Broker(Balances("0")), BASELINE)
     assert drift.diverged is False
+
+
+# ---------------------------------------------------------------------------
+# رأس المال المحاكى
+#
+# ## الطلب الذي أنتج هذا القسم (2026-09-01)
+#
+# رصيد حساب الديمو ٩١٬٠٠٠ دولار، والخطة أن يُقاس النظام كما لو كان ٣٠٠ —
+# لأن نظاماً يتداول ٩١ ألفاً **ليس هو** الذي سيتداول ٣٠٠: قيد الكمية الدنيا
+# غير ملزم هناك وملزمٌ في كل صفقة هنا، والهامش يقفز من ٠٫٢٪ إلى ٥٨٪.
+#
+# ## ولماذا لا يُسمّى ذلك انحرافاً
+#
+# الفارق **تصميمٌ لا خلل**. وإنذارٌ دائم يشتعل بلا سبب يُدرَّب على تجاهله،
+# فيصمت في اليوم الذي يهمّ — وهو نفس صنف العطل الذي نطارده: حقلٌ يقول ما لا
+# يسنده مصدره.
+#
+# والسؤال الصحيح يختلف: لا «أيطابق الرصيدُ المرجع؟» بل **«أيكفي؟»**
+# ---------------------------------------------------------------------------
+
+def test_a_large_demo_balance_against_a_small_baseline_is_not_a_divergence():
+    drift = check_baseline_against_broker(
+        Broker(Balances("91000.00")), D("300.00"), simulated_capital=True
+    )
+    assert drift.diverged is False
+    assert "محاكى" in drift.reason_ar
+    assert "300" in drift.reason_ar and "91000" in drift.reason_ar
+
+
+def test_a_balance_below_the_simulated_baseline_is_a_real_divergence():
+    """
+    **الخطر الحقيقي في الاتجاه الآخر.** رصيدٌ أقلّ من المرجع يعني حدوداً
+    محسوبة على مالٍ غير موجود — وهو خطأ في الحالتين، محاكاةً كانت أو لا.
+    """
+    drift = check_baseline_against_broker(
+        Broker(Balances("120.00")), D("300.00"), simulated_capital=True
+    )
+    assert drift.diverged is True
+    assert "غير موجود" in drift.reason_ar
+
+
+def test_the_live_account_still_demands_a_match():
+    """ولا يُستعمل هذا الباب للتساهل على الحساب الحقيقي: ١٥٠ مقابل ١٤٠ بقيت صامتة."""
+    drift = check_baseline_against_broker(Broker(Balances("91000.00")), D("300.00"))
+    assert drift.diverged is True, "الحساب الحقيقي يقبل انحرافاً هائلاً"

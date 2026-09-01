@@ -224,7 +224,13 @@ def _portfolio(sys: Any, session: Any) -> dict[str, Any]:
 
     baseline = sys.limits.baseline_equity
     try:
-        drift = check_baseline_against_broker(sys.broker, baseline)
+        # على حسابٍ تجريبي يكون المرجع **محاكى عمداً**: رصيد الديمو كبير
+        # والمرجع صغير كي تنتقل التجربة إلى الحساب الحقيقي. فلا يُسمّى ذلك
+        # انحرافاً — وإنذارٌ دائم بلا سبب يُدرَّب على تجاهله.
+        simulated = not bool(getattr(sys.broker, "is_live", False))
+        drift = check_baseline_against_broker(
+            sys.broker, baseline, simulated_capital=simulated
+        )
     except Exception as exc:  # noqa: BLE001
         return {
             "baseline_equity": _money(baseline),

@@ -143,6 +143,14 @@ WorkingDirectory=$APP_DIR/backend
 Environment=PYTHONUNBUFFERED=1
 # التنفيذ الحقيقي مُطفأ. لا يُغيَّر هنا ولا في أي مكان بلا قرار مكتوب.
 Environment=LIVE_TRADING=false
+# رأس المال المرجعي — **٣٠٠ عمداً على حسابٍ تجريبي رصيده ٩١ ألفاً**.
+#
+# نظامٌ يتداول ٩١ ألفاً ليس هو النظام الذي سيتداول ٣٠٠: قيد الكمية الدنيا
+# (١٠٠ وحدة) غير ملزم هناك وملزمٌ في كل صفقة هنا، والهامش يقفز من ٠٫٢٪ إلى
+# ٥٨٪ لثلاثة مراكز. فتجربةٌ ناجحة على ٩١ ألفاً **لا تنتقل**.
+#
+# والرصيد الكبير يبقى نافعاً: هامشٌ وفير فلا تُرفَض صفقة لسببٍ إداري.
+Environment=BASELINE_EQUITY_USD=300.00
 ExecStart=$APP_DIR/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
 Restart=always
 RestartSec=3

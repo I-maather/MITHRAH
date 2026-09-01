@@ -142,7 +142,9 @@ class BaselineDrift:
         }
 
 
-def check_baseline_against_broker(broker, baseline: Decimal) -> BaselineDrift:
+def check_baseline_against_broker(
+    broker, baseline: Decimal, *, simulated_capital: bool = False
+) -> BaselineDrift:
     """
     يقارن رأس المال المرجعي بالرصيد الفعلي لدى الوسيط.
 
@@ -152,6 +154,16 @@ def check_baseline_against_broker(broker, baseline: Decimal) -> BaselineDrift:
 
     وفشل القراءة ليس انحرافاً: وسيطٌ مفصول لا يُثبت شيئاً عن الرصيد، فتُعاد
     `diverged=False` مع سبب صريح — ولا يُختلق رقم.
+
+    ## `simulated_capital` — ولماذا هو ضروري لا تخفيف
+
+    على حساب تجريبي رصيده ٩١ ألفاً بينما المرجع ٣٠٠ **عمداً**، تكون المقارنة
+    بلا معنى: الفارق ليس انحرافاً بل **تصميماً**. وإنذارٌ دائم يشتعل بلا سبب
+    يُدرَّب على تجاهله، فيصمت في اليوم الذي يهمّ.
+
+    والسؤال الصحيح هنا يختلف: ليس «أيطابق الرصيدُ المرجع؟» بل **«أيكفي
+    الرصيد للمرجع؟»** — لأن رصيداً أقلّ من المرجع يعني حدوداً محسوبة على
+    مالٍ غير موجود، وذلك خطرٌ حقيقي في الحالتين.
     """
     # ## الميثود التي لا وجود لها
     #
@@ -191,6 +203,25 @@ def check_baseline_against_broker(broker, baseline: Decimal) -> BaselineDrift:
         return BaselineDrift(
             baseline=baseline, broker_equity=equity, diverged=False,
             reason_ar="الوسيط أعاد رصيداً غير موجب — لا حكم.",
+        )
+
+    if simulated_capital:
+        # رأس مالٍ محاكى: يُطلَب أن **يكفي** الرصيد لا أن يطابقه.
+        if equity < baseline:
+            return BaselineDrift(
+                baseline=baseline, broker_equity=equity, diverged=True,
+                reason_ar=(
+                    f"⚠️ رأس المال المحاكى {baseline} أكبر من الرصيد الفعلي "
+                    f"{equity} — الحدود تُحسب على مالٍ غير موجود."
+                ),
+            )
+        return BaselineDrift(
+            baseline=baseline, broker_equity=equity, diverged=False,
+            reason_ar=(
+                f"رأس مال محاكى {baseline} على حسابٍ رصيده {equity}. "
+                f"الفارق مقصود: النتائج تُقاس كما لو كان الحساب {baseline}، "
+                f"كي تنتقل التجربة إلى الحساب الحقيقي."
+            ),
         )
 
     gap = abs(equity - baseline) / baseline
