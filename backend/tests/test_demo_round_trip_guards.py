@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -61,28 +62,41 @@ def test_nothing_runs_without_the_exact_phrase(args, label):
     assert "لا تشغيل بلا موافقة صريحة" in result.stderr
 
 
-def test_the_approved_run_still_stops_at_the_unproven_stop_unit():
+def test_the_script_refuses_if_the_stop_unit_is_not_the_measured_one():
     """
-    **السور الرابع.** الموافقة تفتح باباً واحداً لا كل الأبواب: ما دامت وحدة
-    `stopDistance` غير مُثبَتة، فالوقف المُرسَل قد يكون أبعد بعشرة آلاف ضعف —
-    أي مركزٌ بلا وقف. فيُرفَض قبل أي اتصال.
+    كان السكربت يقف عند `STOP_DISTANCE_UNIT_PROVEN = False`. وقد **قيست
+    الوحدة** يوم 2026-09-01 (فرق سعر خام)، فزال ذلك الحاجز.
+
+    ولم يبقَ السكربت بلا حارس على الوحدة: يرفض التشغيل إن لم تكن `PRICE` —
+    فلو عاد أحدٌ إلى النقاط يوماً لتوقّف السكربت بدل أن يرسل وقفاً خاطئاً.
     """
-    result = run("--approve", APPROVAL)
-    assert result.returncode == 3
-    assert "وحدة مسافة الوقف غير مُثبَتة" in result.stderr
-    assert "stop_distance_probe" in result.stderr, "يُرفَض ولا يُقال ما الطريق"
+    assert 'STOP_DISTANCE_UNIT != "PRICE"' in SOURCE
+    assert "STOP_DISTANCE_UNIT_PROVEN" not in SOURCE, "بقيت إشارة إلى حارسٍ زال"
+
+
+def test_the_stop_distance_is_written_in_price_units_above_the_broker_minimum():
+    """
+    `0.0150` بوحدة السعر = 150 نقطة على اليورو/دولار، فوق حدّ الوسيط المقيس
+    `0.01`. ورقمٌ مثل `30` هنا يعني وقفاً عند سعرٍ سالب — وهو ما رُفض فعلاً
+    في المسبار الأوّل.
+    """
+    import app.diagnostics.demo_round_trip as drt
+
+    assert drt.STOP_DISTANCE >= Decimal("0.01"), "الوقف دون حدّ الوسيط"
+    assert drt.STOP_DISTANCE < Decimal("1"), "رقمٌ بهذا الحجم ليس بوحدة السعر"
+    assert drt.TARGET_DISTANCE > drt.STOP_DISTANCE
 
 
 def test_the_guards_run_before_any_network_or_secret_is_touched():
     """
-    ترتيبٌ لا تجميل: لو فُتحت الجلسة أوّلاً لصار الرفض **بعد** أن لمسنا
-    الوسيط والسرّ. والدليل أن التشغيلين أعلاه نجحا في بيئةٍ بلا شبكة ولا
-    ملف أسرار — ولو سبق أيٌّ منهما السور لانفجرا بعلّةٍ أخرى.
+    ترتيبٌ لا تجميل: التشغيل بلا موافقة يجب أن يتوقّف **قبل** أن نلمس
+    الوسيط أو ملف الأسرار. والدليل أن الرفض يخرج نظيفاً في بيئةٍ بلا شبكة
+    ولا أسرار — ولو سبق الاتصالُ السورَ لانفجر بعلّةٍ أخرى.
     """
-    for result in (run(), run("--approve", APPROVAL)):
-        assert result.returncode in (2, 3)
-        for leak in ("Traceback", "SecretNotFound", "ConnectionError", "httpx"):
-            assert leak not in result.stderr, f"لُمس شيءٌ قبل السور: {leak}"
+    result = run()
+    assert result.returncode == 2
+    for leak in ("Traceback", "SecretNotFound", "ConnectionError", "httpx"):
+        assert leak not in result.stderr, f"لُمس شيءٌ قبل السور: {leak}"
 
 
 def test_demo_is_written_in_the_source_not_read_from_configuration():

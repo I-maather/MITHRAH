@@ -35,13 +35,16 @@ from __future__ import annotations
 
 import argparse
 import sys
+from decimal import Decimal
 
 APPROVAL_PHRASE = "أوافق على صفقة تجريبية واحدة"
 
 #: مسافة الوقف والهدف بالنقاط. الهدف ضعف الوقف — نسبةٌ معقولة، والغرض
 #: ليس الربح بل أن يقبل الوسيط الحمولة ويعيد مستويات نقارنها.
-STOP_PIPS = 30
-TARGET_PIPS = 60
+#: مسافة الوقف والهدف **بوحدة السعر** — وحدة الوسيط المقيسة.
+#: 0.0150 = 150 نقطة على اليورو/دولار، فوق حدّ الوسيط 0.01.
+STOP_DISTANCE = Decimal("0.0150")
+TARGET_DISTANCE = Decimal("0.0300")
 
 OK, BAD, WARN, DIM, END = "\033[32m", "\033[31m", "\033[33m", "\033[2m", "\033[0m"
 
@@ -65,7 +68,7 @@ def main() -> int:
         )
         return 2
 
-    from app.brokers.capital.adapter import STOP_DISTANCE_UNIT_PROVEN
+    from app.brokers.capital.adapter import STOP_DISTANCE_UNIT
     from app.brokers.capital.endpoints import CapitalEnvironment
     from app.brokers.capital.safety import ExecutionLock
     from app.brokers.factory import build_capital_adapter
@@ -75,11 +78,10 @@ def main() -> int:
     from app.money import D
     from app.secretstore.provider import build_secret_provider
 
-    if not STOP_DISTANCE_UNIT_PROVEN:
+    if STOP_DISTANCE_UNIT != "PRICE":
         print(
-            f"{BAD}⛔ وحدة مسافة الوقف غير مُثبَتة بعد.{END}\n"
-            f'   شغّلي أوّلاً:  python -m app.diagnostics.stop_distance_probe --approve "…"\n'
-            f"{DIM}   ثم تُقلَب STOP_DISTANCE_UNIT_PROVEN بقرارٍ بعد قراءة القياس.{END}",
+            f"{BAD}⛔ وحدة مسافة الوقف غير معروفة ({STOP_DISTANCE_UNIT}).{END}\n"
+            f'   شغّلي أوّلاً:  python -m app.diagnostics.stop_distance_probe --approve "…"',
             file=sys.stderr,
         )
         return 3
@@ -120,16 +122,16 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
-    if D(STOP_PIPS) < details.min_stop_distance:
+    if STOP_DISTANCE < details.min_stop_distance:
         print(
-            f"{BAD}⛔ وقفنا {STOP_PIPS} نقطة دون حدّ الوسيط "
-            f"{details.min_stop_distance} — سيُرفَض.{END}",
+            f"{BAD}⛔ وقفنا {STOP_DISTANCE} دون حدّ الوسيط "
+            f"{details.min_stop_distance} (كلاهما بوحدة السعر) — سيُرفَض.{END}",
             file=sys.stderr,
         )
         return 1
     entry = quote.ask
-    stop = entry - D(STOP_PIPS) * pip
-    target = entry + D(TARGET_PIPS) * pip
+    stop = entry - STOP_DISTANCE
+    target = entry + TARGET_DISTANCE
     print(f"{DIM}   السعر {entry} · الكمية {size} · وقف {stop} · هدف {target}{END}")
 
     step(3, "بناء النية — **بيدٍ لا من استراتيجية**")
@@ -145,10 +147,10 @@ def main() -> int:
         stop_price=stop,
         take_profit_price=target,
         expected_fill_price=entry,
-        max_slippage_abs=D(2) * pip,
+        max_slippage_abs=D(5) * pip,
         strategy_name="MANUAL_PIPELINE_PROOF",
         strategy_version="0.0.0",
-        risk_amount_usd=D(STOP_PIPS) * pip * size,
+        risk_amount_usd=(STOP_DISTANCE / pip) * pip * size,
         commission_estimate_usd=D("0"),
         exit_plan_ar="إثبات مسار: تُغلق فور التأكيد. ليست قراراً تداولياً.",
         instrument_snapshot={"guaranteed_stop": False},

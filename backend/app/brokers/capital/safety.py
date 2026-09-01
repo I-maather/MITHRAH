@@ -30,8 +30,10 @@ from .endpoints import CapitalEnvironment, is_live_url, is_mutating
 #:
 #:   ExecutionLock في الناقل   — يرفض كل فعل مُعدِّل قبل مغادرة الطلب العملية
 #:   LIVE_TRADING = false      — في بيئة الخادم
-#:   STOP_DISTANCE_UNIT_PROVEN — ثابت في المحوّل يمنع كل إرسال حتى تُثبَت
-#:                               وحدة `stopDistance` بأمر تجريبي واحد
+#:   التحقّق من الوقف بعد التنفيذ — يقرأ المركز من الوسيط ويرفض أي مركز
+#:                               بلا وقف أو بوقفٍ غير الذي طُلب. (حلّ محلّ
+#:                               `STOP_DISTANCE_UNIT_PROVEN` بعد أن قيست
+#:                               الوحدة في 2026-09-01: فرق سعر خام.)
 #:
 #: وإعادته إلى False تُعيد المنع فوراً وبلا أثر جانبي — لا حالة تعتمد عليه.
 LIVE_API_ENABLED: bool = True

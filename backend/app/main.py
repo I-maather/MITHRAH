@@ -525,7 +525,7 @@ def _trading_gates(sys: SystemState, market) -> dict:
     عكس المعنى تماماً. والنفي اللغوي ليس نفياً منطقياً في العربية ولا في
     غيرها، فتُكتب الصيغتان صراحةً.
     """
-    from .brokers.capital.adapter import STOP_DISTANCE_UNIT_PROVEN
+    from .brokers.capital.adapter import STOP_DISTANCE_UNIT
 
     #: (مفتوحة؟, سبب المنع حين تكون مغلقة)
     gates = [
@@ -534,7 +534,10 @@ def _trading_gates(sys: SystemState, market) -> dict:
         (not sys.locally_paused, "التشغيل موقوف محلياً"),
         (sys.settings.live_trading, "التداول الحقيقي مُعطَّل"),
         (sys.execution_lock.unlocked, "قفل التنفيذ مغلق"),
-        (STOP_DISTANCE_UNIT_PROVEN, "وحدة مسافة الوقف لم تُثبَت بعد"),
+        # الوحدة صارت مقيسة (2026-09-01) ولم تعد بوابة. وحلّ محلّها تحقّقٌ
+        # **بعد كل تنفيذ** من وقف المركز عند الوسيط — وهو لا يُعرَض هنا
+        # لأنه ليس بوابةً قبلية بل رفضٌ بعديّ.
+        (STOP_DISTANCE_UNIT == "PRICE", "وحدة مسافة الوقف غير معروفة"),
     ]
     blocked = [reason for ok, reason in gates if not ok]
     return {"trading_allowed": not blocked, "blocked_by": blocked}

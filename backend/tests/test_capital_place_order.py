@@ -31,6 +31,7 @@ from tests.capital_fixtures import (
     build_transport,
     confirm_body,
     eurusd_market_body,
+    positions_body,
 )
 from tests.test_capital_execution_safety import an_intent
 
@@ -46,12 +47,16 @@ def intent(**over):
 
 def _prove_unit(monkeypatch):
     """
-    يفتح حارس الوحدة صراحةً.
+    كان يفتح حارس `STOP_DISTANCE_UNIT_PROVEN` صراحةً في كل اختبار.
 
-    وجوده في كل اختبار يمسّ المسار الكامل **مقصود**: لا يُفتح المسار إلا
-    بفعلٍ مكتوب، فلو أُزيل الحارس يوماً سقطت هذه الاختبارات وأخبرتنا.
+    وقد **زال الحارس** يوم 2026-09-01 بعد أن قيست الوحدة على حساب Demo
+    (فرق سعر خام، لا نقاط). فبقيت الدالة تؤكّد ما صار معلوماً، كي لا تُحذف
+    من عشرات المواضع ولئلا يضيع أثر التغيير من الاختبارات.
+
+    ولم يبقَ المسار بلا حارس: حلّ محلّه `_verify_broker_stop` — ويُفحَص في
+    قسم «الوقف يُتحقَّق منه» أدناه.
     """
-    monkeypatch.setattr(adapter_module, "STOP_DISTANCE_UNIT_PROVEN", True)
+    assert adapter_module.STOP_DISTANCE_UNIT == "PRICE"
 
 
 def _unlocked() -> ExecutionLock:
@@ -62,7 +67,7 @@ def _unlocked() -> ExecutionLock:
     )
 
 
-def _adapter(transport=None, *, market=None):
+def _adapter(transport=None, *, market=None, positions=None):
     """
     القفل نفسه في الطبقتين: المحوّل والناقل المحروس.
 
@@ -70,15 +75,25 @@ def _adapter(transport=None, *, market=None):
     أو يُمنع ما نريد اختباره. والطبقتان مقصودتان في التصميم.
     """
     lock = _unlocked()
-    transport = transport or build_transport(markets={"EURUSD": market or eurusd_market_body()})
+    transport = transport or build_transport(
+        markets={"EURUSD": market or eurusd_market_body()},
+        # المركز الافتراضي يطابق وقف النية: `_verify_broker_stop` يقرأ
+        # المركز بعد كل تنفيذ، فمسارٌ ناجح يحتاج مركزاً موجوداً ومحميّاً.
+        positions=positions if positions is not None else positions_body(
+            with_position=True, stop_level=1.08046
+        ),
+    )
     session, _guarded, fixture = build_session(transport, lock=lock)
     adapter = CapitalComAdapter(session=session, execution_lock=lock)
     adapter.connect()
     return adapter, fixture
 
 
-def _with_units(adapter, *, pip_size=D("0.0001"), min_stop=D("10")):
-    """يحقن وحدة مُثبَتة كي تُختبَر الأسطر التي بعد الحارس."""
+def _with_units(adapter, *, pip_size=D("0.0001"), min_stop=D("0.0010")):
+    """
+    يحقن حدود الأداة. `min_stop` **بوحدة السعر** كما يعطيها الوسيط
+    (0.01 على اليورو/دولار فعلياً = 100 نقطة)، لا بالنقاط كما كان.
+    """
     real = adapter.get_instrument_details
     adapter.get_instrument_details = lambda symbol: real(symbol).model_copy(  # type: ignore[method-assign]
         update={"pip_size": pip_size, "min_stop_distance": min_stop}
@@ -101,15 +116,22 @@ def test_locked_adapter_still_blocks_and_sends_nothing():
     assert len(fixture.calls) == before
 
 
-def test_unproven_stop_unit_refuses_and_sends_nothing():
+def test_a_stop_closer_than_the_broker_minimum_is_refused_before_any_send(monkeypatch):
     """
-    الوسيط لا يعيد `pip_size`، و«POINTS» تُقرأ فرقَ سعر للذهب وتستحيل
-    للعملات. الوحدة غير مُثبَتة ⇒ لا إرسال. هذه هي حالة رسم التبييت نفسها.
+    **الحارس الذي كان معطّلاً بصمت.**
+
+    كان يُحسب `stop_distance` بالنقاط (30) ويُقارَن بحدّ الوسيط بوحدة السعر
+    (0.01) — فيمرّ **دائماً**. طرفان بوحدتين، ومقارنةٌ بلا معنى.
+
+    والآن الطرفان بوحدة السعر، فالحدّ يعضّ فعلاً. والوقف **لا يُوسَّع
+    تلقائياً**: توسيعه يغيّر المخاطرة التي وافقت عليها المالكة.
     """
+    _prove_unit(monkeypatch)
     adapter, fixture = _adapter()
+    _with_units(adapter, min_stop=D("0.0500"))      # أوسع من وقف النية (0.005)
     with pytest.raises(BrokerRejected) as exc:
         adapter.place_order(intent())
-    assert "STOP_DISTANCE_UNIT_UNKNOWN" in str(exc.value)
+    assert "دون حدّ الوسيط" in str(exc.value)
     assert _posts(fixture) == 0
 
 
@@ -151,9 +173,16 @@ def test_stop_closer_than_broker_minimum_is_refused_and_never_widened(monkeypatc
 
 # --- المسار الكامل ----------------------------------------------------------
 
-def _submitting(monkeypatch, confirm=None, *, deal_status="ACCEPTED"):
+def _submitting(monkeypatch, confirm=None, *, deal_status="ACCEPTED", positions=None):
     body = confirm if confirm is not None else confirm_body(deal_status=deal_status)
-    transport = build_transport(confirms={REF: body})
+    # المركز العائد يطابق وقف النية (1.08046): بعد كل تنفيذ يُقرأ المركز
+    # ويُقارَن وقفه بما طُلب، فمسارٌ ناجح يحتاج مركزاً محميّاً بالوقف الصحيح.
+    transport = build_transport(
+        confirms={REF: body},
+        positions=positions if positions is not None else positions_body(
+            with_position=True, stop_level=1.08046
+        ),
+    )
     transport.register_json("POST", PATH_POSITIONS, {"dealReference": REF})
     _prove_unit(monkeypatch)
     adapter, fixture = _adapter(transport)
@@ -235,3 +264,74 @@ def test_intent_without_a_take_profit_is_refused(monkeypatch):
         adapter.place_order(intent(take_profit_price=None))
     assert "بلا هدف" in str(exc.value)
     assert _posts(fixture) == 0
+
+
+# ---------------------------------------------------------------------------
+# الوقف يُتحقَّق منه عند الوسيط بعد كل تنفيذ
+#
+# ## لماذا حلّ هذا محلّ ثابتٍ يُقلَب مرّة
+#
+# `STOP_DISTANCE_UNIT_PROVEN` كان يحرس **يوم قُلب** فقط: يقيس مرّة ثم يُنسى،
+# فلو تغيّرت الوحدة عند الوسيط أو أُرسل الوقف خطأً لما قال شيئاً.
+#
+# ومطابقة الأداة والاتجاه والكمية تُثبت أن **المركز الصحيح** فُتح، ولا تقول
+# شيئاً عن **حمايته**. ومركزٌ مفتوح بوقفٍ غير الذي وافقنا عليه أخطر من مركزٍ
+# لم يُفتح: كل الحدود محسوبة على وقفٍ ليس هناك.
+# ---------------------------------------------------------------------------
+
+def test_a_position_that_came_back_without_a_stop_is_refused_loudly(monkeypatch):
+    """
+    **الحالة التي تجعل الحماية وهماً.** لو مات الخادم الآن، ما الذي يحمي
+    المركز؟ لا شيء. فلا يُقال «نُفِّذ بنجاح» عن مركزٍ مكشوف.
+    """
+    adapter, _f = _submitting(
+        monkeypatch, positions=positions_body(with_position=True, stop_level=None)
+    )
+    with pytest.raises(BrokerRejected) as exc:
+        adapter.place_order(intent())
+    assert "بلا وقفٍ عند الوسيط" in str(exc.value)
+
+
+def test_a_stop_far_from_what_we_asked_is_refused(monkeypatch):
+    """وقفٌ عند 1.0700 بدل 1.08046 = مخاطرةٌ تضاعفت بلا أن يقول أحد."""
+    adapter, _f = _submitting(
+        monkeypatch, positions=positions_body(with_position=True, stop_level=1.0700)
+    )
+    with pytest.raises(BrokerRejected) as exc:
+        adapter.place_order(intent())
+    assert "غير التي وافقتِ عليها" in str(exc.value)
+
+
+def test_a_stop_within_tolerance_is_accepted(monkeypatch):
+    """انزلاقٌ صغير في مستوى الوقف طبيعي — والتشدّد فيه يمنع كل تنفيذ."""
+    adapter, _f = _submitting(
+        monkeypatch, positions=positions_body(with_position=True, stop_level=1.08056)
+    )
+    assert adapter.place_order(intent()).status.value == "FILLED"
+
+
+def test_an_executed_order_whose_position_never_appeared_is_uncertain(monkeypatch):
+    """
+    غموضٌ صريح لا نجاحٌ ولا فشل: مركزٌ لا نعرف أمفتوحٌ هو أم لا يستدعي عيناً
+    بشرية، لا محاولةً ثانية.
+    """
+    adapter, fixture = _submitting(monkeypatch, positions=positions_body())
+    with pytest.raises(CapitalExecutionUncertain):
+        adapter.place_order(intent())
+    assert _posts(fixture) == 1, "أُعيد الإرسال بعد الغموض"
+
+
+def test_the_stop_distance_is_sent_in_price_units_not_pips(monkeypatch):
+    """
+    **القياس الذي أنتج هذا الاختبار** (2026-09-01، Demo، EURUSD):
+    `stopDistance = 37` رُفض بـ«القيمة الدنيا: 0» — ولو كانت الوحدة نقاطاً
+    لكان وقفاً سليماً. و`0.0150` قُبل — ولو كانت نقاطاً لكان دون أي حدّ.
+
+    وقسمةٌ على `pip_size` هنا تُرسل 50 مكان 0.005: أبعد بعشرة آلاف ضعف.
+    """
+    adapter, fixture = _submitting(monkeypatch)
+    adapter.place_order(intent())
+    sent = [c for c in fixture.calls
+            if c["method"] == "POST" and c["path"] == PATH_POSITIONS][0]["json"]
+    assert sent["stopDistance"] == pytest.approx(0.005), "الوحدة ليست سعراً"
+    assert sent["profitDistance"] == pytest.approx(0.01)

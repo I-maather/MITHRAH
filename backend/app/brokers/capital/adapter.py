@@ -132,15 +132,36 @@ ASSET_CLASS_BY_TYPE: dict[str, AssetClass] = {
 }
 
 
-#: هل أُثبتت وحدة `stopDistance` لدى الوسيط؟
+#: وحدة `stopDistance` عند كابيتال — **مقيسة، لا مفترضة**.
 #:
-#: `pip_size` يأتي من جدول **محلي** (`PIP_SIZES`) لا من الوسيط، فوجوده ليس
-#: دليلاً. والوسيط يصف `minStopOrProfitDistance` بوحدة "POINTS" بقيمة تُقرأ
-#: فرقَ سعر للذهب (1.00) وتستحيل للعملات (0.25 = 2500 نقطة).
+#: ## القياس (2026-09-01، حساب Demo، EURUSD عند 1.1588)
 #:
-#: تُقلَب إلى True **فقط** بعد أمر تجريبي واحد على Demo يُقارَن فيه
-#: `stopLevel` العائد من الوسيط بالمتوقَّع. لا قبل ذلك.
-STOP_DISTANCE_UNIT_PROVEN = False
+#: مسباران، وكلٌّ منهما يستبعد احتمالاً:
+#:
+#:   `stopDistance = 37`      ⇒ **رُفض**: `error.invalid.stoploss.minvalue: 0`
+#:       لو كانت الوحدة نقاطاً لكان الوقف 1.09715 — سليماً ومقبولاً.
+#:       وبوحدة السعر يصير 1.10085 − 37 = سعرٌ سالب. الرفض يطابق الثانية.
+#:
+#:   `stopDistance = 0.0150`  ⇒ **قُبل**
+#:       لو كانت الوحدة نقاطاً لكان 0.0000015 من السعر — دون أي حدّ.
+#:       وبوحدة السعر يصير الوقف 1.08590، فوق حدّ الوسيط 0.01.
+#:
+#: ⇒ الوحدة **فرق سعر خام**. `PRICE` لا `PIPS`.
+#:
+#: ## والخطأ الذي كان مختبئاً
+#:
+#: كان الكود يقسم على `pip_size` — أي يفترض النقاط. فوقفٌ بـ30 نقطة كان
+#: سيُرسَل كـ`30` من وحدات السعر: **أبعد بعشرة آلاف ضعف**. وعلى اليورو
+#: يُرفَض (سعر سالب)، وعلى الذهب عند 3000 يمرّ صامتاً بوقفٍ عند 2970.
+#: أي أن العطل كان يظهر على أداة ويختفي على أخرى — أسوأ أنواعه.
+#:
+#: ولذلك لا يُقلَب ثابتٌ هنا: **الوحدة تُصحَّح، والوقف يُتحقَّق منه بعد كل
+#: تنفيذ** بمقارنة ما أعاده الوسيط بما طلبناه. قياسٌ حيّ لا ثابتٌ يُنسى.
+STOP_DISTANCE_UNIT = "PRICE"
+
+#: أقصى فارق مقبول بين الوقف الذي طلبناه والوقف الذي وضعه الوسيط، كنسبة من
+#: مسافة الوقف نفسها. فوقه: المركز مفتوح بحمايةٍ غير التي وافقنا عليها.
+STOP_LEVEL_TOLERANCE = D("0.10")
 
 
 class InstrumentNotAllowed(BrokerRejected):
@@ -734,7 +755,7 @@ class CapitalComAdapter(BrokerAdapter):
         # بالمحوّل الذي بين يديه.
         #
         # والحماية لم تُضعَف: الإرسال على البيئة الحقيقية يبقى مرفوضاً هنا،
-        # والديمو يبقى محروساً بقفل التنفيذ وبـ`STOP_DISTANCE_UNIT_PROVEN`.
+        # والديمو يبقى محروساً بقفل التنفيذ وبالتحقّق من الوقف بعد التنفيذ.
         if self.is_live:
             raise LiveApiBlocked("إرسال أمر على البيئة الحقيقية مرفوض في هذا الإصدار.")
 
@@ -755,35 +776,28 @@ class CapitalComAdapter(BrokerAdapter):
         if stop_price_distance <= 0:
             raise BrokerRejected("مسافة الوقف صفر.")
 
-        # ---------------------------------------------------------------
-        # وحدة `stopDistance` غير مُثبَتة.
-        #
-        # الوسيط يقبل الحقل، ولم يُثبَت بعد أهو بالنقاط أم بفرق السعر الخام.
-        # وخطأٌ بمعامل 10000 هنا يعني وقفاً أبعد بعشرة آلاف ضعف — أي بلا وقف.
-        #
-        # هذه هي حالة `OVERNIGHT_RATE_UNIT_UNKNOWN` نفسها، والقاعدة نفسها
-        # تُطبَّق: **لا يُخمَّن، ويُرفَض حتى يُقاس.** يُثبت بأمر تجريبي واحد
-        # على Demo يُقارَن فيه `stopLevel` العائد بالمتوقَّع.
-        # ---------------------------------------------------------------
-        if not STOP_DISTANCE_UNIT_PROVEN:
+        if details.min_stop_distance is None:
             raise BrokerRejected(
-                "وحدة مسافة الوقف غير مُثبَتة (STOP_DISTANCE_UNIT_UNKNOWN). "
-                "pip_size مصدره جدول محلي لا الوسيط، فوجوده ليس دليلاً. "
-                "تُثبَت بأمر تجريبي واحد على Demo يُقارَن فيه stopLevel العائد "
-                "بالمتوقَّع، ثم تُقلَب STOP_DISTANCE_UNIT_PROVEN."
-            )
-        if details.pip_size is None or details.min_stop_distance is None:
-            raise BrokerRejected(
-                f"بيانات الأداة ناقصة: pip_size={details.pip_size} · "
-                f"min_stop_distance={details.min_stop_distance}."
+                f"الوسيط لم يُعطِ أدنى مسافة وقف للأداة {intent.symbol} — "
+                "لا إرسال بلا معرفة الحدّ."
             )
 
-        stop_distance = stop_price_distance / details.pip_size
+        # ---------------------------------------------------------------
+        # **الوحدة سعرٌ خام** — مقيسة 2026-09-01، انظر `STOP_DISTANCE_UNIT`.
+        #
+        # وكان هنا `/ details.pip_size`، فيُرسَل 30 مكان 0.0030: أبعد بعشرة
+        # آلاف ضعف. ثم يُقارَن الناتج (30) بحدّ الوسيط (0.01) فيمرّ دائماً —
+        # أي أن **حارس أدنى مسافة كان معطّلاً أيضاً** بنفس الخطأ، ولا يظهر
+        # لأن طرفَي المقارنة صارا بوحدتين مختلفتين.
+        #
+        # وحدةٌ واحدة الآن على الطرفين: سعر مقابل سعر.
+        # ---------------------------------------------------------------
+        stop_distance = stop_price_distance
         if stop_distance < details.min_stop_distance:
             raise BrokerRejected(
                 f"مسافة الوقف {stop_distance} دون حدّ الوسيط "
-                f"{details.min_stop_distance}. لا تُوسَّع تلقائياً — التوسيع "
-                "يغيّر المخاطرة التي وافقتِ عليها."
+                f"{details.min_stop_distance} (كلاهما بوحدة السعر). "
+                "لا تُوسَّع تلقائياً — التوسيع يغيّر المخاطرة التي وافقتِ عليها."
             )
 
         # `limit_price` سعر الدخول لا الهدف. الهدف حقلٌ مستقلّ، وغيابه رفض.
@@ -797,7 +811,7 @@ class CapitalComAdapter(BrokerAdapter):
             direction=intent.side,
             size=intent.quantity,
             stop_distance=stop_distance,
-            profit_distance=profit_price_distance / details.pip_size,
+            profit_distance=profit_price_distance,   # وحدة السعر نفسها
             guaranteed_stop=bool(intent.instrument_snapshot.get("guaranteed_stop", False)),
         )
 
@@ -846,6 +860,23 @@ class CapitalComAdapter(BrokerAdapter):
                 f"كمية مختلفة: نُفِّذت {confirmation.size} ونويناها {intent.quantity}."
             )
 
+        # ---------------------------------------------------------------
+        # **الوقف يُتحقَّق منه عند الوسيط، لا يُفترَض.**
+        #
+        # مطابقة الأداة والاتجاه والكمية تُثبت أن المركز الصحيح فُتح، ولا
+        # تقول شيئاً عن **حمايته**. ومركزٌ مفتوح بوقفٍ غير الذي وافقنا عليه
+        # هو أخطر من مركزٍ لم يُفتح: الحدود كلها محسوبة على وقفٍ ليس هناك.
+        #
+        # وهذا يحلّ محلّ `STOP_DISTANCE_UNIT_PROVEN`: ثابتٌ يُقلب مرّة ويُنسى
+        # يحرس القياس يوم قُلب فقط؛ وهذا يقيس **عند كل أمر**.
+        # ---------------------------------------------------------------
+        self._verify_broker_stop(
+            deal_id=confirmation.deal_id or "",
+            intended_stop=intent.stop_price,
+            stop_distance=stop_distance,
+            symbol=intent.symbol,
+        )
+
         return BrokerOrder(
             broker_order_id=confirmation.deal_id or "",
             client_order_id=str(deal_reference),
@@ -858,6 +889,38 @@ class CapitalComAdapter(BrokerAdapter):
             status=OrderStatus.FILLED,
             updated_at_utc=at,
         )
+
+    def _verify_broker_stop(
+        self, *, deal_id: str, intended_stop: Decimal,
+        stop_distance: Decimal, symbol: str,
+    ) -> None:
+        """
+        يقرأ المركز من الوسيط ويقارن وقفه بما طلبناه.
+
+        **الغياب رفضٌ لا تسامح.** مركزٌ بلا وقفٍ عند الوسيط يعني أن حمايتنا
+        في ذاكرتنا وحدها — ولو مات الخادم لبقي المركز مكشوفاً. ولا يُبتلع
+        بحجّة أن الأمر «نُفِّذ بنجاح».
+        """
+        position = next(
+            (p for p in self.list_positions() if str(p.deal_id) == str(deal_id)), None
+        )
+        if position is None:
+            raise CapitalExecutionUncertain(
+                f"نُفِّذ الأمر ({deal_id}) ولم يظهر المركز في القائمة. "
+                "لا يُعاد الإرسال — افحصي الحساب بنفسك."
+            )
+        if position.stop_level is None:
+            raise BrokerRejected(
+                f"المركز {deal_id} على {symbol} مفتوحٌ **بلا وقفٍ عند الوسيط**. "
+                "أغلقيه فوراً: حمايتنا في ذاكرتنا وحدها."
+            )
+        drift = abs(position.stop_level - intended_stop)
+        if drift > stop_distance * STOP_LEVEL_TOLERANCE:
+            raise BrokerRejected(
+                f"وقف الوسيط {position.stop_level} يبعد {drift} عمّا طلبناه "
+                f"{intended_stop} — أكثر من {STOP_LEVEL_TOLERANCE:.0%} من مسافة "
+                f"الوقف. المركز مفتوح بحمايةٍ غير التي وافقتِ عليها."
+            )
 
     def confirm_order(self, client_order_id: str) -> BrokerOrder:
         """قراءة فقط — مسموحة، لأن التأكيد هو ما ينقذنا من الحالة الغامضة."""
