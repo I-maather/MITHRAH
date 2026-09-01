@@ -59,6 +59,31 @@ RISK_REDUCING_ROUTES: tuple[str, ...] = (
     "device/revoke",
 )
 
+#: **المسار الوحيد الذي يزيد المخاطرة** — في فئةٍ خاصّة به عمداً.
+#:
+#: ## لماذا فئة ثالثة ولا يُضاف إلى الثانية
+#:
+#: كان العقد: «قراءة + ثلاثة مسارات كلها تقلّل المخاطرة». وإضافة الاستئناف
+#: إليها تُلغي العقد **بصمت** — يبقى الاسم `RISK_REDUCING_ROUTES` ويصير
+#: كاذباً. وفئةٌ ثالثة تُبقي الحقيقة مقروءة: المجال فيه مسارٌ واحد يزيد
+#: المخاطرة، وهو معروفٌ بالاسم ومحروسٌ بأكثر مما يُحرَس به غيره.
+#:
+#: ## ولماذا الاستئناف مقبول أصلاً من الجوال
+#:
+#: لأنه **ليس مفتاح التداول**. يرفع `locally_paused` وحده، ولا يمسّ أياً من
+#: الأقفال الأربعة الباقية. فأسوأ ما يفعله جهازٌ مسروق أن يعيد النظام من
+#: «موقوف» إلى «يقيّم» — ولا يستطيع بعدها إرسال أمر واحد.
+#:
+#: وقاطع الطوارئ يبقى **بلا إلغاء من الجوال**: إلغاؤه يزيد المخاطرة فعلاً،
+#: ويحتاج الخادم. والاستئناف يُرفَض ما دام القاطع مفعّلاً.
+RISK_INCREASING_ROUTES: tuple[str, ...] = (
+    "pause/resume",
+)
+
+#: عبارة التأكيد. تُكتب بالكامل، ولا تُقبَل قريبةً منها.
+#: زرٌّ يُضغط بالخطأ في الجيب لا يكتب جملة.
+RESUME_PHRASE = "أستأنف التداول"
+
 #: كلمات لا يجوز أن تظهر في أي مسار من هذا المجال.
 FORBIDDEN_ROUTE_TOKENS: tuple[str, ...] = (
     "order", "trade/submit", "position/open", "position/close", "leverage",
@@ -73,7 +98,7 @@ FORBIDDEN_RESPONSE_TOKENS: tuple[str, ...] = (
     "X-SECURITY-TOKEN", "CST",
 )
 
-for _route in READ_ROUTES + RISK_REDUCING_ROUTES:
+for _route in READ_ROUTES + RISK_REDUCING_ROUTES + RISK_INCREASING_ROUTES:
     for _token in FORBIDDEN_ROUTE_TOKENS:
         assert _token not in _route, f"مسار محظور تسلّل: {_route}"
 
@@ -141,6 +166,9 @@ class MobileActions:
 
     pause: Optional[Callable[[str], None]] = None
     activate_kill_switch: Optional[Callable[[str], None]] = None
+    #: يعيد `locally_paused` إلى False. يرفع `KillSwitchIsActive` إن كان
+    #: القاطع مفعّلاً — والرفض من عند المصدر لا من عند الواجهة.
+    resume: Optional[Callable[[str], None]] = None
 
     def do_pause(self, reason_ar: str) -> None:
         if self.pause is None:
@@ -151,6 +179,11 @@ class MobileActions:
         if self.activate_kill_switch is None:
             raise MobileActionUnavailable("قاطع الطوارئ")
         self.activate_kill_switch(reason_ar)
+
+    def do_resume(self, reason_ar: str) -> None:
+        if self.resume is None:
+            raise MobileActionUnavailable("استئناف التداول")
+        self.resume(reason_ar)
 
 
 @dataclass
@@ -188,10 +221,13 @@ class MobileApi:
             raise MobileApiError("طريقة غير مسموحة في مجال الجوال.", status=405)
         if method.upper() == "GET" and route not in READ_ROUTES:
             raise MobileApiError("مسار قراءة غير معروف.", status=404)
-        if method.upper() == "POST" and route not in RISK_REDUCING_ROUTES:
-            # كل POST خارج الثلاثة مرفوض — بما فيه أي مسار تداول محتمل.
+        if method.upper() == "POST" and route not in (
+            RISK_REDUCING_ROUTES + RISK_INCREASING_ROUTES
+        ):
+            # كل POST خارج المُعلَن مرفوض — بما فيه أي مسار تداول محتمل.
             raise MobileApiError(
-                "لا يوجد في مجال الجوال أي مسار تعديل عدا ثلاثة تقلّل المخاطرة.",
+                "لا يوجد في مجال الجوال أي مسار تعديل عدا ثلاثة تقلّل المخاطرة "
+                "وواحدٍ يستأنف الإيقاف المحلي وحده.",
                 status=403,
             )
 
@@ -293,6 +329,40 @@ class MobileApi:
                 "device_id": target, "at_utc": now.isoformat(),
             }
 
+        if route == "pause/resume":
+            # السور الأول: العبارة كاملةً حرفاً بحرف.
+            if str(payload.get("confirm") or "").strip() != RESUME_PHRASE:
+                self.security._audit_log(
+                    "MOBILE_RESUME_REFUSED", device_id=device.device_id,
+                    detail_ar="طُلب الاستئناف بلا عبارة التأكيد — لم يقع شيء.",
+                    success=False,
+                )
+                raise MobileApiError(
+                    f"الاستئناف يحتاج كتابة العبارة كاملة: «{RESUME_PHRASE}».",
+                    status=400,
+                )
+            reason = str(payload.get("reason_ar") or "استئناف بطلب من الجوال.")
+            try:
+                self.actions.do_resume(reason)
+            except MobileApiError:
+                self.security._audit_log(
+                    "MOBILE_RESUME_FAILED", device_id=device.device_id,
+                    detail_ar="طُلب الاستئناف ولم يُنفَّذ.", success=False,
+                )
+                raise
+            self.security._audit_log(
+                "MOBILE_RESUME", device_id=device.device_id,
+                detail_ar="استُؤنف التداول من الجوال — إجراء يزيد المخاطرة.",
+                success=True,
+            )
+            return {
+                "action": "RESUMED", "accepted": True, "at_utc": now.isoformat(),
+                "note_ar": (
+                    "رُفع الإيقاف المحلي وحده. **لم يُفتح أي قفل آخر** — "
+                    "النظام يعود إلى التقييم، ولا يستطيع إرسال أمر."
+                ),
+            }
+
         raise MobileApiError("مسار غير معروف.", status=404)
 
 
@@ -302,18 +372,21 @@ def describe_api() -> dict:
         "prefix": API_PREFIX,
         "read_routes": list(READ_ROUTES),
         "risk_reducing_routes": list(RISK_REDUCING_ROUTES),
+        "risk_increasing_routes": list(RISK_INCREASING_ROUTES),
         "trading_routes": [],
         "forbidden_actions": list(FORBIDDEN_MOBILE_ACTIONS),
         "permissions": [p.value for p in MobilePermission],
         "note_ar": (
-            "لا نقطة نهاية تداول في إصدار الجوال الأول. الثلاثة المتاحة "
-            "للتعديل **تقلّل المخاطرة** ولا تزيدها."
+            "لا نقطة نهاية تداول في مجال الجوال. ثلاثة مسارات تقلّل "
+            "المخاطرة، وواحدٌ يرفع الإيقاف المحلي وحده بعبارة تأكيد — "
+            "ولا يفتح أي قفلٍ آخر ولا يُلغي قاطع الطوارئ."
         ),
     }
 
 
 __all__ = [
     "API_PREFIX", "READ_ROUTES", "RISK_REDUCING_ROUTES",
+    "RISK_INCREASING_ROUTES", "RESUME_PHRASE",
     "FORBIDDEN_ROUTE_TOKENS", "FORBIDDEN_RESPONSE_TOKENS",
     "MobileApi", "MobileApiError", "MobileResponse",
     "MobileActions", "MobileActionUnavailable",

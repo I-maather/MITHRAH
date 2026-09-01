@@ -244,9 +244,17 @@ def api_with_device(actions: object | None = None):
 
 
 def test_there_is_no_trading_route():
-    """القائمة نفسها هي الحد. لا مسار تداول، ولا مسار يزيد المخاطرة."""
+    """
+    القائمة نفسها هي الحد.
+
+    ⚠️ حُذفت عبارة «ولا مسار يزيد المخاطرة» يوم 2026-09-01 لأنها **صارت
+    كاذبة**: أُضيف `pause/resume` في فئة `RISK_INCREASING_ROUTES` المُسمّاة.
+    وحدُّ «لا تداول» باقٍ كما هو ويُفحَص على الفئات الثلاث.
+    """
+    from app.mobile.api import RISK_INCREASING_ROUTES
+
     assert describe_api()["trading_routes"] == []
-    for route in READ_ROUTES + RISK_REDUCING_ROUTES:
+    for route in READ_ROUTES + RISK_REDUCING_ROUTES + RISK_INCREASING_ROUTES:
         for token in FORBIDDEN_ROUTE_TOKENS:
             assert token not in route
 
@@ -260,9 +268,21 @@ def test_all_eleven_read_routes_are_present():
 
 
 def test_only_three_mutation_routes_and_all_reduce_risk():
+    """الثلاثة كما هي — ولم يتسلّل الاستئناف إليها ليستفيد من اسمها."""
     assert set(RISK_REDUCING_ROUTES) == {
         "pause/request", "killswitch/activate", "device/revoke",
     }
+
+
+def test_exactly_one_route_increases_risk_and_it_is_named_as_such():
+    """
+    الفئة الثالثة مقفلة على مسارٍ واحد. وتوسيعها لاحقاً يجب أن يُسقط هذا
+    الاختبار — فلا يمرّ مسارٌ يزيد المخاطرة بلا قرارٍ مكتوب.
+    """
+    from app.mobile.api import RESUME_PHRASE, RISK_INCREASING_ROUTES
+
+    assert set(RISK_INCREASING_ROUTES) == {"pause/resume"}
+    assert RESUME_PHRASE, "مسارٌ يزيد المخاطرة بلا عبارة تأكيد"
 
 
 def test_prefix_is_versioned():

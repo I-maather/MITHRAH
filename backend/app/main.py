@@ -45,6 +45,7 @@ from .mobile.routes import (
     MobileActions,
     set_runtime,
 )
+from .mobile.api import MobileApiError
 from .mobile.security import MobileSecurityService
 from .mobile.state import build_mobile_state
 from .mobile.store import MobileStateStore
@@ -157,6 +158,36 @@ def _mobile_pause(reason_ar: str) -> None:
     )
 
 
+def _mobile_resume(reason_ar: str) -> None:
+    """
+    يرفع الإيقاف المحلي **وحده**.
+
+    ## لماذا يُرفض ما دام القاطع مفعّلاً
+
+    الإيقاف المحلي قرارٌ («لا أريد التداول الآن»)، وقاطع الطوارئ **حكمٌ**
+    («وقع ما يستدعي التوقف»). ورفعُ الإيقاف بينما القاطع مفعّل يخلط بينهما:
+    يبدو أن التداول عاد، والقاطع ما زال يمنع كل دخول — فتظنّ المالكة أن
+    النظام يعمل وهو لا يعمل.
+
+    والرفض هنا **من عند المصدر** لا من عند الواجهة: لو حُرس في الواجهة وحدها
+    لمرّ أي نداءٍ آخر من حوله.
+    """
+    sys_state = system()
+    if sys_state.kill_switch.is_active:
+        event = sys_state.kill_switch.state.current_event
+        raise MobileApiError(
+            "قاطع الطوارئ مفعّل"
+            + (f" ({event.reason_ar})" if event else "")
+            + " — الاستئناف لا يرفعه، ورفعه إجراء يزيد المخاطرة ويحتاج الخادم.",
+            status=409,
+        )
+    sys_state.locally_paused = False
+    sys_state.audit.record(
+        actor=Actor.OWNER, action=AuditAction.CONFIG_CHANGE, decision="LOCAL_RESUME",
+        reason_ar=reason_ar, source="mobile",
+    )
+
+
 def _mobile_kill(reason_ar: str) -> None:
     """يفعّل قاطع الطوارئ **فعلاً**. كان الزرّ يسجّل ولا يفعّل."""
     sys_state = system()
@@ -166,7 +197,11 @@ def _mobile_kill(reason_ar: str) -> None:
 mobile_runtime = MobileRuntime(
     security=MobileSecurityService(store=MobileStateStore(_MOBILE_STATE_PATH)),
     state_source=lambda: build_mobile_state(system()),
-    actions=MobileActions(pause=_mobile_pause, activate_kill_switch=_mobile_kill),
+    actions=MobileActions(
+        pause=_mobile_pause,
+        activate_kill_switch=_mobile_kill,
+        resume=_mobile_resume,
+    ),
 )
 set_runtime(mobile_runtime)
 # مجال الجلسة أولاً: مساراته صريحة، ومجال البيانات ينتهي بمُلتقِط عام.
