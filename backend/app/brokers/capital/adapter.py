@@ -870,15 +870,24 @@ class CapitalComAdapter(BrokerAdapter):
         # وهذا يحلّ محلّ `STOP_DISTANCE_UNIT_PROVEN`: ثابتٌ يُقلب مرّة ويُنسى
         # يحرس القياس يوم قُلب فقط؛ وهذا يقيس **عند كل أمر**.
         # ---------------------------------------------------------------
-        self._verify_broker_stop(
-            deal_id=confirmation.deal_id or "",
+        position = self._verify_broker_stop(
+            confirmation=confirmation,
             intended_stop=intent.stop_price,
             stop_distance=stop_distance,
             symbol=intent.symbol,
         )
 
+        # **معرّف المركز، لا معرّف الصفقة.**
+        #
+        # قياس 2026-09-01: التأكيد أعاد `...5fca-f022-...` والمركز الناتج
+        # اسمه `...5fca-f025-...`. معرّفان مختلفان لشيئين مختلفين — الصفقة
+        # حدث، والمركز شيء قائم.
+        #
+        # وإعادةُ معرّف الصفقة هنا تعني أن كل `close_position` لاحق يستهدف
+        # مركزاً لا وجود له: النظام **يفتح ولا يغلق**، ويكتشف ذلك في أسوأ
+        # لحظة ممكنة.
         return BrokerOrder(
-            broker_order_id=confirmation.deal_id or "",
+            broker_order_id=str(position.deal_id),
             client_order_id=str(deal_reference),
             symbol=intent.symbol,
             side=intent.side,
@@ -890,37 +899,72 @@ class CapitalComAdapter(BrokerAdapter):
             updated_at_utc=at,
         )
 
-    def _verify_broker_stop(
-        self, *, deal_id: str, intended_stop: Decimal,
-        stop_distance: Decimal, symbol: str,
-    ) -> None:
+    @staticmethod
+    def position_ids_of(confirmation) -> tuple[str, ...]:
         """
-        يقرأ المركز من الوسيط ويقارن وقفه بما طلبناه.
+        كل المعرّفات التي قد يحملها المركز الناتج عن هذا التأكيد.
+
+        ## القياس الذي فرض هذه الدالة (2026-09-01، Demo)
+
+            التأكيد أعطى:  00000000-5fca-f022-048f-878b0055311e
+            والمركز اسمه:  00000000-5fca-f025-048f-878b0055311e
+
+        **معرّفان مختلفان.** كابيتال يعيد في `/confirms` معرّف *الصفقة*،
+        ويضع معرّف *المركز* الناتج في `affectedDeals`. والبحث بالأوّل لا
+        يجد شيئاً أبداً.
+
+        وكان `affectedDeals` مقروءاً في `CapitalConfirmation` **ولا يُستعمل**
+        — حقلٌ يُفكَّك ولا يُقرأ منه أحد: نفس عائلة العطل الحاكمة لهذا
+        المشروع، كودٌ مكتوب في مسارٍ لا يمرّ به شيء.
+
+        وتُعاد المعرّفات **كلّها** لا أرجحها: البحث في مجموعة أوسع لا يضرّ،
+        والحكم بالغياب على مجموعة أضيق يضرّ كثيراً.
+        """
+        ids: list[str] = []
+        for deal in getattr(confirmation, "affected_deals", ()) or ():
+            found = deal.get("dealId") if isinstance(deal, dict) else None
+            if found:
+                ids.append(str(found))
+        if confirmation.deal_id:
+            ids.append(str(confirmation.deal_id))
+        return tuple(dict.fromkeys(ids))
+
+    def _verify_broker_stop(
+        self, *, confirmation, intended_stop: Decimal,
+        stop_distance: Decimal, symbol: str,
+    ):
+        """
+        يقرأ المركز من الوسيط ويقارن وقفه بما طلبناه، ويعيده.
 
         **الغياب رفضٌ لا تسامح.** مركزٌ بلا وقفٍ عند الوسيط يعني أن حمايتنا
         في ذاكرتنا وحدها — ولو مات الخادم لبقي المركز مكشوفاً. ولا يُبتلع
         بحجّة أن الأمر «نُفِّذ بنجاح».
         """
+        candidates = self.position_ids_of(confirmation)
         position = next(
-            (p for p in self.list_positions() if str(p.deal_id) == str(deal_id)), None
+            (p for p in self.list_positions() if str(p.deal_id) in candidates), None
         )
         if position is None:
             raise CapitalExecutionUncertain(
-                f"نُفِّذ الأمر ({deal_id}) ولم يظهر المركز في القائمة. "
-                "لا يُعاد الإرسال — افحصي الحساب بنفسك."
+                f"نُفِّذ الأمر ولم يظهر المركز في القائمة. "
+                f"المعرّفات المعروفة: {'، '.join(candidates) or '—'}. "
+                "لا يُعاد الإرسال — افحصي الحساب بـ`demo_positions`.",
+                deal_ids=candidates,
             )
         if position.stop_level is None:
             raise BrokerRejected(
-                f"المركز {deal_id} على {symbol} مفتوحٌ **بلا وقفٍ عند الوسيط**. "
-                "أغلقيه فوراً: حمايتنا في ذاكرتنا وحدها."
+                f"المركز {position.deal_id} على {symbol} مفتوحٌ "
+                "**بلا وقفٍ عند الوسيط**. أغلقيه فوراً: حمايتنا في ذاكرتنا وحدها."
             )
         drift = abs(position.stop_level - intended_stop)
         if drift > stop_distance * STOP_LEVEL_TOLERANCE:
             raise BrokerRejected(
                 f"وقف الوسيط {position.stop_level} يبعد {drift} عمّا طلبناه "
                 f"{intended_stop} — أكثر من {STOP_LEVEL_TOLERANCE:.0%} من مسافة "
-                f"الوقف. المركز مفتوح بحمايةٍ غير التي وافقتِ عليها."
+                f"الوقف. المركز مفتوح بحمايةٍ غير التي وافقتِ عليها. "
+                f"معرّفه {position.deal_id}."
             )
+        return position
 
     def confirm_order(self, client_order_id: str) -> BrokerOrder:
         """قراءة فقط — مسموحة، لأن التأكيد هو ما ينقذنا من الحالة الغامضة."""

@@ -335,3 +335,84 @@ def test_the_stop_distance_is_sent_in_price_units_not_pips(monkeypatch):
             if c["method"] == "POST" and c["path"] == PATH_POSITIONS][0]["json"]
     assert sent["stopDistance"] == pytest.approx(0.005), "الوحدة ليست سعراً"
     assert sent["profitDistance"] == pytest.approx(0.01)
+
+
+# ---------------------------------------------------------------------------
+# معرّف الصفقة ليس معرّف المركز
+#
+# ## القياس (2026-09-01، Demo، EURUSD)
+#
+#     التأكيد أعطى:  00000000-5fca-f022-048f-878b0055311e
+#     والمركز اسمه:  00000000-5fca-f025-048f-878b0055311e
+#
+# فبُحث عن المركز بمعرّف الصفقة فلم يوجد، وحُكم بالغموض — وكان المركز مفتوحاً
+# ومحميّاً بالوقف الصحيح تماماً.
+#
+# وكان `affectedDeals` **مقروءاً في `CapitalConfirmation` ولا يُستعمل**: حقلٌ
+# يُفكَّك ولا يقرأ منه أحد. نفس عائلة العطل الحاكمة — كودٌ في مسارٍ لا يُسلَك.
+#
+# ⚠️ ولاحظي أن الأجهزة الوهمية في هذا الملف كانت تعطي المعرّفين **متطابقين**،
+# فما كان أيٌّ من اختباراتها ليكشف هذا أبداً. تشابهٌ في التجهيزة أخفى فرقاً
+# في الواقع.
+# ---------------------------------------------------------------------------
+
+POSITION_ID = "deal-position-999"
+
+
+def _split_ids(deal_status: str = "ACCEPTED") -> dict:
+    """تأكيدٌ معرّفُ صفقته غير معرّف مركزه — كما يفعل الوسيط فعلاً."""
+    body = confirm_body(deal_status=deal_status, deal_id="deal-order-111")
+    body["affectedDeals"] = [{"dealId": POSITION_ID, "status": "OPENED"}]
+    return body
+
+
+def _positions_named(deal_id: str, stop_level=1.08046) -> dict:
+    body = positions_body(with_position=True, stop_level=stop_level)
+    body["positions"][0]["position"]["dealId"] = deal_id
+    return body
+
+
+def test_the_position_is_found_through_affected_deals(monkeypatch):
+    """**العطل بعينه.** البحث بمعرّف الصفقة وحده لا يجد المركز أبداً."""
+    adapter, _f = _submitting(
+        monkeypatch, confirm=_split_ids(), positions=_positions_named(POSITION_ID)
+    )
+    order = adapter.place_order(intent())
+    assert order.status.value == "FILLED"
+
+
+def test_the_returned_id_is_the_position_not_the_order(monkeypatch):
+    """
+    وإعادةُ معرّف الصفقة تجعل كل `close_position` لاحق يستهدف مركزاً لا وجود
+    له: النظام **يفتح ولا يغلق**، ويكتشف ذلك في أسوأ لحظة ممكنة.
+    """
+    adapter, _f = _submitting(
+        monkeypatch, confirm=_split_ids(), positions=_positions_named(POSITION_ID)
+    )
+    order = adapter.place_order(intent())
+    assert order.broker_order_id == POSITION_ID
+    assert order.broker_order_id != "deal-order-111"
+
+
+def test_every_known_identifier_is_collected_not_just_the_likeliest():
+    """البحث في مجموعة أوسع لا يضرّ؛ والحكم بالغياب على أضيق يضرّ كثيراً."""
+    from app.brokers.capital.models import CapitalConfirmation
+
+    confirmation = CapitalConfirmation.parse(_split_ids())
+    ids = CapitalComAdapter.position_ids_of(confirmation)
+    assert POSITION_ID in ids and "deal-order-111" in ids
+    assert len(ids) == len(set(ids)), "تكرار في المعرّفات"
+
+
+def test_the_uncertainty_carries_the_identifiers_it_knows(monkeypatch):
+    """
+    رُفع هذا الاستثناء من داخل `place_order`، فلم يعرف `finally` ما يغلق
+    وقال «لا مركز فُتح» — والمركز مفتوح. فصارت المعرّفات تُحمل في الاستثناء.
+    """
+    adapter, _f = _submitting(
+        monkeypatch, confirm=_split_ids(), positions=positions_body()
+    )
+    with pytest.raises(CapitalExecutionUncertain) as exc:
+        adapter.place_order(intent())
+    assert POSITION_ID in exc.value.deal_ids
+    assert POSITION_ID in str(exc.value), "المعرّفات لا تُذكر في الرسالة"

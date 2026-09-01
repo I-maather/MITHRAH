@@ -70,6 +70,7 @@ def main() -> int:
 
     from app.brokers.capital.adapter import STOP_DISTANCE_UNIT
     from app.brokers.capital.endpoints import CapitalEnvironment
+    from app.brokers.capital.errors import CapitalExecutionUncertain
     from app.brokers.capital.safety import ExecutionLock
     from app.brokers.factory import build_capital_adapter
     from app.clock import now_utc
@@ -158,10 +159,23 @@ def main() -> int:
     )
     print(f"{OK}✅{END} النية جاهزة — الاستراتيجية «{intent.strategy_name}»")
 
+    # **يُسجَّل أنّ الإرسال وقع، قبل أن نعرف نتيجته.**
+    #
+    # كان `deal_id` وحده يقرّر ما يفعله `finally`، وهو لا يُملأ إلا بعد أن
+    # تعود `place_order` سالمة. فلمّا رفعت غموضاً في 2026-09-01 قال `finally`
+    # «لا مركز فُتح» — وكان المركز مفتوحاً. جملةٌ تطمئن بلا حقّ.
+    sent = False
+    deal_ids: tuple[str, ...] = ()
     deal_id = None
     try:
         step(4, "الإرسال ⇐ التأكيد ⇐ المطابقة")
-        order = adapter.place_order(intent)
+        sent = True
+        try:
+            order = adapter.place_order(intent)
+        except CapitalExecutionUncertain as exc:
+            deal_ids = exc.deal_ids
+            print(f"{BAD}⛔ غموضٌ في التنفيذ: {exc}{END}", file=sys.stderr)
+            raise
         print(f"{OK}✅{END} الحالة {order.status.value} · "
               f"المعرّف {order.broker_order_id} · التنفيذ {order.average_fill_price}")
 
@@ -184,8 +198,31 @@ def main() -> int:
 
     finally:
         step(6, "الإغلاق ⇐ التأكيد ⇐ المطابقة")
+
+        # لو غمض التنفيذ، تُقرأ القائمة ويُبحث عن مركزٍ بأيٍّ من المعرّفات
+        # المعروفة. **قراءةٌ لا إرسال** — آمنة تماماً، ولا تفتح شيئاً.
+        if deal_id is None and deal_ids:
+            print(f"{DIM}   بحثٌ عن مركزٍ بالمعرّفات: {'، '.join(deal_ids)}{END}")
+            try:
+                found = next(
+                    (p for p in adapter.list_positions() if str(p.deal_id) in deal_ids),
+                    None,
+                )
+                deal_id = found.deal_id if found else None
+            except Exception as exc:  # noqa: BLE001
+                print(f"{BAD}⛔ تعذّرت قراءة المراكز: {type(exc).__name__}: {exc}{END}",
+                      file=sys.stderr)
+
         if deal_id is None:
-            print(f"{DIM}   لا مركز فُتح — لا شيء يُغلق.{END}")
+            if sent:
+                # **الفرق بين «لم يُرسَل» و«أُرسل ولم أتحقّق».**
+                print(f"{BAD}⚠️  أُرسل الأمر ولم أتمكّن من تحديد مركزه.{END}",
+                      file=sys.stderr)
+                print(f"{BAD}   افحصي الحساب بنفسك:{END}", file=sys.stderr)
+                print(f"{BAD}   python -m app.diagnostics.demo_positions{END}",
+                      file=sys.stderr)
+            else:
+                print(f"{DIM}   لم يقع إرسال — لا شيء يُغلق.{END}")
         else:
             try:
                 closed = adapter.close_position(str(deal_id))
