@@ -247,17 +247,47 @@ if ! command -v tailscale >/dev/null 2>&1; then
 fi
 green "✅ Tailscale مثبَّت"
 
+# **الحالة تُقرأ لا تُفترَض.** كانت التعليمات التالية تُطبع عند كل نشر، سواء
+# كانت الشبكة موصولة أم لا — فتقول «بقيت خطوة واحدة» وقد تمّت منذ أيام،
+# ويُرسَل صاحبُ الخادم إلى `ssh` بلا سبب. وهو العطل نفسه المتكرّر في هذا
+# المشروع: رسالةٌ تُعرَض ولا تُقرأ من مصدرها.
+TS_UP=0
+tailscale status >/dev/null 2>&1 && TS_UP=1
+
+TS_SERVED=0
+if [ "$TS_UP" -eq 1 ] && tailscale serve status 2>/dev/null | grep -q '8000'; then
+  TS_SERVED=1
+fi
+
+TS_NAME=""
+if [ "$TS_UP" -eq 1 ]; then
+  TS_NAME="$(tailscale status 2>/dev/null | awk 'NR==1{print $2}')"
+fi
+
 echo
 echo "════════════════════════════════════════════════════════"
 green "تمّت التهيئة."
 echo "════════════════════════════════════════════════════════"
 echo
-echo "بقيت خطوة واحدة تحتاج موافقتك بالمتصفّح — ربط الخادم بشبكتك الخاصة:"
-echo
-echo "    ssh -i ~/Desktop/Trading/.ssh-maather/maather_hetzner root@SERVER_IP"
-echo "    tailscale up --hostname=mathrah"
-echo "    tailscale serve --bg 8000"
-echo
-echo "سيطبع رابطاً افتحيه في المتصفّح لتأكيد انضمام الخادم."
-echo "وبعدها يصير عنوان الخادم:  https://mathrah.<شبكتك>.ts.net"
+
+if [ "$TS_UP" -eq 1 ] && [ "$TS_SERVED" -eq 1 ]; then
+  green "✅ الشبكة الخاصة موصولة والخدمة منشورة عليها — لا خطوة متبقّية."
+  [ -n "$TS_NAME" ] && echo "   عنوان الخادم:  https://${TS_NAME}"
+  echo "   BOOTSTRAP_NETWORK=READY"
+elif [ "$TS_UP" -eq 1 ]; then
+  echo "الخادم منضمّ إلى شبكتك، لكن الخدمة غير منشورة عليها. من الخادم:"
+  echo
+  echo "    tailscale serve --bg 8000"
+  echo "   BOOTSTRAP_NETWORK=SERVE_MISSING"
+else
+  echo "بقيت خطوة واحدة تحتاج موافقتك بالمتصفّح — ربط الخادم بشبكتك الخاصة:"
+  echo
+  echo "    ssh -i ~/Desktop/Trading/.ssh-maather/maather_hetzner root@SERVER_IP"
+  echo "    tailscale up --hostname=mathrah"
+  echo "    tailscale serve --bg 8000"
+  echo
+  echo "سيطبع رابطاً افتحيه في المتصفّح لتأكيد انضمام الخادم."
+  echo "وبعدها يصير عنوان الخادم:  https://mathrah.<شبكتك>.ts.net"
+  echo "   BOOTSTRAP_NETWORK=NOT_JOINED"
+fi
 echo
