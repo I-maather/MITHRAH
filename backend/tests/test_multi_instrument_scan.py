@@ -214,7 +214,15 @@ def no_db(monkeypatch):
         ),
     )
     # الشموع كافية دائماً: البند المفحوص هنا هو المسح لا جودة البيانات.
-    monkeypatch.setattr("app.runtime.heartbeat._bars", lambda broker, symbol: ["bar"] * 120)
+    # الدقّة تُمرَّر الآن من الحالة — والبديل يقبلها ويسجّلها كي يُفحَص
+    # أنها تصل فعلاً، لا أن تُبتلع في وسيطٍ لا أحد ينظر إليه.
+    seen_resolutions: list[str] = []
+
+    def _fake_bars(broker, symbol, resolution="DAY"):
+        seen_resolutions.append(resolution)
+        return ["bar"] * 120
+
+    monkeypatch.setattr("app.runtime.heartbeat._bars", _fake_bars)
 
 
 def test_every_allowed_instrument_is_scanned(no_db):
@@ -421,3 +429,38 @@ def test_the_scan_route_is_a_read_route_not_a_mutation():
 
     assert "scan/latest" in READ_ROUTES
     assert "scan/latest" not in RISK_REDUCING_ROUTES + RISK_INCREASING_ROUTES
+
+
+def test_the_loop_reads_the_resolution_the_owner_configured(monkeypatch, no_db):
+    """
+    الحلقة كانت تقرأ شموعاً **يومية** مثبَّتة وتكرّر السؤال 1440 مرّة في
+    اليوم على نفس الشمعة — فإشارةٌ واحدة كل ثلاثة أسابيع تقريباً.
+
+    والدقّة الآن من الحالة. ولو عادت مثبَّتة لسقط هذا: لا يكفي أن يقبل
+    `_bars` وسيطاً، بل أن يصل إليه ما ضُبط.
+    """
+    seen: list[str] = []
+
+    def _fake_bars(broker, symbol, resolution="DAY"):
+        seen.append(resolution)
+        return ["bar"] * 120
+
+    monkeypatch.setattr("app.runtime.heartbeat._bars", _fake_bars)
+
+    state = FakeState(["EURUSD", "GBPUSD"], FakePipeline())
+    state.candle_resolution = "MINUTE_15"
+    decision_job(state)()
+
+    assert seen, "لم تُقرأ شموعٌ إطلاقاً — الفحص بلا معنى"
+    assert set(seen) == {"MINUTE_15"}
+
+
+def test_without_configuration_it_stays_on_daily(monkeypatch, no_db):
+    """الافتراض الأسلم: أبطأ إشارةً لا أخطر."""
+    seen: list[str] = []
+    monkeypatch.setattr(
+        "app.runtime.heartbeat._bars",
+        lambda broker, symbol, resolution="DAY": (seen.append(resolution), ["bar"] * 120)[1],
+    )
+    decision_job(FakeState(["EURUSD"], FakePipeline()))()
+    assert set(seen) == {"DAY"}

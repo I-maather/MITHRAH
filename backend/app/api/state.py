@@ -33,6 +33,10 @@ from ..intelligence.pipeline import PipelineResult as IntelligenceResult
 from ..profiles import DEFAULT_PROFILE
 from ..profiles.manager import ProfileManager
 from ..strategies.trend_pullback_v1 import TrendPullbackV1
+from ..strategies.trend_pullback_v2 import TrendPullbackV2
+from ..strategies.range_mean_reversion import RangeMeanReversion
+from ..strategies.breakout_retest import BreakoutRetest
+from ..runtime.demo_trial import demo_trial_for, read_demo_trial
 from ..brokers.capital.safety import LIVE_API_ENABLED, ExecutionLock
 from ..contracts import Broker, StopKind
 from ..notifications import InMemoryNotifier
@@ -87,6 +91,12 @@ class SystemState:
     #: عشرات النداءات على الوسيط — وحدودُه تُستهلَك فيُحرَم القرار منها.
     last_bars: dict = field(default_factory=dict)
     last_intelligence: Optional[IntelligenceResult] = None
+    #: دقّة الشموع التي تقرأها حلقة القرار. `DAY` افتراضاً، ولا تُغيَّر إلا
+    #: عبر تجربة التجريبي (`app/runtime/demo_trial.py`).
+    candle_resolution: str = "DAY"
+    #: وصفُ التجربة بالنصّ — يُعرض ويُسجَّل، فلا يبقى الفرق بين «مطفأة» و«مُلغاة
+    #: لأن الوسيط حقيقي» في الذاكرة وحدها.
+    demo_trial_note_ar: str = "تجربة التجريبي مطفأة."
 
     def health(self) -> HealthReport:
         details: list[str] = []
@@ -189,6 +199,15 @@ def build_system(settings: Settings | None = None) -> SystemState:
 
     registry = StrategyRegistry()
     registry.register(TrendPullbackV1())
+    # الثلاث الجديدة تُسجَّل — والتسجيل **لا يعتمد**: الخط يصفّي بالحالة،
+    # وحالتهنّ `RESEARCH`. وكنّ غير مسجَّلات أصلاً، فكان المسح يقول «لا
+    # استراتيجية معتمدة» عن استراتيجياتٍ لم تكن في السجلّ من الأساس.
+    registry.register(TrendPullbackV2())
+    registry.register(RangeMeanReversion())
+    registry.register(BreakoutRetest())
+
+    # التجربة تُقرأ من البيئة ثم **تُصفّى بالوسيط**. حقيقيٌّ ⇒ تُلغى كاملةً.
+    trial = demo_trial_for(broker, read_demo_trial())
 
     blackouts = BlackoutCalendar()
     pipeline = Pipeline(
@@ -196,6 +215,35 @@ def build_system(settings: Settings | None = None) -> SystemState:
         execution=execution, strategies=registry.all(),
         schedule=IBKR_PRO_TIERED_US_STOCK, assumptions=CostAssumptions.default(),
         blackouts=blackouts, allow_live_submission=False,
+        trial_strategies=trial.strategies,
+    )
+
+    # قفل التنفيذ: مغلقٌ إلا في تجربةٍ تجريبيةٍ صريحة بمرجع موافقة مكتوب.
+    #
+    # ولا يُفتَح من متغيّر بيئةٍ وحده: `authorise` تشترط مرجعاً وسبباً، والتجربة
+    # لا تكون فعّالة أصلاً إلا بعد أن يقول الوسيط إنه تجريبي. ثلاثة شروط
+    # مجتمعة، وأيّ واحدٍ ناقص ⇒ يبقى مغلقاً.
+    trial_lock = ExecutionLock.locked()
+    if trial.active:
+        trial_lock = trial_lock.authorise(
+            owner_authorization_reference=trial.approval_reference,
+            reason_ar=(
+                "تجربة الحساب التجريبي — تشغيل استراتيجيات البحث على مالٍ وهمي "
+                "لجمع إشاراتٍ أمامية. لا يمسّ الحساب الحقيقي."
+            ),
+            at=now_utc(),
+        )
+        # القفل يُركَّب على المحوّل نفسه: الخط يسأل المحوّل لا الحالة.
+        try:
+            broker.execution_lock = trial_lock
+        except Exception:  # noqa: BLE001
+            logging.getLogger(__name__).warning(
+                "الوسيط لا يقبل قفل تنفيذ — التجربة لن تنفّذ."
+            )
+    audit.record(
+        actor=Actor.OWNER, action=AuditAction.CONFIG_CHANGE,
+        decision="DEMO_TRIAL_ACTIVE" if trial.active else "DEMO_TRIAL_OFF",
+        reason_ar=trial.note_ar, source="build_system",
     )
 
     # C1: حالة المخاطرة تُقرأ من جدول الصفقات، لا تُثبَّت على صفر.
@@ -223,8 +271,9 @@ def build_system(settings: Settings | None = None) -> SystemState:
         settings=settings, broker=broker, audit=audit, kill_switch=kill_switch,
         risk_engine=risk_engine, execution=execution, registry=registry, pipeline=pipeline,
         blackouts=blackouts, limits=limits, session_state=state,
+        candle_resolution=trial.resolution, demo_trial_note_ar=trial.note_ar,
         cost_model=CapitalComCostModel(PROVISIONAL_EURUSD),
-        execution_lock=ExecutionLock.locked(),
+        execution_lock=trial_lock,
         notifier=InMemoryNotifier(),
         scheduler=SafeScheduler(),
         secret_presence=[p.as_dict() for p in secret_provider.presence(REQUIRED_CAPITAL_SECRETS)],

@@ -122,6 +122,9 @@ class Pipeline:
         assumptions: CostAssumptions,
         blackouts: BlackoutCalendar,
         allow_live_submission: bool = False,
+        #: أسماء استراتيجيات مسموحة **على التجريبي وحده**. انظري
+        #: `app/runtime/demo_trial.py`. فارغةٌ في كل مسارٍ آخر.
+        trial_strategies: frozenset[str] = frozenset(),
     ) -> None:
         self.broker = broker
         self.risk = risk_engine
@@ -133,6 +136,7 @@ class Pipeline:
         self.assumptions = assumptions
         self.blackouts = blackouts
         self.allow_live_submission = allow_live_submission
+        self.trial_strategies = frozenset(trial_strategies)
 
     # -- helpers ------------------------------------------------------------
     def _no_trade(self, stage: str, code: str, message: str, at: datetime) -> PipelineResult:
@@ -141,6 +145,32 @@ class Pipeline:
             reason_ar=message, source=stage, at=at,
         )
         return PipelineResult(Decision.NO_TRADE, code, message, stage, at_utc=at)
+
+    def runnable_strategies(self) -> list:
+        """
+        الاستراتيجيات التي يحقّ لها أن تُقيّم الآن.
+
+        **دالّة لا سطرٌ داخل `run`** عن قصد: كانت منطقاً مكتوباً في موضع
+        واحدٍ يستحيل استدعاؤه من اختبارٍ بلا تشغيل الخط كاملاً، فكُتب له
+        اختبارٌ **ينسخ المنطق** — ونسخةٌ في اختبار لا تسقط حين يتغيّر الأصل.
+        وهو العطل الحاكم في هذا المشروع مرّةً أخرى: اختبارٌ يمرّ لسببٍ غير
+        الذي كُتب له.
+
+        فالمنطق هنا، ويُستدعى من الاختبار كما يُستدعى من `run`.
+        """
+        approved = [s for s in self.strategies if s.metadata.state.value == "APPROVED"]
+        # الاستثناء التجريبي — مقفلٌ على الوسيط **هنا**، عند موضع الاستعمال،
+        # لا عند موضع البناء وحده. و`getattr(..., True)` تُغلق عند غياب
+        # الصفة: وسيطٌ لا نعرف نوعه يُعامَل معاملة الحقيقي.
+        if self.trial_strategies and getattr(self.broker, "is_live", True) is False:
+            already = {id(s) for s in approved}
+            approved += [
+                s for s in self.strategies
+                if id(s) not in already
+                and s.metadata.name.upper() in self.trial_strategies
+                and s.metadata.state.value != "DISABLED"
+            ]
+        return approved
 
     # -- main ---------------------------------------------------------------
     def run(
@@ -228,8 +258,13 @@ class Pipeline:
                 Decision.NO_TRADE, eligibility.reason_code, eligibility.reason_ar, "eligibility", at_utc=now
             )
 
-        # 5b) Strategy — APPROVED فقط
-        approved = [s for s in self.strategies if s.metadata.state.value == "APPROVED"]
+        # 5b) Strategy — APPROVED فقط، وتجربةُ التجريبي استثناءٌ مُسمّى
+        #
+        # الاستثناء **مقفلٌ على الوسيط هنا أيضاً**، لا في مكان البناء وحده:
+        # حارسٌ في موضع البناء يمرّ من حوله أي مسارٍ يبني الخط بنفسه — وهذا
+        # موضع الاستعمال. و`getattr(..., True)` تُغلق عند غياب الصفة: وسيطٌ
+        # لا نعرف نوعه يُعامَل معاملة الحقيقي.
+        approved = self.runnable_strategies()
         if not approved:
             return self._no_trade(
                 "strategy", "NO_APPROVED_STRATEGY",

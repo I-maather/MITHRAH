@@ -90,7 +90,7 @@ def _no_trade(code: str, reason_ar: str, stage: str) -> PipelineResult:
     return PipelineResult(Decision.NO_TRADE, code, reason_ar, stage, at_utc=now_utc())
 
 
-def _bars(broker, symbol: str) -> list[Bar]:
+def _bars(broker, symbol: str, resolution: str = "DAY") -> list[Bar]:
     """شموع الوسيط ⇐ شموع الخط. الوسط بين العرض والطلب."""
     get = getattr(broker, "get_candles", None)
     if get is None:
@@ -107,7 +107,7 @@ def _bars(broker, symbol: str) -> list[Bar]:
             volume=c.volume if c.volume is not None else D(0),
             source=DataSource.HISTORICAL,
         )
-        for c in get(symbol, resolution="DAY", max_bars=BARS_NEEDED)
+        for c in get(symbol, resolution=resolution, max_bars=BARS_NEEDED)
     ]
 
 
@@ -213,7 +213,9 @@ def register_runtime_jobs(state, *, interval_seconds: int = DEFAULT_INTERVAL_SEC
 
         scan: list[tuple[str, PipelineResult]] = []
         for symbol in symbols:
-            bars = _bars(state.broker, symbol)
+            # الدقّة من الحالة لا مثبّتة: الحلقة كانت تقرأ شموعاً **يومية**
+            # وتكرّر السؤال 1440 مرّة في اليوم على نفس الشمعة.
+            bars = _bars(state.broker, symbol, getattr(state, "candle_resolution", "DAY"))
             if len(bars) < BARS_NEEDED // 2:
                 scan.append((symbol, _no_trade(
                     "INSUFFICIENT_BARS",
