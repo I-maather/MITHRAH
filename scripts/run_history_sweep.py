@@ -254,6 +254,10 @@ def main() -> int:
     ap.add_argument("--tp-pips", default="60")
     ap.add_argument("--size", default="100")
     ap.add_argument(
+        "--strategies", nargs="*", default=["all"],
+        help="أسماء الاستراتيجيات، أو all لكلّها.",
+    )
+    ap.add_argument(
         "--transplant", action="store_true",
         help="اسمحي للاستراتيجية بأداة خارج أسواقها المُعلَنة — فرضية جديدة تُختبَر.",
     )
@@ -270,6 +274,29 @@ def main() -> int:
         )
         return 2
 
+    # **الفحص قبل الأسرار والشبكة.** اسمٌ مكتوبٌ خطأً يجب أن يُردّ في
+    # جزءٍ من الثانية، لا بعد فتح جلسةٍ عند الوسيط ثم الانفجار على
+    # سرٍّ مفقود — فيبدو الخطأ في الاعتماد وهو في سطر الأوامر.
+    from app.strategies.breakout_retest import BreakoutRetest
+    from app.strategies.range_mean_reversion import RangeMeanReversion
+    from app.strategies.trend_pullback_v1 import TrendPullbackV1
+    from app.strategies.trend_pullback_v2 import TrendPullbackV2
+
+    catalogue = {
+        "TREND_PULLBACK_V2": TrendPullbackV2,
+        "RANGE_MEAN_REVERSION": RangeMeanReversion,
+        "BREAKOUT_RETEST": BreakoutRetest,
+        "TREND_PULLBACK_V1": TrendPullbackV1,      # للمقارنة التاريخية وحدها
+    }
+    default_three = ["TREND_PULLBACK_V2", "RANGE_MEAN_REVERSION", "BREAKOUT_RETEST"]
+    wanted = default_three if a.strategies == ["all"] else a.strategies
+    unknown = [name for name in wanted if name not in catalogue]
+    if unknown:
+        print(f"{BAD}⛔ استراتيجيات غير معروفة: {'، '.join(unknown)}{END}\n"
+              f"   المتاح: {'، '.join(catalogue)}", file=sys.stderr)
+        return 2
+
+
     from app.brokers.capital.endpoints import CapitalEnvironment
     from app.brokers.factory import build_capital_adapter
     from app.config import get_settings
@@ -278,7 +305,6 @@ def main() -> int:
     from app.risk.capital_costs import PROVISIONAL_EURUSD, CapitalComCostModel
     from app.secretstore.provider import build_secret_provider
     from app.strategies.backtest import BacktestConfig, Backtester, InsufficientData
-    from app.strategies.trend_pullback_v1 import TrendPullbackV1
 
     from scripts.run_backtest import to_bars   # نفس التحويل، بلا ازدواج منطق
 
@@ -316,8 +342,29 @@ def main() -> int:
         "runs": [],
     }
 
-    declared = tuple(TrendPullbackV1.metadata.markets)
-    for epic in a.epics:
+    print(f"{DIM}   الاستراتيجيات: {'، '.join(wanted)}{END}\n")
+
+    for strategy_name in wanted:
+        strategy_class = catalogue[strategy_name]
+        declared = tuple(strategy_class.metadata.markets)
+        print(f"\n\033[1m▸ {strategy_name}\033[0m  "
+              f"(أسواقها: {'، '.join(declared)})")
+        run_one_strategy(
+            strategy_class=strategy_class, strategy_name=strategy_name,
+            declared=declared, epics=a.epics, resolutions=a.resolutions,
+            adapter=adapter, engine=engine, config=config, breakeven=breakeven,
+            transplant=a.transplant, report=report, to_bars=to_bars,
+        )
+    return finish(report, a.report)
+
+
+def run_one_strategy(
+    *, strategy_class, strategy_name, declared, epics, resolutions,
+    adapter, engine, config, breakeven, transplant, report, to_bars,
+):
+    from app.strategies.backtest import InsufficientData
+
+    for epic in epics:
         # **يُسأل أوّلاً: هل تنظر الاستراتيجية إلى هذه الأداة أصلاً؟**
         # صفرُ صفقة من استراتيجية رفضت الأداة ليس «لا حافّة» ولا «عيّنة
         # صغيرة» — هو لا شيء. وقولُ غير ذلك يُرسل القارئ إلى المكان الخطأ.
@@ -325,23 +372,24 @@ def main() -> int:
             if not a.transplant:
                 print(
                     f"  {BAD}⛔{END} {epic:<8} الاستراتيجية لا تقبل هذه الأداة.\n"
-                    f"     {TrendPullbackV1.metadata.name} أسواقها المُعلَنة: "
+                    f"     {strategy_name} أسواقها المُعلَنة: "
                     f"{'، '.join(declared)}\n"
                     f"     وهي فرضية كُتبت لمؤشرات أسهم أمريكية يومية، لا لزوج عملات.\n"
                     f"     لتشغيلها على {epic} بوصفها **فرضية جديدة**: أضيفي --transplant"
                 )
                 report["runs"].append({
+                    "strategy": strategy_name,
                     "epic": epic, "verdict": "DECLINED_INSTRUMENT",
                     "declared_markets": list(declared),
                 })
                 continue
             print(
-                f"  {WARN}⚠️{END}  فرضية منقولة: {TrendPullbackV1.metadata.name} كُتبت لـ"
+                f"  {WARN}⚠️{END}  فرضية منقولة: {strategy_name} كُتبت لـ"
                 f"{'، '.join(declared)} وتُختبَر هنا على {epic}.\n"
                 f"     النتيجة **بحثٌ من الصفر** لا امتداد لنتيجة سابقة.\n"
             )
         strategy = (
-            transplanted(TrendPullbackV1, epic) if epic not in declared else TrendPullbackV1()
+            transplanted(strategy_class, epic) if epic not in declared else strategy_class()
         )
         for resolution in a.resolutions:
             if resolution not in LADDER:
@@ -352,6 +400,7 @@ def main() -> int:
                 print(f"  {WARN}○{END} {epic:<8} {resolution:<10} "
                       f"{len(candles):>5} شمعة — أقلّ من ١٢٠، تُخطّى")
                 report["runs"].append({
+                    "strategy": strategy_name,
                     "epic": epic, "resolution": resolution, "bars": len(candles),
                     "verdict": "INSUFFICIENT_BARS",
                 })
@@ -363,6 +412,7 @@ def main() -> int:
             except InsufficientData as exc:
                 print(f"  {WARN}○{END} {epic:<8} {resolution:<10} {exc}")
                 report["runs"].append({
+                    "strategy": strategy_name,
                     "epic": epic, "resolution": resolution, "bars": len(bars),
                     "verdict": "INSUFFICIENT_DATA", "detail": str(exc),
                 })
@@ -371,6 +421,7 @@ def main() -> int:
                 print(f"  {BAD}⛔{END} {epic:<8} {resolution:<10} "
                       f"{type(exc).__name__}: {exc}")
                 report["runs"].append({
+                    "strategy": strategy_name,
                     "epic": epic, "resolution": resolution, "bars": len(bars),
                     "verdict": "ERROR", "detail": f"{type(exc).__name__}: {exc}",
                 })
@@ -378,6 +429,7 @@ def main() -> int:
 
             code, sentence = verdict(result, config.min_trades_for_conclusion, breakeven)
             report["runs"].append({
+                "strategy": strategy_name,
                 "epic": epic,
                 "resolution": resolution,
                 "bars": len(bars),
@@ -406,8 +458,11 @@ def main() -> int:
             print(f"  {mark} {epic:<8} {resolution:<10} {len(bars):>5} شمعة · "
                   f"{result.trade_count:>3} صفقة · {sentence}")
 
-    Path(a.report).parent.mkdir(parents=True, exist_ok=True)
-    Path(a.report).write_text(
+def finish(report: dict, report_path: str) -> int:
+    """يكتب التقرير ويطبع الخلاصة. فُصلت عن `main` حين صار المسح
+    يمرّ على أكثر من استراتيجية — فلا تُكرَّر الخلاصة لكلٍّ منها."""
+    Path(report_path).parent.mkdir(parents=True, exist_ok=True)
+    Path(report_path).write_text(
         json.dumps(report, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
     )
 
@@ -422,7 +477,7 @@ def main() -> int:
                 if r["verdict"] in ("ABOVE_BREAKEVEN", "BELOW_BREAKEVEN",
                                     "INDISTINGUISHABLE", "LOSING")]
 
-    print(f"\n{DIM}   التقرير: {a.report}{END}")
+    print(f"\n{DIM}   التقرير: {report_path}{END}")
     # الترتيب مقصود: الأخصّ أوّلاً. وكان «لا نتيجة حاسمة» يسبق الجميع فيبتلع
     # أحكاماً وقعت فعلاً — أربعة إعدادات حُكم عليها، والخلاصة تقول «لم يُبلَغ
     # الحدّ الأدنى». خلاصةٌ تناقض سطورها التي فوقها.

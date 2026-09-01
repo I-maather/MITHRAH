@@ -295,19 +295,42 @@ class Backtester:
 
             # التنفيذ عند فتح الشمعة التالية — لا يمكن للاستراتيجية رؤيتها.
             entry_bar = bars[i + 1]
-            entry_price = entry_bar.open + spread + slippage_price
-            stop_price = entry_price - self.cost_model.pips_to_price(self.config.stop_distance_pips)
-            target_price = entry_price + self.cost_model.pips_to_price(
-                self.config.take_profit_distance_pips
-            )
+            long = signal.side is Side.BUY
+
+            # ---------------------------------------------------------------
+            # **الوقف والهدف من الإشارة نفسها، لا من إعدادٍ ثابت.**
+            #
+            # كان المحرّك يفرض وقفاً ثابتاً (٣٠ نقطة) وهدفاً ثابتاً على كل
+            # إشارة، مهما قالت الاستراتيجية. وكل استراتيجياتنا تشتقّ وقفها
+            # من ATR — أي من تقلّب السوق ساعتَه.
+            #
+            # ⇒ كان الاختبار يقيس **استراتيجيةً أخرى** تحمل الاسم نفسه:
+            # نفس شروط الدخول، وخروجٌ مختلف تماماً. ونتيجةٌ من ذلك لا تقول
+            # شيئاً عمّا سيقع في السوق، لا سلباً ولا إيجاباً.
+            #
+            # والانزلاق يُطبَّق في الجهة التي تضرّ: يرفع سعر الشراء ويخفض
+            # سعر البيع. وتطبيقه في جهةٍ واحدة يجعل نصف الصفقات تربح منه.
+            # ---------------------------------------------------------------
+            if long:
+                entry_price = entry_bar.open + spread + slippage_price
+            else:
+                entry_price = entry_bar.open - spread - slippage_price
+            stop_price = signal.stop_price
+            target_price = signal.take_profit_price
+
+            stop_pips = self.cost_model.price_to_pips(abs(entry_price - stop_price))
+            target_pips = self.cost_model.price_to_pips(abs(target_price - entry_price))
 
             exit_index = None
             exit_price = None
             reason = ExitReason.END_OF_DATA
             for j in range(i + 1, min(len(bars), i + 1 + self.config.max_bars_in_trade)):
                 bar = bars[j]
-                hit_stop = bar.low <= stop_price
-                hit_target = bar.high >= target_price
+                # **الاتجاه يقلب معنى «لُمس».** في البيع يقع الوقف فوق الدخول
+                # فيُلمس بالارتفاع، والهدف تحته فيُلمس بالانخفاض. وقراءةُ
+                # صفقة بيعٍ بمنطق الشراء تعكس كل ربحٍ وخسارة فيها.
+                hit_stop = (bar.low <= stop_price) if long else (bar.high >= stop_price)
+                hit_target = (bar.high >= target_price) if long else (bar.low <= target_price)
                 if hit_stop and hit_target:
                     exit_index, exit_price = j, stop_price
                     reason = ExitReason.AMBIGUOUS_BAR_ASSUMED_STOP
@@ -335,14 +358,11 @@ class Backtester:
                 if self.config.allow_overnight
                 else 0
             )
-            economics = self._economics(
-                self.config.stop_distance_pips,
-                self.config.take_profit_distance_pips,
-                entry_price,
-                nights,
-            )
+            economics = self._economics(stop_pips, target_pips, entry_price, nights)
             units = self.config.size * self.cost_model.economics.lot_size
-            gross = money((exit_price - entry_price) * units)
+            gross = money(
+                ((exit_price - entry_price) if long else (entry_price - exit_price)) * units
+            )
             costs = money(
                 economics.spread_cost
                 + economics.guaranteed_stop_premium
