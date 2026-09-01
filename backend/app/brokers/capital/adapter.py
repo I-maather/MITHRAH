@@ -87,6 +87,36 @@ DEFAULT_DISCOVERY_ALLOWLIST: frozenset[str] = frozenset(
 #: أدوات مسموح بتنفيذها. أضيق عمداً من قائمة الاكتشاف.
 DEFAULT_EXECUTION_ALLOWLIST: frozenset[str] = frozenset({"EURUSD"})
 
+#: مفاتيح جسد الخطأ التي يُسمح بنقلها إلى الرسالة. **قائمة سماح لا حجب**:
+#: أجساد الأخطاء تحمل أحياناً ما لا نريده في سجلّ، والحصر أأمن من الاستثناء.
+BROKER_ERROR_KEYS: tuple[str, ...] = ("errorCode", "errorMessage", "error_description")
+
+
+def _broker_reason(response) -> str:
+    """
+    يُلحق **سبب الوسيط بلسانه** برسالة الخطأ.
+
+    ## العطل الذي أنتج هذه الدالة
+
+    كان الرفض يُعاد هكذا: «استجابة غير ناجحة 400 من /api/v1/workingorders».
+    وهي جملة تقول **أن** شيئاً فشل ولا تقول **لماذا** — بينما الوسيط أرسل
+    السبب في الجسد نفسه (`errorCode`) ونحن نرميه.
+
+    ⇒ فيصير التشخيص تخميناً: أمسافةُ الوقف دون الحدّ؟ أم السعر بعيدٌ أكثر
+    مما يُقبَل؟ أم الحمولة ناقصةُ حقل؟ ثلاثة أسباب مختلفة تماماً، ولكلٍّ
+    إصلاح مختلف، ورمزٌ واحد من الوسيط يفصل بينها.
+
+    وهذا هو صنف العطل الحاكم بعينه — **سببٌ معروفٌ عند المصدر ولا يُقرأ منه**
+    — واقعاً هذه المرّة في مسار الخطأ نفسه، وهو أسوأ مواضعه: العدسة التي
+    نفحص بها الأعطال.
+    """
+    body = getattr(response, "body", None)
+    if not isinstance(body, dict):
+        return ""
+    parts = [f"{k}={body[k]}" for k in BROKER_ERROR_KEYS if body.get(k)]
+    return f" الوسيط قال: {' · '.join(parts)}." if parts else ""
+
+
 #: حجم النقطة لكل أداة. لا يُخمَّن — يُثبَّت هنا ويُراجَع بعد الاكتشاف.
 PIP_SIZES: dict[str, Decimal] = {
     "EURUSD": D("0.0001"),
@@ -169,7 +199,10 @@ class CapitalComAdapter(BrokerAdapter):
         if response.status == 404:
             raise CapitalNotFound(f"المسار {path} أعاد 404.")
         if not response.ok:
-            raise CapitalTransportError(f"استجابة غير ناجحة {response.status} من {path}.")
+            raise CapitalTransportError(
+                f"استجابة غير ناجحة {response.status} من {path}."
+                f"{_broker_reason(response)}"
+            )
         if self.session.tokens is not None:
             self.session.tokens.touch(now_utc())
         body = response.json()
@@ -195,7 +228,10 @@ class CapitalComAdapter(BrokerAdapter):
         if response.status == 404:
             raise CapitalNotFound(f"المسار {path} أعاد 404.")
         if not response.ok:
-            raise CapitalTransportError(f"استجابة غير ناجحة {response.status} من {path}.")
+            raise CapitalTransportError(
+                f"استجابة غير ناجحة {response.status} من {path}."
+                f"{_broker_reason(response)}"
+            )
         body = response.body
         if not isinstance(body, dict):
             raise CapitalMalformedResponse(f"جسد غير متوقَّع من {path}.")
@@ -219,7 +255,10 @@ class CapitalComAdapter(BrokerAdapter):
                 "الطلب قد يكون وصل، وإعادته تفتح مركزاً ثانياً."
             )
         if not response.ok:
-            raise CapitalTransportError(f"استجابة غير ناجحة {response.status} من {path}.")
+            raise CapitalTransportError(
+                f"استجابة غير ناجحة {response.status} من {path}."
+                f"{_broker_reason(response)}"
+            )
         if self.session.tokens is not None:
             self.session.tokens.touch(now_utc())
         body = response.json()

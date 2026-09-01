@@ -56,6 +56,10 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="إثبات وحدة stopDistance بأمر معلَّق واحد")
     ap.add_argument("--approve", default="", help=f"العبارة المطلوبة: «{APPROVAL_PHRASE}»")
     ap.add_argument("--epic", default="EURUSD")
+    ap.add_argument("--stop-distance", type=Decimal, default=PROBE_STOP_DISTANCE,
+                    help="مسافة الوقف المُرسَلة — تُرفع إن رفضها الوسيط لدنوّها")
+    ap.add_argument("--away", type=Decimal, default=AWAY_FROM_MARKET,
+                    help="بُعد الأمر المعلَّق عن السوق كنسبة (0.05 = 5٪)")
     a = ap.parse_args()
 
     if a.approve.strip() != APPROVAL_PHRASE:
@@ -68,6 +72,7 @@ def main() -> int:
         )
         return 2
 
+    from app.brokers.capital.errors import CapitalTransportError
     from app.brokers.capital.endpoints import (
         PATH_WORKING_ORDERS,
         CapitalEnvironment,
@@ -134,11 +139,20 @@ def main() -> int:
 
     # شراءٌ معلَّق **تحت** السوق بكثير: لا يُنفَّذ حتى يهبط السعر 5٪.
     # التقريب إلى دقّة السعر نفسها: سعرٌ بخانات أكثر مما يقبله الوسيط يُرفض.
-    level = (market * (Decimal("1") - AWAY_FROM_MARKET)).quantize(market)
+    away = a.away
+    probe_distance = a.stop_distance
+    level = (market * (Decimal("1") - away)).quantize(market)
 
+    # حدود الأداة تُطبع قبل الإرسال: رفضٌ بـ400 بلا معرفة الحدود يصير تخميناً.
+    print(f"{DIM}   حدود الأداة من الوسيط — أدنى مسافة وقف "
+          f"{details.min_stop_distance} · أقصاها {getattr(details, 'max_stop_distance', None)} · "
+          f"pip {pip} · أدنى كمية {size}{END}")
+    if details.min_stop_distance is not None and probe_distance < details.min_stop_distance:
+        print(f"{WARN}⚠️  {probe_distance} دون حدّ الوسيط {details.min_stop_distance} — "
+              f"سيُرفَض. أعيدي بـ --stop-distance {details.min_stop_distance}.{END}")
     print(f"{DIM}   السوق {market} · الأمر المعلَّق عند {level} "
-          f"({AWAY_FROM_MARKET:.0%} تحته) · الكمية {size}{END}")
-    print(f"{DIM}   نرسل stopDistance = {PROBE_STOP_DISTANCE} ونقرأ ما يعيده الوسيط.{END}\n")
+          f"({away:.0%} تحته) · الكمية {size}{END}")
+    print(f"{DIM}   نرسل stopDistance = {probe_distance} ونقرأ ما يعيده الوسيط.{END}\n")
 
     payload = {
         "epic": a.epic,
@@ -146,12 +160,19 @@ def main() -> int:
         "size": float(size),
         "level": float(level),
         "type": "LIMIT",
-        "stopDistance": float(PROBE_STOP_DISTANCE),
+        "stopDistance": float(probe_distance),
     }
 
     deal_id = None
     try:
-        body = adapter._post(PATH_WORKING_ORDERS, payload)  # noqa: SLF001
+        try:
+            body = adapter._post(PATH_WORKING_ORDERS, payload)  # noqa: SLF001
+        except CapitalTransportError as exc:
+            # الرفض هنا **قياسٌ أيضاً**: رمز الوسيط يفصل بين ثلاثة أسباب
+            # مختلفة لكلٍّ إصلاح مختلف. ولا يُخمَّن أيّها وقع.
+            print(f"{BAD}⛔ رفض الوسيط الحمولة.{END}\n   {exc}", file=sys.stderr)
+            print(f"{DIM}   الحمولة المُرسَلة: {payload}{END}", file=sys.stderr)
+            return 1
         reference = body.get("dealReference")
         if not reference:
             print(f"{BAD}⛔ استجابة بلا dealReference — لا يُثبَت ما حدث.{END}", file=sys.stderr)
@@ -181,8 +202,8 @@ def main() -> int:
 
         stop_level = D(str(stop_level))
         gap = abs(level - stop_level)
-        as_pips = PROBE_STOP_DISTANCE * pip        # لو كانت الوحدة نقاطاً
-        as_raw = PROBE_STOP_DISTANCE                # لو كانت فرق سعر خام
+        as_pips = probe_distance * pip        # لو كانت الوحدة نقاطاً
+        as_raw = probe_distance                # لو كانت فرق سعر خام
 
         print(f"\n\033[1m▸ القياس\033[0m\n")
         print(f"  سعر الأمر         {level}")
