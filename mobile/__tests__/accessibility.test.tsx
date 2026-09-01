@@ -1,8 +1,9 @@
 import React from 'react';
 import type { ReactTestInstance } from 'react-test-renderer';
-import { screen } from '@testing-library/react-native';
+import { act, screen } from '@testing-library/react-native';
 
 import AuditScreen from '../app/(app)/audit';
+import ChartScreen from '../app/(app)/chart';
 import DecisionScreen from '../app/(app)/decision';
 import EmergencyScreen from '../app/(app)/emergency';
 import HomeScreen from '../app/(app)/home';
@@ -12,6 +13,7 @@ import PerformanceScreen from '../app/(app)/performance';
 import PositionScreen from '../app/(app)/position';
 import ProfilesScreen from '../app/(app)/profiles';
 import ProvidersScreen from '../app/(app)/providers';
+import ScanScreen from '../app/(app)/scan';
 import SettingsScreen from '../app/(app)/settings';
 import SystemScreen from '../app/(app)/system';
 import HistoryScreen from '../app/(app)/history';
@@ -36,6 +38,8 @@ const SCREENS: Array<[string, React.ComponentType]> = [
   ['المزوّدون', ProvidersScreen],
   ['الإشعارات', NotificationsScreen],
   ['التدقيق', AuditScreen],
+  ['ماذا رأيتُ اليوم', ScanScreen],
+  ['الشموع والمستويات', ChartScreen],
   ['النظام', SystemScreen],
   ['الإعدادات', SettingsScreen],
   ['الطوارئ', EmergencyScreen],
@@ -76,7 +80,25 @@ describe('كل عنصر تفاعلي منطوق', () => {
     }
   });
 
-  it('شاشات القراءة المحضة لا تحمل أي فعل', () => {
+  /**
+   * ⚠️ **تغيير مُعلَن (2026-09-01): الفحص صار سلوكياً بدل أن يكون على الدور.**
+   *
+   * كان يشترط ألّا يوجد **أي** عنصرٍ بدورٍ تفاعلي في شاشات القراءة. وهو
+   * حارسٌ على الشكل لا على المعنى، وأوسع من اسمه: صفُّ انتقالٍ يفتح شاشة،
+   * وزرُّ اختيار أداةٍ يبدّل ما يُعرَض — وليس أيٌّ منهما فعلاً على النظام.
+   * وحين أُضيفت صفوف الانتقال (علاجاً لعشر شاشاتٍ لا يصل إليها أحد) وزرُّ
+   * اختيار الأداة في شاشة الشموع، أسقطهما الفحص وهما بريئان.
+   *
+   * والمقصود الحقيقي أن **شاشة القراءة لا تغيّر شيئاً في النظام**. وهذا
+   * يُقاس بما يخرج إلى الشبكة لا بدور العنصر: كل تغييرٍ في هذا التطبيق يمرّ
+   * بـ`POST` على مسارٍ مُعلَن، بلا استثناء (`src/api/client.ts`).
+   *
+   * فالفحص الآن **أقوى**: يضغط كل عنصرٍ تفاعلي في الشاشة، ثم يشترط أن كل ما
+   * خرج إلى الشبكة كان `GET`. ولو أضاف أحدٌ يوماً زرّ إغلاق مركزٍ في شاشة
+   * «المركز الحالي» لسقط هنا، وهو ما كان الفحص القديم يمنعه — مع أنه كان
+   * يسقط أيضاً على زرٍّ لا يفعل شيئاً.
+   */
+  it('شاشات القراءة لا يخرج منها إلا GET — ولو ضُغط كل ما فيها', async () => {
     for (const Component of [
       DecisionScreen,
       ProfilesScreen,
@@ -86,9 +108,29 @@ describe('كل عنصر تفاعلي منطوق', () => {
       ProvidersScreen,
       NotificationsScreen,
       AuditScreen,
+      ScanScreen,
+      ChartScreen,
     ]) {
-      const view = renderWithHarness(<Component />, { status: 'UNLOCKED' });
-      expect(interactiveNodes(view)).toHaveLength(0);
+      const seen: string[] = [];
+      const fetchImpl = jest.fn(async (_url: unknown, init?: { method?: string }) => {
+        seen.push(init?.method ?? 'GET');
+        // استجابة لا تطابق الغلاف: العميل يرفضها، والشاشة تعرض خطأً —
+        // وهذا كافٍ، فالمقصود ما خرج لا ما عاد.
+        return { ok: true, status: 200, json: async () => ({}) } as unknown as Response;
+      });
+
+      const view = renderWithHarness(<Component />, {
+        status: 'UNLOCKED',
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+      });
+
+      for (const node of interactiveNodes(view)) {
+        await act(async () => {
+          (node.props.onPress as undefined | (() => void))?.();
+        });
+      }
+
+      expect(seen.filter((method) => method !== 'GET')).toEqual([]);
       view.unmount();
     }
   });

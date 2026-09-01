@@ -18,6 +18,8 @@ const ALLOWED: Record<string, string> = {
   home: '/(app)/home',
   intelligence: '/(app)/intelligence',
   decision: '/(app)/decision',
+  scan: '/(app)/scan',
+  chart: '/(app)/chart',
   profiles: '/(app)/profiles',
   position: '/(app)/position',
   history: '/(app)/history',

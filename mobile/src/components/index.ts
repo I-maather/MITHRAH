@@ -1,6 +1,16 @@
 export { Banner, OfflineBanner, PreviewBanner, StaleBanner } from './Banner';
 export { Button, ConfirmButton } from './Button';
 export { Card, Divider } from './Card';
+export {
+  CandleChart,
+  CHART_HEIGHT,
+  buildScale,
+  parseCandles,
+  prepareChart,
+  type ChartLevel,
+  type ChartScale,
+  type PreparedChart,
+} from './CandleChart';
 export { CrashGuard } from './CrashGuard';
 export { NavRow } from './NavRow';
 export { PrivacyVeil } from './PrivacyVeil';

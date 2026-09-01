@@ -9,6 +9,8 @@ import type {
   ProfilesData,
   ProvidersData,
   ScanData,
+  Candle,
+  CandlesData,
   RiskData,
   StatusData,
   TradesData,
@@ -383,6 +385,46 @@ const audit: AuditData = {
   ],
 };
 
+/**
+ * شموع المعاينة — **مولَّدة بدالّة ثابتة، لا مسجَّلة من سوق**.
+ *
+ * ولا تُكتب أربعون شمعة يدوياً: قائمةٌ طويلة من الأرقام المكتوبة تُقرأ يوماً
+ * على أنها تسجيلٌ حقيقي. والدالّة هنا موجةٌ حسابية صريحة لا تشبه سعراً —
+ * تكفي لاختبار الرسم والمقياس، ولا تدّعي أنها EURUSD في يومٍ ما.
+ *
+ * وتُقرَّب إلى خمس خانات لأن الخادم يرسل نصّاً بكامل دقّة `Decimal`؛ فلو
+ * أعطتها المعاينة خانتين لاختُبر الرسم على دقّةٍ غير التي يعمل عليها.
+ */
+const previewCandles = (): Candle[] => {
+  const rows: Candle[] = [];
+  const base = 1.1;
+  for (let i = 0; i < 40; i += 1) {
+    const drift = Math.sin(i / 6) * 0.004 + i * 0.00012;
+    const open = base + drift;
+    const close = base + Math.sin((i + 1) / 6) * 0.004 + (i + 1) * 0.00012;
+    const high = Math.max(open, close) + 0.0007;
+    const low = Math.min(open, close) - 0.0007;
+    const at = new Date(Date.parse('2026-01-14T00:00:00Z') + i * 3_600_000);
+    rows.push({
+      t: at.toISOString().replace('.000Z', '+00:00'),
+      o: open.toFixed(5),
+      h: high.toFixed(5),
+      l: low.toFixed(5),
+      c: close.toFixed(5),
+    });
+  }
+  return rows;
+};
+
+const candles: CandlesData = {
+  instruments: { EURUSD: previewCandles() },
+  symbols: ['EURUSD'],
+  // لا مركز في المعاينة ⇒ أربعتها `null`. وصفرٌ هنا كان يرسم خطّاً عند الصفر
+  // فيسحب المقياس ويجعل الشموع خيطاً.
+  levels: { symbol: null, entry: null, stop: null, target: null },
+  note_ar: 'شموع معاينة مولَّدة — ليست سوقاً. (معاينة)',
+};
+
 export const fixtures = {
   status,
   intelligence,
@@ -394,6 +436,7 @@ export const fixtures = {
   performance,
   providers,
   scan,
+  candles,
   notifications,
   audit,
 } as const;

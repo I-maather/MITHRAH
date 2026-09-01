@@ -10,6 +10,7 @@ import {
   Field,
   Hadd,
   LoadingState,
+  NavRow,
   Metric,
   Screen,
   Text,
@@ -162,6 +163,38 @@ export default function PositionScreen(): React.JSX.Element {
           body={t.position.protection}
         />
       ) : null}
+
+      {/*
+        بقيّة شاشات هذا التبويب.
+
+        كانت هذه الشاشات مبنيّة ومسجَّلة في `_layout` ومُختبَرة — **ولا صفَّ
+        انتقالٍ واحد يفتحها**. فالتبويبات الأربعة تصل إلى أربع شاشات، والباقي
+        لا يُفتَح إلا برابطٍ عميق من إشعار. وهو العطل نفسه المتكرر في هذا
+        المشروع بصورة أخرى: شيءٌ بُني ولم يُنفَّذ قط.
+
+        ويحرسه الآن `__tests__/navigation-reach.test.tsx`: كل شاشة تحت
+        `(app)` يجب أن يصل إليها تبويبٌ أو صفٌّ من شاشة تبويب.
+      */}
+      <Card testID="position-more-card" title={t.nav.more}>
+        <NavRow
+          testID="nav-chart"
+          label={t.nav.chart}
+          hint={t.navHint.chart}
+          href="/(app)/chart"
+        />
+        <NavRow
+          testID="nav-history"
+          label={t.nav.history}
+          hint={t.navHint.history}
+          href="/(app)/history"
+        />
+        <NavRow
+          testID="nav-performance"
+          label={t.nav.performance}
+          hint={t.navHint.performance}
+          href="/(app)/performance"
+        />
+      </Card>
 
       <Banner
         testID="position-readonly-banner"

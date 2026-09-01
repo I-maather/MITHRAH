@@ -13,6 +13,7 @@ import {
   ErrorState,
   Field,
   LoadingState,
+  NavRow,
   Screen,
   StatusPill,
   Text,
@@ -202,6 +203,50 @@ export default function SystemScreen(): React.JSX.Element {
       ) : (
         <ErrorState error={error} onRetry={refresh} />
       )}
+
+      {/*
+        بقيّة شاشات هذا التبويب.
+
+        كانت هذه الشاشات مبنيّة ومسجَّلة في `_layout` ومُختبَرة — **ولا صفَّ
+        انتقالٍ واحد يفتحها**. فالتبويبات الأربعة تصل إلى أربع شاشات، والباقي
+        لا يُفتَح إلا برابطٍ عميق من إشعار. وهو العطل نفسه المتكرر في هذا
+        المشروع بصورة أخرى: شيءٌ بُني ولم يُنفَّذ قط.
+
+        ويحرسه الآن `__tests__/navigation-reach.test.tsx`: كل شاشة تحت
+        `(app)` يجب أن يصل إليها تبويبٌ أو صفٌّ من شاشة تبويب.
+      */}
+      <Card testID="system-more-card" title={t.nav.more}>
+        <NavRow
+          testID="nav-providers"
+          label={t.nav.providers}
+          hint={t.navHint.providers}
+          href="/(app)/providers"
+        />
+        <NavRow
+          testID="nav-audit"
+          label={t.nav.audit}
+          hint={t.navHint.audit}
+          href="/(app)/audit"
+        />
+        <NavRow
+          testID="nav-notifications"
+          label={t.nav.notifications}
+          hint={t.navHint.notifications}
+          href="/(app)/notifications"
+        />
+        <NavRow
+          testID="nav-settings"
+          label={t.nav.settings}
+          hint={t.navHint.settings}
+          href="/(app)/settings"
+        />
+        <NavRow
+          testID="nav-emergency"
+          label={t.nav.emergency}
+          hint={t.navHint.emergency}
+          href="/(app)/emergency"
+        />
+      </Card>
 
       <Card testID="boundary-card" title={t.system.whatAppCannotDo}>
         {t.boundary.items.map((item) => (

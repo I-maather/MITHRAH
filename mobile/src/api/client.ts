@@ -20,6 +20,7 @@ import type {
   PauseResult,
   ResumeResult,
   ScanData,
+  CandlesData,
   PerformanceData,
   PositionData,
   ProfilesData,
@@ -189,6 +190,16 @@ export class MobileApiClient {
 
   getAudit(): Promise<MobileEnvelope<AuditData>> {
     return this.read<AuditData>('audit/recent');
+  }
+
+  /**
+   * الشموع كما رآها النظام حين قرّر.
+   *
+   * لا نداءَ وسيطٍ خلفها: الخادم يحفظها في دورة المسح ويقرأها من ذاكرته.
+   * فتصفّح الرسم لا يستهلك حدّ الوسيط ولا يزاحم القرار على نداءاته.
+   */
+  getCandles(): Promise<MobileEnvelope<CandlesData>> {
+    return this.read<CandlesData>('market/candles');
   }
 
   // -- الإجراءات: ثلاثةٌ تقلّل المخاطرة وواحدٌ يستأنف --------------------

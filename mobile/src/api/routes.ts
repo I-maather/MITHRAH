@@ -21,6 +21,9 @@ export const READ_ROUTES = [
   'notifications',
   'audit/recent',
   'scan/latest',
+  // الشموع تُخدَم من ذاكرة الخادم لا من الوسيط: تصفّحُ الشاشة لا
+  // يستهلك حدّ الوسيط، ولا يزاحم القرار على نداءاته.
+  'market/candles',
 ] as const;
 
 export type ReadRoute = (typeof READ_ROUTES)[number];

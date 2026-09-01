@@ -10,6 +10,7 @@ import {
   Field,
   Hadd,
   LoadingState,
+  NavRow,
   Metric,
   Screen,
   StatusPill,
@@ -157,6 +158,44 @@ export default function DecisionScreen(): React.JSX.Element {
             </View>
           ))
         )}
+      </Card>
+
+      {/*
+        بقيّة شاشات هذا التبويب.
+
+        كانت هذه الشاشات مبنيّة ومسجَّلة في `_layout` ومُختبَرة — **ولا صفَّ
+        انتقالٍ واحد يفتحها**. فالتبويبات الأربعة تصل إلى أربع شاشات، والباقي
+        لا يُفتَح إلا برابطٍ عميق من إشعار. وهو العطل نفسه المتكرر في هذا
+        المشروع بصورة أخرى: شيءٌ بُني ولم يُنفَّذ قط.
+
+        ويحرسه الآن `__tests__/navigation-reach.test.tsx`: كل شاشة تحت
+        `(app)` يجب أن يصل إليها تبويبٌ أو صفٌّ من شاشة تبويب.
+      */}
+      <Card testID="decision-more-card" title={t.nav.more}>
+        <NavRow
+          testID="nav-scan"
+          label={t.nav.scan}
+          hint={t.navHint.scan}
+          href="/(app)/scan"
+        />
+        <NavRow
+          testID="nav-chart"
+          label={t.nav.chart}
+          hint={t.navHint.chart}
+          href="/(app)/chart"
+        />
+        <NavRow
+          testID="nav-intelligence"
+          label={t.nav.intelligence}
+          hint={t.navHint.intelligence}
+          href="/(app)/intelligence"
+        />
+        <NavRow
+          testID="nav-profiles"
+          label={t.nav.profiles}
+          hint={t.navHint.profiles}
+          href="/(app)/profiles"
+        />
       </Card>
 
       <Banner
