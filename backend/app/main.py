@@ -5,7 +5,7 @@ FastAPI application. الواجهة تقرأ من هنا فقط.
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock
 from decimal import Decimal
@@ -60,6 +60,23 @@ from .profiles import (
     TradingProfile,
 )
 from .profiles.manager import SystemGuardState
+
+def _read_boot_commit() -> str:
+    """كوميت رأس المستودع لحظةَ إقلاع هذه العملية. يُقرأ مرّة ولا يُعاد."""
+    try:
+        head = Path(__file__).resolve().parents[2] / ".git" / "HEAD"
+        ref = head.read_text(encoding="utf-8").strip()
+        if ref.startswith("ref: "):
+            target = head.parent / ref[5:]
+            return target.read_text(encoding="utf-8").strip()[:40]
+        return ref[:40]
+    except Exception:  # noqa: BLE001
+        return "unknown"
+
+
+_BOOT_COMMIT = _read_boot_commit()
+_BOOT_TIME = datetime.now(timezone.utc)
+
 
 @asynccontextmanager
 async def _lifespan(_app: FastAPI):
@@ -162,6 +179,29 @@ def _money(value: Decimal | None) -> str:
 
 
 # ---------------------------------------------------------------------------
+
+@app.get("/api/version")
+def version():
+    """
+    أي كوميتٍ **يعمل الآن في هذه العملية** — لا أيّه على القرص.
+
+    ## لماذا وُجد هذا المسار
+
+    كانت النشرة تنقل الكود ثم تنادي `systemctl enable --now`. و`--now`
+    يشغّل الخدمة إن لم تكن تعمل **ولا يعيد تشغيلها إن كانت تعمل**. فبقيت
+    عملية واحدة تخدم من 21:52 حتى الصباح، والكود الجديد على القرص لا يُقرأ.
+
+    وأخفاه فحصُ الجاهزية: يسأل «هل يردّ أحدٌ على 8000؟» — والعملية القديمة
+    تردّ. فحصُ حياة لا فحصُ إصدار.
+
+    وكلّف ذلك ليلة: كل إصلاح يُنشر ولا يعمل، بينما المسابر — عمليات منفصلة
+    تقرأ من القرص — تعمل بالكود الجديد. فبدا النظام يناقض نفسه.
+
+    فيُقرأ الكوميت **من رأس المستودع وقت الإقلاع**، ويُثبَّت في ثابتٍ يُقرأ
+    مرّة: قراءته عند كل طلب تجعله يتبع القرص لا الذاكرة — وهو نفس الخداع.
+    """
+    return {"commit": _BOOT_COMMIT, "started_utc": _BOOT_TIME.isoformat()}
+
 
 @app.get("/api/health")
 def health(sys: SystemState = Depends(system)):
