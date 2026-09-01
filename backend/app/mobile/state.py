@@ -65,9 +65,26 @@ def _status(sys: Any) -> dict[str, Any]:
     else:
         phase, phase_ar = "RUNNING", "يعمل."
 
-    missing_ar = [_provider_name_ar(k) for k in sys.providers.missing()]
-    configured = len(sys.providers.all()) - len(missing_ar)
-    total = len(sys.providers.all())
+    # **الاكتمال يُقاس على الإلزاميين وحدهم.**
+    #
+    # كان يُقاس على كل المزوّدين، ومنهم `FundamentalContextProvider` — وهو
+    # **اختياري ولا وجود لتنفيذٍ له في المشروع أصلاً**. فكان يُحتسب ناقصاً
+    # إلى الأبد، وتُعرض على المالكة نسبة **لا يمكن أن تبلغ ١٠٠٪ بحال**،
+    # وتوحي بنقصٍ يمنع التداول وهو لا يمنعه.
+    #
+    # والإلزاميون هم من يحكمون الأهلية (`MANDATORY_FOR_LIVE`)، فهم وحدهم
+    # ما تعنيه كلمة «اكتمال». والاختياري الناقص يُقال باسمه على حدة، لا
+    # يُخصَم من رقمٍ يُقرأ حكماً.
+    from ..intelligence.providers import MANDATORY_FOR_LIVE
+
+    missing_mandatory = list(sys.providers.missing_mandatory())
+    missing_ar = [_provider_name_ar(k) for k in missing_mandatory]
+    optional_missing_ar = [
+        _provider_name_ar(k) for k in sys.providers.missing()
+        if k not in MANDATORY_FOR_LIVE
+    ]
+    total = len([p for p in sys.providers.all() if p.kind in MANDATORY_FOR_LIVE])
+    configured = total - len(missing_ar)
 
     return {
         "system_state": phase,
@@ -102,6 +119,8 @@ def _status(sys: Any) -> dict[str, Any]:
             "complete": not missing_ar,
             "ratio": (configured / total) if total else None,
             "missing": missing_ar,
+            # الاختياري الناقص يُذكر ولا يُخصَم: معلومةٌ لا حكم.
+            "optional_missing": optional_missing_ar,
         },
         # لا استراتيجية مُجازة للتنفيذ، ولا نخترع واحدة لملء الحقل.
         "strategy_state": None,

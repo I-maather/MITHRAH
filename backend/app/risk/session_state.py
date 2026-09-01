@@ -149,10 +149,32 @@ def check_baseline_against_broker(broker, baseline: Decimal) -> BaselineDrift:
     وفشل القراءة ليس انحرافاً: وسيطٌ مفصول لا يُثبت شيئاً عن الرصيد، فتُعاد
     `diverged=False` مع سبب صريح — ولا يُختلق رقم.
     """
+    # ## الميثود التي لا وجود لها
+    #
+    # كان هنا `broker.get_account_snapshot()` — **وهي غير موجودة على أي
+    # وسيط في المشروع**. لا في `BrokerAdapter`، ولا في محوّل كابيتال، ولا
+    # في الوهمي. فكان النداء يرفع `AttributeError` في كل مرّة، ويُبتلَع في
+    # `except` أدناه، فيُعاد «تعذّرت القراءة» **دائماً**.
+    #
+    # ولم يُكشَف لأن هذه الدالة كُتبت ولم تُوصَل بشيء يومين. ثم وُصلت أمس
+    # بشاشة المحفظة، فظهر أثرها للمالكة: «غير متاح» ورصيدٌ لا يصل أبداً
+    # مهما كان الوسيط متصلاً.
+    #
+    # نفس عائلة `UNRELIABLE` و`observed_at_utc` و`app.backtest.runner`:
+    # **اسمٌ كُتب من الذاكرة لا من العقد**، في مسارٍ لا يُنفَّذ.
+    #
+    # والصحيح `get_balances(account_id)` — وهي في العقد المجرَّد، فيملكها
+    # كل وسيط بالضرورة.
     try:
-        snapshot = broker.get_account_snapshot()
-        equity = D(str(getattr(snapshot, "settled_cash", None)
-                       or getattr(snapshot, "equity", 0)))
+        accounts = list(broker.get_accounts() or [])
+        balances = broker.get_balances(accounts[0] if accounts else "")
+        # **صافي التصفية** هو حقوق الملكية: الرصيد زائد ربح المراكز المفتوحة.
+        # والنقد المسوّى وحده يُنقص ما في السوق، فيبدو الحساب أصغر مما هو.
+        equity = D(str(
+            getattr(balances, "net_liquidation", None)
+            or getattr(balances, "total_cash", None)
+            or getattr(balances, "settled_cash", 0)
+        ))
     except Exception as exc:  # noqa: BLE001
         return BaselineDrift(
             baseline=baseline,

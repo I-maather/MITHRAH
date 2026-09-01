@@ -44,6 +44,7 @@
     "status.data_completeness",
     "status.data_completeness.complete",
     "status.data_completeness.missing",
+    "status.data_completeness.optional_missing",
     "status.kill_switch",
     "status.kill_switch.active",
     "status.locally_paused",
@@ -65,6 +66,9 @@
     "data_completeness": {
       "complete": "boolean",
       "missing": [
+        "string"
+      ],
+      "optional_missing": [
         "string"
       ],
       "ratio": "number"

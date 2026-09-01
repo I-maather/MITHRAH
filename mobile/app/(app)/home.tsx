@@ -193,7 +193,19 @@ export default function HomeScreen(): React.JSX.Element {
               testID="portfolio-broker"
               label={t.home.brokerEquity}
               value={r.portfolio?.broker_equity ?? null}
-              caption={(r.portfolio?.broker_equity ?? null) === null ? t.home.brokerEquityMissing : undefined}
+              /*
+                السبب **يُقرأ من الخادم** ولا يُفترض هنا.
+
+                كانت هذه التسمية مثبَّتة: «لم يُقرَأ — الوسيط غير متصل».
+                فعُرضت على المالكة بينما شاشة النظام تقول في اللحظة نفسها
+                إن الوسيط **متصل** — والسبب الحقيقي كان `AttributeError`
+                على ميثود لا وجود لها. شاشتان تتناقضان، وإحداهما تخمّن.
+              */
+              caption={
+                (r.portfolio?.broker_equity ?? null) === null
+                  ? (r.portfolio?.note_ar ?? t.home.brokerEquityMissing)
+                  : undefined
+              }
             />
             <Metric
               testID="portfolio-baseline"
@@ -311,10 +323,22 @@ export default function HomeScreen(): React.JSX.Element {
               s.data_completeness.missing.length,
             ).labelAr} · ${formatRatio(s.data_completeness.ratio)}`}
             tone={s.data_completeness.complete ? 'positive' : 'caution'}
+            /*
+              الناقص الإلزامي يُسمّى أولاً لأنه يمنع التداول. والاختياري
+              يُذكر بعده **مفصولاً بكلمة تقول إنه لا يمنع** — وخلطُهما هو
+              ما جعل «٦٠٪» تبدو حاجزاً وهي ليست كذلك.
+            */
             hint={
-              s.data_completeness.missing.length > 0
-                ? s.data_completeness.missing.join('، ')
-                : undefined
+              [
+                s.data_completeness.missing.length > 0
+                  ? s.data_completeness.missing.join('، ')
+                  : null,
+                (s.data_completeness.optional_missing?.length ?? 0) > 0
+                  ? `${t.home.optionalMissing}: ${(s.data_completeness.optional_missing ?? []).join('، ')}`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(' · ') || undefined
             }
           />
           <Field

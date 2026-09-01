@@ -65,6 +65,7 @@ const status: StatusData = {
     complete: false,
     ratio: 0.5,
     missing: ['تقويم اقتصادي', 'أخبار', 'بيانات كلية'],
+    optional_missing: ['السياق الأساسي'],
   },
   strategy_state: {
     key: 'trend_pullback_v1',

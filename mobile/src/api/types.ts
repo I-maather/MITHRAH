@@ -55,9 +55,17 @@ export interface MarketView {
 
 export interface CompletenessView {
   complete: boolean;
-  /** 0..1 أو null إذا لم تُحسب. */
+  /**
+   * 0..1 على **الإلزاميين وحدهم**، أو null إذا لم تُحسب.
+   *
+   * كانت تُحسب على كل المزوّدين، ومنهم واحدٌ اختياري لا تنفيذ له أصلاً —
+   * فكانت النسبة لا تبلغ ١٠٠٪ بحال، وتوحي بنقصٍ يمنع التداول وهو لا يمنعه.
+   */
   ratio: number | null;
+  /** الإلزاميون الناقصون — هؤلاء يمنعون التداول. */
   missing: string[];
+  /** اختياريون ناقصون: يُذكرون ولا يُخصمون من النسبة. */
+  optional_missing: string[];
 }
 
 export interface StrategyStateView {
