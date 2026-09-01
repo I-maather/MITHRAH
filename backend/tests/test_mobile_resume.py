@@ -114,7 +114,7 @@ def test_nothing_resumes_without_the_exact_phrase(api_and_token, confirm):
 def test_the_exact_phrase_resumes(api_and_token):
     api, paired_token = api_and_token
     body = resume(api, paired_token).body
-    assert body["action"] == "RESUMED" and body["accepted"] is True
+    assert body["data"]["action"] == "RESUMED" and body["data"]["accepted"] is True
     assert api._resume_recorder.calls, "قيل «تمّ» ولم يُنفَّذ شيء"
 
 
@@ -160,7 +160,7 @@ def test_a_refusal_from_the_system_is_surfaced_not_swallowed():
 
 def test_the_reply_says_plainly_that_no_other_lock_opened(api_and_token):
     api, paired_token = api_and_token
-    note = resume(api, paired_token).body["note_ar"]
+    note = resume(api, paired_token).body["data"]["note_ar"]
     assert "لم يُفتح أي قفل آخر" in note
     assert "لا يستطيع إرسال أمر" in note
 

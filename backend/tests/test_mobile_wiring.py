@@ -224,7 +224,7 @@ def test_kill_switch_response_says_it_cannot_be_undone_from_mobile(wired):
     body = client.post(
         "/api/mobile/v1/killswitch/activate", headers=headers, json={}
     ).json()
-    assert "لا يُلغى من الجوال" in body["note_ar"]
+    assert "لا يُلغى من الجوال" in body["data"]["note_ar"]
 
 
 # ---------------------------------------------------------------------------

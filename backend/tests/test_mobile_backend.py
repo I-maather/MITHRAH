@@ -358,8 +358,8 @@ def test_pause_and_kill_switch_actually_act_not_merely_audit():
     recorder = RecordingActions()
     api, svc, _device, token = api_with_device(recorder.as_actions())
 
-    assert api.handle("POST", "pause/request", token=token).body["accepted"] is True
-    assert api.handle("POST", "killswitch/activate", token=token).body["accepted"] is True
+    assert api.handle("POST", "pause/request", token=token).body["data"]["accepted"] is True
+    assert api.handle("POST", "killswitch/activate", token=token).body["data"]["accepted"] is True
 
     assert recorder.paused, "قيل «أُوقف» ولم يقع إيقاف"
     assert recorder.killed, "قيل «فُعِّل القاطع» ولم يُفعَّل"
@@ -390,7 +390,7 @@ def test_an_unwired_action_fails_closed_and_says_so(route, label):
 def test_kill_switch_cannot_be_deactivated_from_mobile():
     api, _svc, _device, token = api_with_device()
     body = api.handle("POST", "killswitch/activate", token=token).body
-    assert "لا يُلغى من الجوال" in body["note_ar"]
+    assert "لا يُلغى من الجوال" in body["data"]["note_ar"]
     with pytest.raises(MobileApiError):
         api.handle("POST", "killswitch/deactivate", token=token)
 

@@ -100,7 +100,7 @@ def test_going_back_to_demo_needs_no_phrase():
     """حارسٌ يعرقل التراجع عن الخطر ليس حارساً."""
     api, token, switcher = api_with_switch()
     body = switch(api, token, "DEMO").body
-    assert body["accepted"] is True and body["is_demo"] is True
+    assert body["data"]["accepted"] is True and body["data"]["is_demo"] is True
     assert switcher.calls == ["DEMO"]
 
 
@@ -120,7 +120,7 @@ def test_going_live_without_the_exact_phrase_changes_nothing(confirm):
 def test_the_exact_phrase_switches_to_live():
     api, token, switcher = api_with_switch()
     body = switch(api, token, "LIVE", confirm=LIVE_ENVIRONMENT_PHRASE).body
-    assert body["environment"] == "LIVE" and body["is_demo"] is False
+    assert body["data"]["environment"] == "LIVE" and body["data"]["is_demo"] is False
     assert switcher.calls == ["LIVE"]
 
 
@@ -130,7 +130,7 @@ def test_the_reply_says_plainly_that_no_trading_opened():
     والحقيقة أنه يقرأ فقط — وقولها في نصّ الردّ لا في وثيقةٍ جانبية.
     """
     api, token, _ = api_with_switch()
-    note = switch(api, token, "LIVE", confirm=LIVE_ENVIRONMENT_PHRASE).body["note_ar"]
+    note = switch(api, token, "LIVE", confirm=LIVE_ENVIRONMENT_PHRASE).body["data"]["note_ar"]
     assert "لم يُفتح تداول" in note
     assert "قفل التنفيذ" in note
 

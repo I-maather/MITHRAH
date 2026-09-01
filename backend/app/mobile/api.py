@@ -260,10 +260,35 @@ class MobileApi:
             )
 
         device = self._authenticate(token)
-        body = (
+        section = (
             self._read(route, device) if method.upper() == "GET"
             else self._mutate(route, device, payload)
         )
+        # **الغلاف يُبنى هنا وحده — للقراءة والتعديل معاً.**
+        #
+        # ## العطل الذي فرض هذا
+        #
+        # كان `_read` يبني الغلاف بنفسه و`_mutate` يعيد قاموساً عارياً. والعميل
+        # يرفض أي استجابة بلا غلاف (`isEnvelope` في `client.ts`) — فكان **كل
+        # إجراء في التطبيق ميتاً**: الإيقاف، والاستئناف، وإلغاء الجهاز، وتبديل
+        # الحساب، و**قاطع الطوارئ نفسه**. تظهر للمالكة: «استجابة لا تطابق عقد
+        # الجوال. أهملت.»
+        #
+        # ولم يكشفه اختبار واحد: اختبارات الخادم تفحص ما تعيده `_mutate`،
+        # واختبارات الجوال تحقن `fetch` وهمياً **يبني الغلاف بنفسه** — فكل
+        # طرفٍ يوافق نفسه، ولا أحد يعبر الحدّ بينهما. وهو العطل نفسه الذي
+        # أسقط التطبيق إلى شاشة سوداء يوم كان الخادم يرسل `kill_switch_active`
+        # والتطبيق يقرأ `kill_switch.active`.
+        #
+        # فالغلاف الآن يُبنى في موضعٍ واحد لا موضعين: انحرافُ أحدهما عن الآخر
+        # صار مستحيلاً بالبنية، لا محروساً باختبار.
+        body = {
+            "route": route,
+            "server_time_utc": self.clock().isoformat(),
+            "device_id": device.device_id,
+            "authorises_execution": False,
+            "data": section,
+        }
         assert_response_is_clean(body)
         return MobileResponse(200, body)
 
@@ -271,13 +296,6 @@ class MobileApi:
 
     def _read(self, route: str, device: RegisteredDevice) -> dict:
         state = self.state_source() or {}
-        now = self.clock()
-        common = {
-            "route": route,
-            "server_time_utc": now.isoformat(),
-            "device_id": device.device_id,
-            "authorises_execution": False,
-        }
         section = {
             "status": lambda: state.get("status", {}),
             "intelligence/latest": lambda: state.get("intelligence", {}),
@@ -295,7 +313,7 @@ class MobileApi:
                 "entries": [e.as_dict() for e in self.security.audit()]
             },
         }[route]()
-        return {**common, "data": section}
+        return section
 
     # -- التعديل المُقلِّل للمخاطرة ------------------------------------------
 

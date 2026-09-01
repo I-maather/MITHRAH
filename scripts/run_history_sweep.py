@@ -70,6 +70,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+from statistics import NormalDist
 import sys
 import time
 from datetime import datetime, timedelta, timezone
@@ -116,6 +117,80 @@ def breakeven_win_rate(cost_model, config, reference_price) -> float:
     if net_rr <= 0:
         return 1.0          # عائدٌ غير موجب: لا معدّل فوز ينقذه
     return 1.0 / (1.0 + net_rr)
+
+
+def breakeven_from_trades(result, cost_model, stop_kind) -> float | None:
+    """
+    حدّ التعادل **من مستويات الصفقات التي وقعت فعلاً**.
+
+    ## العطل الذي فرض هذه الدالّة
+
+    كان الحدّ يُحسَب مرّة واحدة من `BacktestConfig` (وقف 30 · هدف 60)،
+    وكان ذلك صحيحاً يوم كان المحرّك ينفّذ بذلك الوقف. ثم غُيّر المحرّك
+    ليحترم وقف الإشارة وهدفها (`backtest.py:318`) — فصارت الصفقات تُنفَّذ
+    بمستويات الاستراتيجية، والحدُّ يُحسَب لإعدادٍ **لم يُنفَّذ منه شيء**.
+
+    وهو بالحرف ما يحذّر منه التعليق فوق `breakeven_win_rate`: «نقيس معدّل
+    فوز إعدادٍ ونقارنه بحدّ تعادل إعدادٍ آخر». عاد العطل من باب آخر بعد
+    إصلاحه — لأن الإصلاح كان في مكانٍ والتغيير في مكانٍ ثانٍ، ولا اختبار
+    يربطهما.
+
+    واتجاه الخطأ **غير معروف مسبقاً**: وقفٌ أوسع يجعل السبريد كسراً أصغر
+    من المخاطرة فيخفض الحدّ، وعائدٌ إلى مخاطرةٍ أقلّ من 2 يرفعه. فالنتيجة
+    قد تنقلب في أي اتجاه، ولا يصحّ تصديق حكمٍ بُني عليها.
+
+    ## الحساب
+
+    لكل صفقة، من مستوياتها هي: العائد الصافي عند الهدف (`net_reward`)
+    والخسارة الكاملة عند الوقف (`all_in_risk`) — كلاهما **قبل معرفة
+    النتيجة**، فالمقارنة بمعدّل الفوز تبقى اختباراً لا دورةً مغلقة.
+
+    ثم: الحدّ = Σ الخسائر ÷ (Σ العوائد + Σ الخسائر). بالمجاميع لا
+    بمتوسّط النسب، كي تُوزَن الصفقات بأحجامها لا بعددها.
+    """
+    if result.trade_count == 0:
+        return None
+    total_reward = 0.0
+    total_risk = 0.0
+    for trade in result.trades:
+        stop_pips = cost_model.price_to_pips(abs(trade.entry_price - trade.stop_price))
+        tp_pips = cost_model.price_to_pips(abs(trade.take_profit_price - trade.entry_price))
+        economics = cost_model.estimate(
+            size=trade.size,
+            entry_price=trade.entry_price,
+            stop_distance_pips=stop_pips,
+            take_profit_distance_pips=tp_pips,
+            stop_kind=stop_kind,
+            nights_held=trade.nights_held,
+        )
+        total_reward += float(economics.net_reward)
+        total_risk += float(economics.all_in_risk)
+    if total_risk <= 0:
+        return None
+    if total_reward <= 0:
+        return 1.0          # عائدٌ غير موجب: لا معدّل فوز ينقذه
+    return total_risk / (total_reward + total_risk)
+
+
+def corrected_z(comparisons: int, alpha: float = 0.05) -> float:
+    """
+    عتبة z بعد تصحيح المقارنات المتعدّدة (Bonferroni).
+
+    ## لماذا
+
+    المسح يجرّب 3 استراتيجيات × 4 دقّات = **اثني عشر إعداداً**. وعند
+    عتبةٍ 95٪ لكل إعدادٍ على حدة، يُتوقَّع **0.6 نتيجة «فوق التعادل»
+    من الصدفة وحدها** في مسحٍ لا حافّة فيه إطلاقاً. فالإعلان عن إعدادٍ
+    أو اثنين بعتبة الاختبار الواحد يقول «وجدنا» عن ما قد يكون ضجيجاً.
+
+    والتصحيح يقسّم مستوى الخطأ على عدد المقارنات، فترتفع العتبة من
+    1.645 إلى نحو 2.64 عند اثني عشر إعداداً.
+
+    وتُحسَب العتبة من **العدد المخطَّط** قبل التشغيل لا من عدد ما نجح
+    بعده: اختيارُ العدد بعد رؤية النتائج هو المشكلة نفسها في ثوبٍ آخر.
+    """
+    return NormalDist().inv_cdf(1.0 - alpha / max(comparisons, 1))
+
 
 OK, BAD, WARN, DIM, END = "\033[32m", "\033[31m", "\033[33m", "\033[2m", "\033[0m"
 
@@ -203,7 +278,9 @@ def win_rate_z(wins: int, trades: int, breakeven: float) -> float:
     return (p - breakeven) / math.sqrt(variance)
 
 
-def verdict(result, minimum: int, breakeven: float) -> tuple[str, str]:
+def verdict(
+    result, minimum: int, breakeven: float | None, min_z: float = MIN_Z_FOR_EDGE
+) -> tuple[str, str]:
     """
     (الرمز، الحكم) — أربع حالات.
 
@@ -216,6 +293,8 @@ def verdict(result, minimum: int, breakeven: float) -> tuple[str, str]:
         )
     if result.win_rate is None:
         return "INCONCLUSIVE", "لا معدّل فوز محسوب."
+    if breakeven is None:
+        return "INCONCLUSIVE", "لا حدّ تعادل يُحسَب من هذه الصفقات."
 
     rate = float(result.win_rate)
     z = win_rate_z(result.wins, result.trade_count, breakeven)
@@ -238,9 +317,9 @@ def verdict(result, minimum: int, breakeven: float) -> tuple[str, str]:
     # يُصدَّق ما وقع.
     if result.net_pnl <= 0:
         return "LOSING", f"**خاسر بالصافي** — {tail}"
-    if z >= MIN_Z_FOR_EDGE:
+    if z >= min_z:
         return "ABOVE_BREAKEVEN", f"فوق التعادل بفارق يُعتدّ به — {tail}"
-    if z <= -MIN_Z_FOR_EDGE:
+    if z <= -min_z:
         return "BELOW_BREAKEVEN", f"تحت التعادل بفارق يُعتدّ به — {tail}"
     return "INDISTINGUISHABLE", f"**رابح بالصافي، لكن لا يُفرَّق عن التعادل** — {tail}"
 
@@ -326,16 +405,28 @@ def main() -> int:
     )
     cost_model = CapitalComCostModel(PROVISIONAL_EURUSD)
     engine = Backtester(cost_model=cost_model, config=config)
-    breakeven = breakeven_win_rate(cost_model, config, D("1.15837"))
-    print(f"{DIM}   حدّ التعادل لهذا الإعداد: {breakeven * 100:.1f}٪ "
-          f"(وقف {a.stop_pips} · هدف {a.tp_pips} نقطة){END}\n")
+
+    # عدد الإعدادات المخطَّطة — يُحسَب **قبل** التشغيل. انظري `corrected_z`.
+    planned = len(wanted) * len(a.epics) * len(a.resolutions)
+    min_z = corrected_z(planned)
+    reference = breakeven_win_rate(cost_model, config, D("1.15837"))
+
+    print(f"{DIM}   الأدوات المُسعَّرة (وهي وحدها ما يُقاس): "
+          f"{'، '.join(a.epics)}{END}")
+    print(f"{DIM}   حدّ التعادل يُحسَب لكل إعداد من مستويات صفقاته نفسها.{END}")
+    print(f"{DIM}   (مرجعٌ فقط، لإعداد وقف {a.stop_pips} · هدف {a.tp_pips}: "
+          f"{reference * 100:.1f}٪ — لا يُحكَم به){END}")
+    print(f"{DIM}   {planned} إعداداً مخطَّطاً ⇒ عتبة z مصحَّحة = "
+          f"{min_z:.2f} (بدل {MIN_Z_FOR_EDGE}){END}\n")
 
     report: dict = {
         "generated_utc": datetime.now(timezone.utc).isoformat(),
         "config": {
             "size": a.size, "stop_pips": a.stop_pips, "tp_pips": a.tp_pips,
-            "breakeven_win_rate": round(breakeven, 4),
-            "breakeven_source": "محسوب من نموذج التكلفة للإعداد الجاري",
+            "reference_breakeven_win_rate": round(reference, 4),
+            "breakeven_source": "يُحسَب لكل إعداد من مستويات صفقاته (breakeven_from_trades)",
+            "planned_comparisons": planned,
+            "min_z_corrected": round(min_z, 3),
             "cost_model": "PROVISIONAL_EURUSD",
             "transplanted": bool(a.transplant),
         },
@@ -352,7 +443,8 @@ def main() -> int:
         run_one_strategy(
             strategy_class=strategy_class, strategy_name=strategy_name,
             declared=declared, epics=a.epics, resolutions=a.resolutions,
-            adapter=adapter, engine=engine, config=config, breakeven=breakeven,
+            adapter=adapter, engine=engine, config=config,
+            cost_model=cost_model, min_z=min_z,
             transplant=a.transplant, report=report, to_bars=to_bars,
         )
     return finish(report, a.report)
@@ -360,7 +452,7 @@ def main() -> int:
 
 def run_one_strategy(
     *, strategy_class, strategy_name, declared, epics, resolutions,
-    adapter, engine, config, breakeven, transplant, report, to_bars,
+    adapter, engine, config, cost_model, min_z, transplant, report, to_bars,
 ):
     from app.strategies.backtest import InsufficientData
 
@@ -427,7 +519,11 @@ def run_one_strategy(
                 })
                 continue
 
-            code, sentence = verdict(result, config.min_trades_for_conclusion, breakeven)
+            # الحدّ من صفقات هذا الإعداد نفسه — لا من إعدادٍ لم يُنفَّذ.
+            breakeven = breakeven_from_trades(result, cost_model, config.stop_kind)
+            code, sentence = verdict(
+                result, config.min_trades_for_conclusion, breakeven, min_z
+            )
             report["runs"].append({
                 "strategy": strategy_name,
                 "epic": epic,
@@ -439,6 +535,9 @@ def run_one_strategy(
                 "wins": result.wins,
                 "losses": result.losses,
                 "win_rate": None if result.win_rate is None else str(result.win_rate),
+                # الحدّ المستعمل في الحكم — يُسجَّل لأن الحكم بلا حدِّه غير قابل للمراجعة.
+                "breakeven_win_rate": None if breakeven is None else round(breakeven, 4),
+                "min_z_used": round(min_z, 3),
                 "expectancy": None if result.expectancy is None else str(result.expectancy),
                 "net_pnl": str(result.net_pnl),
                 "profit_factor": (
