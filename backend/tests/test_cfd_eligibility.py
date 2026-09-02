@@ -214,3 +214,43 @@ def test_missing_details_fall_back_to_the_stricter_stock_path():
     )
     assert not result.eligible
     assert result.reason_code == "EXPLICITLY_DENIED"
+
+
+# ---------------------------------------------------------------------------
+# عملة التسعير: مقروءة أم مفترضة؟
+# ---------------------------------------------------------------------------
+
+def test_an_undeclared_quote_currency_is_named_an_assumption_not_a_reading():
+    """
+    **قياس 2026-09-02:** كابيتال عادت بالذهب بلا عملة تسعير (`currencies`
+    فارغة)، فمُلئت من قائمتنا. والقرار صحيح — الحساب بالدولار والذهب مسعَّر
+    به — لكن الفحص كان يقول «التسعير بالدولار — لا تحويل» عن شيءٍ **لم يقله
+    الوسيط**.
+
+    وهو العيب الحاكم في أصغر صوره: قيمةٌ تُعرَض كأنها مقروءة وهي مفترضة.
+    القرار لا يتغيّر، والنصّ يتغيّر — لأن الفرق بين المقروء والمفترض هو ما
+    يُبنى عليه لاحقاً.
+    """
+    result = evaluate("GOLD", det=details("GOLD", asset_class=AssetClass.CFD_COMMODITY,
+                                          quote_currency=None))
+    assert result.eligible, result.reason_ar
+    check = next(c for c in result.checks if c[0] == "QUOTE_CURRENCY")
+    assert check[1] is True
+    assert "افتراضٌ لا قراءة" in check[2], (
+        "فحصٌ يصف افتراضاً بلغة القراءة يُبنى عليه كأنه دليل."
+    )
+
+
+def test_a_declared_quote_currency_is_reported_as_read():
+    """وحين يُعلنها الوسيط، تُقال كما هي بلا تحفّظٍ لا محلّ له."""
+    result = evaluate("EURUSD", det=details("EURUSD", quote_currency="USD"))
+    check = next(c for c in result.checks if c[0] == "QUOTE_CURRENCY")
+    assert "افتراض" not in check[2]
+
+
+def test_a_foreign_quote_currency_is_still_refused_declared_or_not():
+    """التشديد لم يُخفَّف: عملةٌ غير الدولار تُرفض سواءٌ أُعلنت أم فُرضت."""
+    from app.eligibility.allowlist import CONVERSION_COST_UNMEASURED
+    result = evaluate("USDJPY", det=details("USDJPY", quote_currency="JPY"))
+    assert not result.eligible
+    assert result.reason_code == CONVERSION_COST_UNMEASURED

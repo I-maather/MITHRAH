@@ -140,18 +140,45 @@ def main() -> int:
 
     limits = RiskLimits.for_mode(RiskMode.VALIDATION, D(a.baseline), Broker.CAPITAL_COM)
     budget = min(limits.target_risk_per_trade, limits.effective_max_risk(D(a.baseline)))
+
+    # ---------------------------------------------------------------------
+    # **سلّم الأوقاف نسبةٌ من السعر، لا مضاعفاتٌ لأدنى حدّ الوسيط.**
+    #
+    # أوّل كتابةٍ لهذا السكربت جعلت السلّم مضاعفاتٍ لأدنى مسافة وقف. وذلك
+    # يصلح لـEUR/USD لأن حدّها 100 نقطة — رقمٌ كبيرٌ قريب من وقفٍ حقيقي.
+    # وحدّ الذهب `0.001` دولار: **عُشر سنت**. فصار أوسع صفٍّ في الجدول وقفاً
+    # بثلاثة سنتات على أداةٍ سعرها 4371 دولاراً، فابتلعه السبريد كلّه،
+    # فطبع «لا وقفَ يمرّ» — وهو خطأٌ في مدى الجدول لا حقيقةٌ عن الذهب.
+    #
+    # وكاد ذلك يُسقط خطّةً صحيحة. فالسلّم الآن **نسبةٌ من السعر**: يقيس ما
+    # يقيسه وقفٌ حقيقي على أي أداة، ويُعلَّم فيه صفُّ حدّ الوسيط ليُرى موضعه.
+    # ---------------------------------------------------------------------
+    LADDER_PCT = (
+        D("0.0002"), D("0.0005"), D("0.001"), D("0.0025"),
+        D("0.005"), D("0.01"), D("0.015"), D("0.02"),
+    )
+
     print(
         f"\n{BOLD}ما يمرّ عند مرجع {a.baseline} دولار "
-        f"(ميزانية الصفقة {budget:.2f}، أدنى عائد/مخاطرة {limits.min_reward_risk_ratio}){END}"
+        f"(ميزانية الصفقة {budget:.2f}، أدنى عائد/مخاطرة صافٍ {limits.min_reward_risk_ratio}){END}"
     )
-    print(f"  {DIM}السعر الآن {entry} · الكمية الدنيا {size} · أدنى وقف {min_pips:.0f} نقطة{END}")
-    header = f"  {'الوقف':>10} {'الخسارة':>9} {'التكلفة':>9} {'الهامش':>9} {'هدف ×2':>9} {'أقلّ هدف':>10}"
-    print(f"{DIM}{header}{END}")
+    print(
+        f"  {DIM}السعر الآن {entry} · الكمية الدنيا {size} · "
+        f"أدنى وقفٍ يقبله الوسيط {row.economics.min_stop_distance} "
+        f"({min_pips:g} نقطة){END}"
+    )
+    print(
+        f"{DIM}  {'الوقف':>12} {'٪ السعر':>8} {'الخسارة':>8} {'التكلفة':>8} "
+        f"{'الهامش':>8} {'ع/م ×2':>8} {'أقلّ هدف':>9}{END}"
+    )
 
-    workable = []
-    for multiple in (1, 2, 5, 10, 15, 20, 30):
-        stop_pips = min_pips * multiple
-        stop_money = stop_pips * pip
+    passing: list[tuple[Decimal, Decimal, Decimal]] = []
+    for pct in LADDER_PCT:
+        stop_money = (entry * pct).quantize(pip if pip < 1 else D("0.01"))
+        if stop_money <= 0:
+            continue
+        below_broker = stop_money < row.economics.min_stop_distance
+        stop_pips = stop_money / pip
         e2 = model.estimate(
             size=size, entry_price=entry,
             stop_distance_pips=stop_pips, take_profit_distance_pips=stop_pips * 2,
@@ -159,9 +186,9 @@ def main() -> int:
         fits_budget = e2.all_in_risk <= budget
         rr2_ok = e2.net_reward_risk_ratio >= limits.min_reward_risk_ratio
 
-        # أقلّ مضاعِف هدفٍ يبلغ الحدّ الصافي — يُبحَث لا يُفترَض.
+        # أقلّ مضاعِف هدفٍ يبلغ الحدّ الصافي — **يُبحَث عنه ولا يُفترَض**.
         needed = None
-        for tenth in range(20, 81):
+        for tenth in range(15, 101):
             candidate = model.estimate(
                 size=size, entry_price=entry, stop_distance_pips=stop_pips,
                 take_profit_distance_pips=stop_pips * (Decimal(tenth) / 10),
@@ -170,28 +197,39 @@ def main() -> int:
                 needed = Decimal(tenth) / 10
                 break
 
-        verdict = (
-            f"{OK}✔{END}" if (fits_budget and rr2_ok)
-            else (f"{WARN}~{END}" if fits_budget else f"{BAD}✘{END}")
-        )
-        print(
-            f"  {verdict} {stop_money:>8} {e2.all_in_risk:>9.2f} {e2.total_costs:>9.2f} "
-            f"{e2.margin_required:>9.2f} {e2.net_reward_risk_ratio:>9.2f} "
-            f"{('×' + str(needed)) if needed else 'لا يبلغ':>10}"
-        )
-        if fits_budget and needed is not None:
-            workable.append((stop_money, needed, e2.all_in_risk))
+        if below_broker:
+            verdict, note = f"{BAD}✘{END}", "دون حدّ الوسيط"
+        elif not fits_budget:
+            verdict, note = f"{BAD}✘{END}", "فوق الميزانية"
+        elif needed is None:
+            verdict, note = f"{WARN}~{END}", "لا يبلغ"
+        else:
+            verdict = f"{OK}✔{END}" if rr2_ok else f"{WARN}~{END}"
+            note = f"×{needed}"
+            passing.append((stop_money, needed, e2.all_in_risk))
 
-    if not workable:
+        print(
+            f"  {verdict} {stop_money:>11} {pct * 100:>7.2f}% {e2.all_in_risk:>8.2f} "
+            f"{e2.total_costs:>8.2f} {e2.margin_required:>8.2f} "
+            f"{e2.net_reward_risk_ratio:>8.2f} {note:>9}"
+        )
+
+    if not passing:
         print(
             f"\n{BAD}⛔ لا وقفَ يجمع بين الميزانية والعائد الصافي على {epic} "
             f"بمرجع {a.baseline}.{END}"
         )
-    else:
-        widest = workable[-1]
         print(
-            f"\n{OK}✅{END} {epic} صالحة: وقفٌ حتى {widest[0]} بمخاطرة {widest[2]:.2f} دولار، "
-            f"بشرط هدفٍ عند {widest[1]}× الوقف فأكثر."
+            f"{DIM}   وهذا يعني أن {epic} لا تصلح على هذا الحجم — لا أن الحساب معطوب.{END}"
+        )
+    else:
+        narrowest, widest = passing[0], passing[-1]
+        best_multiple = min(p[1] for p in passing)
+        print(
+            f"\n{OK}✅{END} {epic} صالحة على مرجع {a.baseline}: "
+            f"وقفٌ من {narrowest[0]} إلى {widest[0]} دولار "
+            f"(مخاطرة {narrowest[2]:.2f}–{widest[2]:.2f} دولار)، "
+            f"وأقلّ هدفٍ مقبول {best_multiple}× الوقف."
         )
 
     if not a.prove:
@@ -206,8 +244,37 @@ def main() -> int:
     # قفل التنفيذ لا يُفتَح من علَمٍ وحده: `authorise` تشترط مرجعاً وسبباً
     # مكتوبين، ويُسجَّلان في القفل. وهذه هي القاعدة نفسها التي تحكم تجربة
     # الحساب التجريبي — ولا تُلتَفّ هنا لأن السكربت «مؤقّت».
-    from app.brokers.capital.safety import ExecutionLock
+    from app.brokers.capital.safety import ExecutionLock, ExecutionLocked
     from app.contracts import OrderIntent
+    from app.brokers.base import BrokerRejected
+
+    # ---------------------------------------------------------------------
+    # **حين لا يكون الحدّ قيداً، لا يُشترى إثباتُه بفتح قفلين.**
+    #
+    # أدنى وقفٍ على EUR/USD مئة نقطة — رقمٌ يمنع صفقاتٍ فعلاً، فإثباتُه يغيّر
+    # قراراً. وأدنى وقفٍ على الذهب `0.001` دولار: عُشر سنت. لا استراتيجيةَ
+    # تُنتج وقفاً بعُشر سنت، فالرقم لا يمنع شيئاً، وإثباتُه لا يغيّر قراراً.
+    #
+    # وثمنُ الإثبات ليس رخيصاً: قفل التنفيذ **طبقتان** — واحدة في المحوّل
+    # وأخرى في الناقل — وهما أقوى ما في هذا النظام. وفتحُهما معاً لأجل رقمٍ
+    # لا يقرّر شيئاً مقايضةٌ خاسرة.
+    #
+    # فالحدّ يبقى `FACT` مقروءاً من الوسيط لا مُثبَتاً بتجربة، **ويُقال ذلك**.
+    # ---------------------------------------------------------------------
+    binding_ratio = row.economics.min_stop_distance / entry
+    if binding_ratio < D("0.0002"):
+        print(
+            f"\n{WARN}○ لا تجربة على {epic}: أدنى وقفٍ يقبله الوسيط "
+            f"{row.economics.min_stop_distance} — أي {binding_ratio * 100:.4f}٪ من السعر.{END}"
+        )
+        print(f"{DIM}   رقمٌ لا يمنع أي وقفٍ حقيقي، فإثباتُه لا يغيّر قراراً.{END}")
+        print(f"{DIM}   وفتحُ قفلَي التنفيذ لأجله مقايضةٌ خاسرة — وهما أقوى ما في هذا النظام.{END}")
+        print(
+            f"{DIM}   ما يقرّر في {epic} هو السبريد ({row.assumptions.spread_price}، "
+            f"{row.spread_samples} رصدات) والكمية الدنيا ({size}) والهامش — وكلها مقيسة.{END}"
+        )
+        print(f"{DIM}   وأدنى الوقف يبقى مقروءاً من الوسيط لا مُثبَتاً بتجربة.{END}\n")
+        return 0
 
     if not (a.approval_ref or "").strip():
         print(f"\n{BAD}⛔ --prove يتطلب --approval-ref: مرجع موافقتك المكتوب.{END}\n")
@@ -251,17 +318,43 @@ def main() -> int:
         print(f"  {BAD}✘ قُبِل!{END} أي أن أدنى مسافة الوقف المُعلَنة ليست هي المطبَّقة.")
         print(f"  {BAD}  أغلقي المركز من تطبيق كابيتال، ولا تبني على الرقم المُعلَن.{END}")
         return 5
+    except ExecutionLocked as exc:
+        print(f"  {WARN}○ لم يصل الأمر إلى الوسيط{END} — {exc}")
+        print(f"  {DIM}  قفل التنفيذ طبقتان، والناقل ما زال مغلقاً. لا إثبات هنا.{END}")
+        return 9
     except Exception as exc:  # noqa: BLE001
-        print(f"  {OK}✔ رُفض كما يجب{END} — {type(exc).__name__}: {exc}")
+        # **الرفض من حارسنا ليس إثباتاً.** حارسنا يقارن بالرقم الذي قرأناه
+        # نحن، فرفضُه يثبت أن الحارس يعمل — لا أن الوسيط يرفض. والإثبات لا
+        # يكون إلا برفضٍ صادرٍ عن كابيتال.
+        ours = isinstance(exc, BrokerRejected) and "حدّ الوسيط" in str(exc)
+        mark = f"{WARN}○ رفضه حارسُنا قبل الإرسال{END}" if ours else f"{OK}✔ رفضه الوسيط{END}"
+        print(f"  {mark} — {type(exc).__name__}: {exc}")
+        if ours:
+            print(f"  {DIM}  وهذا يثبت أن الحارس يعمل، لا أن الوسيط يرفض.{END}")
 
     at_min = intent(min_pips, "ATMIN")
     print(f"  {DIM}ب · وقفٌ عند {at_min.stop_price} (المُعلَن) — يُنتظر قبول…{END}")
     try:
         order = adapter.place_order(at_min)
-    except Exception as exc:  # noqa: BLE001
-        print(f"  {BAD}✘ رُفض أيضاً{END} — {type(exc).__name__}: {exc}")
+    except ExecutionLocked as exc:
+        # **لا يُنسَب إلى الوسيط رفضٌ لم يصدر عنه.**
+        #
+        # كان هذا الفرع يقول «فالحدّ الحقيقي أوسع من المُعلَن» عن *أي* فشل.
+        # فلمّا أغلق قفلُ الناقل الطريق — وهو قفلنا نحن، لا الوسيط — نُسب
+        # الرفض إلى كابيتال، واستُنتج عن أرقامها ما لم تقله. وهو العيب
+        # الحاكم في صورة جديدة: سببٌ يُعرَض لم يُقرأ من مصدره.
+        print(f"  {WARN}○ لم يصل الأمر إلى الوسيط أصلاً{END} — {exc}")
+        print(f"  {DIM}  قفل التنفيذ طبقتان: واحدة في المحوّل وأخرى في الناقل.{END}")
+        print(f"  {DIM}  ولا يُستنتج من هذا شيءٌ عن أرقام {epic}: لم تُختبَر.{END}")
+        return 9
+    except BrokerRejected as exc:
+        print(f"  {BAD}✘ رفضه الوسيط{END} — {exc}")
         print(f"  {BAD}  فالحدّ الحقيقي أوسع من المُعلَن. لا تبني على الرقم المُعلَن.{END}")
         return 6
+    except Exception as exc:  # noqa: BLE001
+        print(f"  {BAD}✘ فشل لسببٍ آخر{END} — {type(exc).__name__}: {exc}")
+        print(f"  {DIM}  ولا يُستنتج من هذا شيءٌ عن أرقام {epic}: لم تُختبَر.{END}")
+        return 10
 
     print(f"  {OK}✔ قُبل{END} — أمر {order.broker_order_id or order.client_order_id}")
     print(f"  {DIM}يُغلق الآن…{END}")

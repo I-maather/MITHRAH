@@ -251,14 +251,29 @@ def _check_cfd(
         return fail(ALLOWLIST_ENTRY_DISABLED, f"{symbol} معطّل في قائمة CFD.")
     checks.append(("CFD_ALLOWLIST", True, f"{symbol} ضمن قائمة CFD ({entry.name_ar})."))
 
-    quote_currency = (details.quote_currency or entry.currency or "").upper()
+    # **عملة التسعير: مقروءةٌ أم مفترضة؟ الفرق يُقال.**
+    #
+    # كابيتال لا تُعلن `currencies` لكل أداة — الذهب عادت بلا عملة (قياس
+    # 2026-09-02). فتُملأ من قائمتنا، وهذا **افتراضٌ لا قراءة**؛ وفحصٌ يقول
+    # «التسعير بالدولار — لا تحويل» عن شيءٍ لم يقله الوسيط هو العيب الحاكم
+    # في أصغر صوره. فالنصّ يفرّق الآن، ويبقى القرار كما هو.
+    declared = (details.quote_currency or "").upper()
+    quote_currency = declared or (entry.currency or "").upper()
     if quote_currency != ACCOUNT_CURRENCY:
         return fail(
             CONVERSION_COST_UNMEASURED,
             f"{symbol} مسعَّر بـ{quote_currency} لا {ACCOUNT_CURRENCY}، وكلفة التحويل "
             "غير مقيسة — تُفترض صفراً في نموذج التكلفة. يُرفض حتى تُقاس.",
         )
-    checks.append(("QUOTE_CURRENCY", True, f"التسعير بـ{ACCOUNT_CURRENCY} — لا تحويل."))
+    checks.append((
+        "QUOTE_CURRENCY", True,
+        f"التسعير بـ{ACCOUNT_CURRENCY} — لا تحويل."
+        if declared
+        else (
+            f"الوسيط لم يُعلن عملة تسعير {symbol}؛ فُرِضت {ACCOUNT_CURRENCY} من قائمتنا "
+            "— **افتراضٌ لا قراءة**، ويصحّ ما دام الحساب بالدولار."
+        ),
+    ))
 
     problems = permissions.violates_cfd_policy()
     if problems:
