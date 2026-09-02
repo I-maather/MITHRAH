@@ -254,9 +254,27 @@ green "✅ Tailscale مثبَّت"
 TS_UP=0
 tailscale status >/dev/null 2>&1 && TS_UP=1
 
+# **ما يعرفه السكربت لا يُطلَب من المالكة.** كان النشر يكتشف أن الخدمة غير
+# منشورة على الشبكة الخاصة، فيطبع لها الأمر لتنفّذه بيدها. والأمر معروف،
+# والخادم بين يدي السكربت في تلك اللحظة — فالطباعة هنا تأجيلٌ لا إبلاغ.
+# يُعاد النشر في كل مرة (العملية عديمة الأثر إن كانت قائمة)، ثم **تُقرأ
+# الحالة من `tailscale` بعد المحاولة** لا من نجاح الأمر.
+serve_is_up() { tailscale serve status 2>/dev/null | grep -q '8000'; }
+
 TS_SERVED=0
-if [ "$TS_UP" -eq 1 ] && tailscale serve status 2>/dev/null | grep -q '8000'; then
-  TS_SERVED=1
+TS_SERVE_HOW=""
+TS_SERVE_ERR=""
+if [ "$TS_UP" -eq 1 ]; then
+  if serve_is_up; then
+    TS_SERVED=1
+    TS_SERVE_HOW="كانت منشورة"
+  else
+    TS_SERVE_ERR="$(tailscale serve --bg 8000 2>&1)"
+    if serve_is_up; then
+      TS_SERVED=1
+      TS_SERVE_HOW="أُعيد نشرها في هذا النشر"
+    fi
+  fi
 fi
 
 TS_NAME=""
@@ -271,14 +289,17 @@ echo "════════════════════════�
 echo
 
 if [ "$TS_UP" -eq 1 ] && [ "$TS_SERVED" -eq 1 ]; then
-  green "✅ الشبكة الخاصة موصولة والخدمة منشورة عليها — لا خطوة متبقّية."
+  green "✅ الشبكة الخاصة موصولة والخدمة منشورة عليها ($TS_SERVE_HOW) — لا خطوة متبقّية."
   [ -n "$TS_NAME" ] && echo "   عنوان الخادم:  https://${TS_NAME}"
   echo "   BOOTSTRAP_NETWORK=READY"
 elif [ "$TS_UP" -eq 1 ]; then
-  echo "الخادم منضمّ إلى شبكتك، لكن الخدمة غير منشورة عليها. من الخادم:"
-  echo
-  echo "    tailscale serve --bg 8000"
-  echo "   BOOTSTRAP_NETWORK=SERVE_MISSING"
+  red "⛔ الخادم منضمّ إلى شبكتك، وحاولتُ نشر الخدمة عليه فلم تُنشَر."
+  echo "   التطبيق على الجوال لن يصل إلى الخادم حتى تُنشَر."
+  if [ -n "$TS_SERVE_ERR" ]; then
+    echo "   ما قاله tailscale حرفياً:"
+    printf '%s\n' "$TS_SERVE_ERR" | sed 's/^/     /'
+  fi
+  echo "   BOOTSTRAP_NETWORK=SERVE_FAILED"
 else
   echo "بقيت خطوة واحدة تحتاج موافقتك بالمتصفّح — ربط الخادم بشبكتك الخاصة:"
   echo
