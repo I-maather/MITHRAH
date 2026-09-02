@@ -31,7 +31,12 @@ KEY="${MATHRAH_SSH_KEY:-$HOME/Desktop/Trading/.ssh-maather/maather_hetzner}"
 PHRASE="أوافق على تشغيل التداول التجريبي"
 
 #: الاستراتيجيتان اللتان أعطتا إشارةً أوّلية في مسح التاريخ. **لا اعتماد.**
-STRATEGIES="${DEMO_TRIAL_STRATEGIES:-TREND_PULLBACK_V2,BREAKOUT_RETEST}"
+#: **بالمفتاح الكامل `الاسم@الإصدار`، لا بالاسم.**
+#:
+#: كُتب هنا `TREND_PULLBACK_V2` وهو لا يطابق أي استراتيجية: اسمها
+#: `TREND_PULLBACK` وإصدارها `2.0.0`. فلم تُشغَّل الاستراتيجية الرئيسية
+#: إطلاقاً — بصمت. والاسم وحده لا يكفي أصلاً: v1 وv2 يحملانه معاً.
+STRATEGIES="${DEMO_TRIAL_STRATEGIES:-TREND_PULLBACK@2.0.0,BREAKOUT_RETEST@1.0.0}"
 #: الدقّة — **يومية، ولا خيار غيرها عند هذا الوسيط.**
 #:
 #: كان الافتراض هنا `MINUTE_15` طلباً للتكرار (نحو صفقتين يومياً في المسح

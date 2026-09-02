@@ -1,5 +1,5 @@
 import React from 'react';
-import { View } from 'react-native';
+import { PanResponder, View } from 'react-native';
 
 import type { Candle } from '@/api/types';
 import { useTheme } from '@/theme';
@@ -148,14 +148,104 @@ export function prepareChart(
   return { bars, dropped, scale: buildScale(bars, levels) };
 }
 
+/**
+ * أقلّ ما يُعرَض من الشموع. أقلّ من ثمانٍ لا يُقرأ شكلاً.
+ * (كان هذا التعليق بأسلوب بايثون `#:` سهواً — وهو حرفٌ غير صالح في TS.)
+ */
+export const MIN_VISIBLE = 8;
+
 interface CandleChartProps {
   prepared: PreparedChart;
   testID?: string;
+  /** يُستدعى بعدد المعروض وموضعه، كي تقول الشاشة «٢٠ من ٦٠». */
+  onWindow?: (visible: number, offsetFromEnd: number) => void;
 }
 
-export function CandleChart({ prepared, testID }: CandleChartProps): React.JSX.Element {
+/**
+ * السحب والتقريب — **بلا مكتبة، وبلا حالةٍ تُعاد بناءً في كل إصبع**.
+ *
+ * الشاشة رسمٌ ساكن، والمالكة قالت: «ما أقدر أحرّكه». والتحريك هنا ليس
+ * زخرفة: ستّون شمعة يومية شهران، وفهمُ ما رآه النظام يحتاج النظر فيما
+ * قبلها.
+ *
+ * والتنفيذ بـ`PanResponder` — وهو في React Native نفسها، فلا تبعية جديدة
+ * في تطبيقٍ صُمّم ألّا يحمل ما لا يلزم.
+ */
+export function CandleChart({ prepared, testID, onWindow }: CandleChartProps): React.JSX.Element {
   const theme = useTheme();
-  const { bars, scale } = prepared;
+  const all = prepared.bars;
+
+  /**
+   * النافذة: كم شمعة تُعرض، وكم شمعة بيننا وبين الأحدث.
+   *
+   * تُحفظ في `ref` لا في `state` أثناء الإصبع: تحديثُ الحالة عند كل حركة
+   * يُعيد بناء الشجرة عشرات المرّات في الثانية فيتقطّع السحب. والحالة
+   * تُحدَّث عند نهاية الحركة وحدها.
+   */
+  const [window, setWindow] = React.useState({ visible: all.length, offset: 0 });
+  const start = React.useRef({ visible: all.length, offset: 0 });
+  const spanRef = React.useRef(0);
+
+  const clampedVisible = Math.max(MIN_VISIBLE, Math.min(window.visible, all.length));
+  const maxOffset = Math.max(0, all.length - clampedVisible);
+  const clampedOffset = Math.max(0, Math.min(window.offset, maxOffset));
+  const from = all.length - clampedVisible - clampedOffset;
+  const bars = all.slice(Math.max(0, from), all.length - clampedOffset);
+
+  React.useEffect(() => {
+    // نافذةٌ جديدة عند تبدّل الأداة أو الإطار: تُعاد إلى الكلّ لا إلى
+    // موضعٍ من شموعٍ أخرى — وهو ما يجعل الرسم يبدو «عالقاً».
+    setWindow({ visible: all.length, offset: 0 });
+  }, [all.length]);
+
+  React.useEffect(() => {
+    onWindow?.(bars.length, clampedOffset);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bars.length, clampedOffset]);
+
+  const responder = React.useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onPanResponderGrant: () => {
+          start.current = { visible: clampedVisible, offset: clampedOffset };
+          spanRef.current = 0;
+        },
+        onPanResponderMove: (event, gesture) => {
+          const touches = event.nativeEvent.touches;
+          if (touches.length >= 2) {
+            // إصبعان: تقريب. المسافة بينهما تحدّد كم شمعة تُعرض.
+            const a = touches[0];
+            const b = touches[1];
+            if (a === undefined || b === undefined) return;
+            const span = Math.hypot(a.pageX - b.pageX, a.pageY - b.pageY);
+            if (spanRef.current === 0) {
+              spanRef.current = span;
+              return;
+            }
+            const factor = spanRef.current / Math.max(span, 1);
+            setWindow((w) => ({
+              visible: Math.round(start.current.visible * factor),
+              offset: w.offset,
+            }));
+            return;
+          }
+          // إصبعٌ واحد: تمرير في الزمن. السحب يميناً يذهب إلى الماضي.
+          const perBar = 12;
+          setWindow(() => ({
+            visible: start.current.visible,
+            offset: start.current.offset + Math.round(gesture.dx / perBar),
+          }));
+        },
+      }),
+    [clampedVisible, clampedOffset],
+  );
+
+  const scale = React.useMemo(
+    () => (bars.length > 0 ? buildScale(bars, prepared.scale.drawn) : prepared.scale),
+    [bars, prepared.scale],
+  );
 
   const range = scale.hi - scale.lo || 1;
   /** نسبة من الأعلى: السعر الأعلى عند 0٪. */
@@ -168,6 +258,7 @@ export function CandleChart({ prepared, testID }: CandleChartProps): React.JSX.E
       accessibilityRole="image"
       // قارئ الشاشة لا يقرأ مستطيلات. فالوصف رقمٌ لا شكل.
       accessibilityLabel={`رسم شموع: ${bars.length} شمعة، أعلى ${scale.hi.toFixed(5)}، أدنى ${scale.lo.toFixed(5)}.`}
+      {...responder.panHandlers}
       style={{
         height: CHART_HEIGHT,
         borderRadius: theme.radii.md,

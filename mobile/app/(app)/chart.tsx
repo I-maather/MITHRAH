@@ -51,6 +51,7 @@ export default function ChartScreen(): React.JSX.Element {
 
   const [chosen, setChosen] = React.useState<string | null>(null);
   const [frame, setFrame] = React.useState<string | null>(null);
+  const [shown, setShown] = React.useState<number | null>(null);
 
   if (loading && data === null) {
     return (
@@ -195,7 +196,19 @@ export default function ChartScreen(): React.JSX.Element {
                 {t.chart.viewOnly}
               </Text>
             ) : null}
-            <CandleChart testID="chart-canvas" prepared={prepared} />
+            <CandleChart
+              testID="chart-canvas"
+              prepared={prepared}
+              onWindow={(visible) => {
+                setShown(visible);
+              }}
+            />
+            <Text variant="micro" tone="tertiary" testID="chart-window">
+              {t.chart.gesture}
+              {shown !== null && shown < candles.length
+                ? ` — ${t.chart.showing} ${shown} ${t.chart.of} ${candles.length}`
+                : ''}
+            </Text>
 
             <View style={{ flexDirection: 'row', gap: theme.spacing.lg }}>
               <View style={{ flex: 1 }}>

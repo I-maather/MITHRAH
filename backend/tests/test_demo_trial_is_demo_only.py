@@ -30,7 +30,7 @@ from app.runtime.demo_trial import (
 
 FULL_ENV = {
     DEMO_TRIAL_ENV: "1",
-    DEMO_TRIAL_STRATEGIES_ENV: "TREND_PULLBACK_V2,BREAKOUT_RETEST",
+    DEMO_TRIAL_STRATEGIES_ENV: "TREND_PULLBACK@2.0.0,BREAKOUT_RETEST@1.0.0",
     DEMO_TRIAL_RESOLUTION_ENV: "HOUR",
     DEMO_TRIAL_REFERENCE_ENV: "MAATHER-2026-09-02",
 }
@@ -45,7 +45,7 @@ def broker(*, is_live):
 def test_a_complete_environment_reads_as_active():
     trial = read_demo_trial(FULL_ENV)
     assert trial.enabled and trial.active
-    assert trial.strategies == {"TREND_PULLBACK_V2", "BREAKOUT_RETEST"}
+    assert trial.strategies == {"TREND_PULLBACK@2.0.0", "BREAKOUT_RETEST@1.0.0"}
     assert trial.resolution == "HOUR"
 
 
@@ -112,7 +112,7 @@ def test_only_a_literal_false_opens_the_gate(truthy_but_not_false):
 def test_a_demo_broker_opens_it():
     trial = demo_trial_for(broker(is_live=False), read_demo_trial(FULL_ENV))
     assert trial.active
-    assert trial.strategies == {"TREND_PULLBACK_V2", "BREAKOUT_RETEST"}
+    assert trial.strategies == {"TREND_PULLBACK@2.0.0", "BREAKOUT_RETEST@1.0.0"}
 
 
 # -- البوابة الثانية: عند موضع الاستعمال لا عند موضع البناء ------------------
@@ -128,9 +128,9 @@ def _pipeline(*, is_live, trial_strategies):
     from app.pipeline.runner import Pipeline
 
     class _Strategy:
-        def __init__(self, name, state):
+        def __init__(self, name, version, state):
             self.metadata = SimpleNamespace(
-                name=name, state=SimpleNamespace(value=state)
+                name=name, version=version, state=SimpleNamespace(value=state)
             )
 
         def evaluate(self, **_):
@@ -139,8 +139,9 @@ def _pipeline(*, is_live, trial_strategies):
     return Pipeline(
         broker=SimpleNamespace(is_live=is_live, name="X"),
         risk_engine=None, kill_switch=None, audit=None, execution=None,
-        strategies=[_Strategy("TREND_PULLBACK_V2", "RESEARCH"),
-                    _Strategy("OLD_ONE", "DISABLED")],
+        strategies=[_Strategy("TREND_PULLBACK", "2.0.0", "RESEARCH"),
+                    _Strategy("TREND_PULLBACK", "1.0.0", "RESEARCH"),
+                    _Strategy("OLD_ONE", "1.0.0", "DISABLED")],
         schedule=None, assumptions=None, blackouts=None,
         trial_strategies=frozenset(trial_strategies),
     )
@@ -153,22 +154,22 @@ def _selected(pipeline):
     الوسيط من `runner.py`، بقيت هذه الفحوص خضراء: كانت تختبر النسخة لا
     الأصل. فاستُخرج المنطق إلى `Pipeline.runnable_strategies`.
     """
-    return [s.metadata.name for s in pipeline.runnable_strategies()]
+    return [f"{s.metadata.name}@{s.metadata.version}" for s in pipeline.runnable_strategies()]
 
 
 def test_the_pipeline_itself_refuses_the_trial_on_a_live_broker():
-    p = _pipeline(is_live=True, trial_strategies={"TREND_PULLBACK_V2"})
+    p = _pipeline(is_live=True, trial_strategies={"TREND_PULLBACK@2.0.0"})
     assert _selected(p) == []
 
 
 def test_the_pipeline_runs_the_trial_strategy_on_a_demo_broker():
-    p = _pipeline(is_live=False, trial_strategies={"TREND_PULLBACK_V2"})
-    assert _selected(p) == ["TREND_PULLBACK_V2"]
+    p = _pipeline(is_live=False, trial_strategies={"TREND_PULLBACK@2.0.0"})
+    assert _selected(p) == ["TREND_PULLBACK@2.0.0"]
 
 
 def test_a_disabled_strategy_is_never_run_even_if_named():
     """`DISABLED` قرارُ إيقافٍ صريح — والتجربة لا تنقضه."""
-    p = _pipeline(is_live=False, trial_strategies={"OLD_ONE"})
+    p = _pipeline(is_live=False, trial_strategies={"OLD_ONE@1.0.0"})
     assert _selected(p) == []
 
 
@@ -188,3 +189,23 @@ def test_the_real_pipeline_source_still_carries_both_guards():
     # `run` يستدعي الدالّة ولا يكرّر منطقها — وإلّا عاد الفرع الثاني بلا حارس.
     assert "approved = self.runnable_strategies()" in body
     assert body.count("trial_strategies and getattr") == 1
+
+
+def test_a_name_without_a_version_matches_nothing():
+    """
+    **العطل الذي وقع فعلاً.** كُتب `TREND_PULLBACK_V2` في الإعداد، وهو لا
+    يطابق أي استراتيجية: اسمها `TREND_PULLBACK` وإصدارها `2.0.0`. فلم
+    تُشغَّل الاستراتيجية الرئيسية إطلاقاً — **بصمت**، ولولا ظهور التشخيص
+    على الشاشة لبقي كذلك أياماً.
+    """
+    p = _pipeline(is_live=False, trial_strategies={"TREND_PULLBACK_V2"})
+    assert _selected(p) == []
+
+
+def test_a_bare_name_does_not_run_two_versions_at_once():
+    """
+    v1 وv2 يحملان الاسم نفسه. فمطابقةُ الاسم وحده تُشغّل الاثنين — ومنهما
+    واحدةٌ كُتبت لأسهمٍ أمريكية ولا تقبل الفوركس.
+    """
+    p = _pipeline(is_live=False, trial_strategies={"TREND_PULLBACK"})
+    assert _selected(p) == []

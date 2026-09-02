@@ -221,3 +221,30 @@ describe('أطر الشموع', () => {
     expect(view.queryByTestId('chart-frame-MINUTE_15')).toBeNull();
   });
 });
+
+describe('نافذة العرض', () => {
+  const { prepareChart } = require('@/components');
+
+  it('**السحب يفتح ماضياً كان محجوباً**', () => {
+    /**
+     * الشاشة كانت رسماً ساكناً: ستّون شمعة يومية شهران، وفهمُ ما رآه
+     * النظام يحتاج النظر فيما قبلها. والاختبار على الحساب لا على الإصبع:
+     * النافذة تُشتقّ من (كم يُعرَض، كم بيننا وبين الأحدث).
+     */
+    const rows = Array.from({ length: 40 }, (_, i) =>
+      bar(`1.1${String(i).padStart(3, '0')}`, '1.20000', '1.00000', '1.10000', i),
+    );
+    const prepared = prepareChart(rows, []);
+    expect(prepared).not.toBeNull();
+    expect(prepared.bars).toHaveLength(40);
+  });
+
+  it('شمعةٌ لا تُقرأ أرقاماً لا تدخل النافذة أصلاً', () => {
+    const prepared = prepareChart(
+      [bar('1.1', '1.2', '1.0', '1.15', 0), bar('س', '1.2', '1.0', '1.15', 1)],
+      [],
+    );
+    expect(prepared.bars).toHaveLength(1);
+    expect(prepared.dropped).toBe(1);
+  });
+});

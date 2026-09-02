@@ -111,6 +111,12 @@ class PipelineResult:
         return f"لا تداول اليوم — {self.reason_ar}"
 
 
+def strategy_key(strategy) -> str:
+    """`الاسم@الإصدار` بحروفٍ كبيرة — الهوية الوحيدة التي تُطابَق بها."""
+    meta = strategy.metadata
+    return f"{meta.name}@{meta.version}".upper()
+
+
 class Pipeline:
     def __init__(
         self,
@@ -162,6 +168,16 @@ class Pipeline:
         فالمنطق هنا، ويُستدعى من الاختبار كما يُستدعى من `run`.
         """
         approved = [s for s in self.strategies if s.metadata.state.value == "APPROVED"]
+        # **المطابقة بالمفتاح الكامل `الاسم@الإصدار` لا بالاسم.**
+        #
+        # `TrendPullbackV1` و`TrendPullbackV2` يحملان الاسم نفسه
+        # (`TREND_PULLBACK`) ويختلفان بالإصدار. فمطابقةُ الاسم وحده تُشغّل
+        # الاثنين معاً — ومنهما واحدةٌ كُتبت لأسهمٍ أمريكية.
+        #
+        # وقد وقع الأسوأ من ذلك فعلاً: كُتب في الإعداد `TREND_PULLBACK_V2`
+        # وهو **لا يطابق أي استراتيجية**، فلم تُشغَّل الاستراتيجية الرئيسية
+        # إطلاقاً — **بصمت**. اسمٌ في إعدادٍ لا يوافق هويّةً في السجلّ، ولا
+        # أحد يقول شيئاً. وهو العطل الحاكم في هذا المشروع مرّةً أخرى.
         # الاستثناء التجريبي — مقفلٌ على الوسيط **هنا**، عند موضع الاستعمال،
         # لا عند موضع البناء وحده. و`getattr(..., True)` تُغلق عند غياب
         # الصفة: وسيطٌ لا نعرف نوعه يُعامَل معاملة الحقيقي.
@@ -170,7 +186,7 @@ class Pipeline:
             approved += [
                 s for s in self.strategies
                 if id(s) not in already
-                and s.metadata.name.upper() in self.trial_strategies
+                and strategy_key(s) in self.trial_strategies
                 and s.metadata.state.value != "DISABLED"
             ]
         return approved

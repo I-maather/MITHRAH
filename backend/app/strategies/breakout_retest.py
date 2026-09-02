@@ -34,6 +34,7 @@ from typing import Optional, Sequence
 
 from ..contracts import Bar, Quote, Side, Signal, StrategyState
 from .base import Strategy, StrategyMetadata
+from .assessment import Assessment, Recorder
 from .fx_common import D, FX_MARKETS, closes, sane_levels
 from .indicators import atr, bollinger, highest_high, lowest_low
 
@@ -97,14 +98,26 @@ class BreakoutRetest(Strategy):
     def evaluate(
         self, *, symbol: str, bars: Sequence[Bar], quote: Quote, now: datetime
     ) -> Optional[Signal]:
+        """القرار وحده — لم يتغيّر. التشخيص في `assess`."""
+        return self.assess(symbol=symbol, bars=bars, quote=quote, now=now).signal
+
+    def assess(
+        self, *, symbol: str, bars: Sequence[Bar], quote: Quote, now: datetime
+    ) -> Assessment:
+        """نفس القرار، ومعه سببه بالأرقام."""
+        r = Recorder()
         if symbol not in self.metadata.markets:
-            return None
+            return r.fail("الأداة", f"{symbol} ليس من أسواق هذه الاستراتيجية.")
         if len(bars) < self.metadata.min_bars_required:
-            return None
+            return r.fail(
+                "عدد الشموع",
+                f"{len(bars)} شمعة، والمطلوب {self.metadata.min_bars_required}.",
+            )
 
         volatility = atr(bars, ATR_PERIOD)
         if volatility is None or volatility <= 0:
-            return None
+            return r.fail("التقلّب", "ATR14 صفر أو غير محسوب — لا وقف يُقاس.")
+        r.ok("التقلّب", f"ATR14 = {volatility:.5f}")
 
         prices = closes(bars)
 
@@ -114,7 +127,7 @@ class BreakoutRetest(Strategy):
         before = prices[:-RETEST_WINDOW]
         squeeze_band = bollinger(before, BAND_PERIOD)
         if squeeze_band is None:
-            return None
+            return r.fail("الضغط", "تعذّر حساب نطاق بولنجر قبل نافذة الاختراق.")
         widths = []
         for end in range(len(before) - SQUEEZE_LOOKBACK, len(before) + 1):
             window = before[:end]
@@ -122,29 +135,54 @@ class BreakoutRetest(Strategy):
             if band is not None:
                 widths.append(band.width)
         if not widths:
-            return None
+            return r.fail("الضغط", "لا عرض نطاقٍ محسوب في نافذة الخمسين شمعة.")
         widest = max(widths)
         if widest <= 0 or squeeze_band.width > widest * SQUEEZE_RATIO:
-            return None
+            return r.fail(
+                "الضغط",
+                f"عرض النطاق {squeeze_band.width:.5f} فوق نصف أوسعه "
+                f"({widest:.5f}) — لا ضغط سبق الاختراق.",
+            )
+        r.ok(
+            "الضغط",
+            f"عرض النطاق {squeeze_band.width:.5f} دون نصف أوسعه ({widest:.5f}).",
+        )
 
         # --- الاختراق: مستوىً من قبل النافذة، اختُرق داخلها ---------------
         prior = bars[:-RETEST_WINDOW]
         resistance = highest_high(prior, RANGE_PERIOD)
         support = lowest_low(prior, RANGE_PERIOD)
         if resistance is None or support is None:
-            return None
+            return r.fail("المستويات", "تعذّر حساب أعلى قمّة أو أدنى قاع قبل النافذة.")
 
         window_bars = bars[-RETEST_WINDOW:]
         last = bars[-1]
         broke_up = any(b.close > resistance for b in window_bars[:-1])
         broke_down = any(b.close < support for b in window_bars[:-1])
         if broke_up == broke_down:            # لا اختراق، أو اختراقان متضادّان
-            return None
+            return r.fail(
+                "الاختراق",
+                (
+                    "لا إغلاق خارج النطاق في آخر خمس شموع "
+                    f"(مقاومة {resistance:.5f} · دعم {support:.5f})."
+                )
+                if not broke_up
+                else "اختراقان متضادّان في النافذة — إشارة متناقضة.",
+            )
+        r.ok(
+            "الاختراق",
+            f"إغلاقٌ {'فوق المقاومة' if broke_up else 'تحت الدعم'} "
+            f"{resistance if broke_up else support:.5f} خلال آخر خمس شموع.",
+        )
 
         if broke_up:
             # إعادة اختبار: لامست المستوى من فوق ولم تُغلق تحته.
             if not (last.low <= resistance and last.close > resistance):
-                return None
+                return r.fail(
+                    "إعادة الاختبار",
+                    f"أدنى الشمعة {last.low:.5f} وإغلاقها {last.close:.5f} "
+                    f"مقابل المستوى {resistance:.5f} — لم يقع اختبارٌ ناجح.",
+                )
             long = True
             level = resistance
             entry = quote.ask
@@ -153,7 +191,11 @@ class BreakoutRetest(Strategy):
             side = Side.BUY
         else:
             if not (last.high >= support and last.close < support):
-                return None
+                return r.fail(
+                    "إعادة الاختبار",
+                    f"أعلى الشمعة {last.high:.5f} وإغلاقها {last.close:.5f} "
+                    f"مقابل المستوى {support:.5f} — لم يقع اختبارٌ ناجح.",
+                )
             long = False
             level = support
             entry = quote.bid
@@ -161,11 +203,17 @@ class BreakoutRetest(Strategy):
             target = entry - ATR_TARGET * volatility
             side = Side.SELL
 
+        r.ok("إعادة الاختبار", f"لامست المستوى {level:.5f} ولم تُغلق خلفه.")
+
         if not sane_levels(entry=entry, stop=stop, target=target, long=long):
-            return None
+            return r.fail(
+                "المستويات",
+                f"دخول {entry:.5f} · وقف {stop:.5f} · هدف {target:.5f} — ترتيبٌ غير منطقي.",
+            )
+        r.ok("المستويات", f"دخول {entry:.5f} · وقف {stop:.5f} · هدف {target:.5f}")
 
         direction_ar = "صعودي" if long else "هبوطي"
-        return Signal(
+        return r.signal(Signal(
             strategy_name=self.metadata.name,
             strategy_version=self.metadata.version,
             symbol=symbol,
@@ -186,4 +234,4 @@ class BreakoutRetest(Strategy):
                 f"إغلاقٌ خلف {level:.5f} يعني اختراقاً كاذباً ويلغي الفرضية."
             ),
             inputs_digest=self.inputs_digest(symbol, bars),
-        )
+        ))

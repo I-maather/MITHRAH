@@ -279,10 +279,28 @@ def build_system(settings: Settings | None = None) -> SystemState:
             logging.getLogger(__name__).warning(
                 "الوسيط لا يقبل قفل تنفيذ — التجربة لن تنفّذ."
             )
+    # **اسمٌ لا يطابق شيئاً يُقال، لا يُبتلَع.**
+    #
+    # كُتب في الإعداد `TREND_PULLBACK_V2` وهو لا يطابق أي استراتيجية
+    # (اسمها `TREND_PULLBACK` وإصدارها `2.0.0`). فلم تُشغَّل الاستراتيجية
+    # الرئيسية إطلاقاً — بصمت، ولأيامٍ لو لم يظهر التشخيص على الشاشة.
+    from ..pipeline.runner import strategy_key
+
+    known = {strategy_key(s) for s in registry.all()}
+    unmatched = sorted(trial.strategies - known)
+    trial_note = trial.note_ar
+    if unmatched:
+        trial_note = (
+            f"{trial.note_ar} ⚠️ أسماءٌ في الإعداد لا تطابق أي استراتيجية: "
+            f"{'، '.join(unmatched)}. المتاح: {'، '.join(sorted(known))}."
+        )
     audit.record(
         actor=Actor.OWNER, action=AuditAction.CONFIG_CHANGE,
-        decision="DEMO_TRIAL_ACTIVE" if trial.active else "DEMO_TRIAL_OFF",
-        reason_ar=trial.note_ar, source="build_system",
+        decision=(
+            "DEMO_TRIAL_PARTIAL" if (trial.active and unmatched)
+            else "DEMO_TRIAL_ACTIVE" if trial.active else "DEMO_TRIAL_OFF"
+        ),
+        reason_ar=trial_note, source="build_system",
     )
 
     # C1: حالة المخاطرة تُقرأ من جدول الصفقات، لا تُثبَّت على صفر.
@@ -310,7 +328,7 @@ def build_system(settings: Settings | None = None) -> SystemState:
         settings=settings, broker=broker, audit=audit, kill_switch=kill_switch,
         risk_engine=risk_engine, execution=execution, registry=registry, pipeline=pipeline,
         blackouts=blackouts, limits=limits, session_state=state,
-        candle_resolution=trial.resolution, demo_trial_note_ar=trial.note_ar,
+        candle_resolution=trial.resolution, demo_trial_note_ar=trial_note,
         instruments=instruments, instruments_note_ar=instruments_note,
         cost_model=CapitalComCostModel(PROVISIONAL_EURUSD),
         execution_lock=trial_lock,
