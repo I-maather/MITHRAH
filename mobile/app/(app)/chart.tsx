@@ -50,6 +50,7 @@ export default function ChartScreen(): React.JSX.Element {
   });
 
   const [chosen, setChosen] = React.useState<string | null>(null);
+  const [frame, setFrame] = React.useState<string | null>(null);
 
   if (loading && data === null) {
     return (
@@ -77,7 +78,19 @@ export default function ChartScreen(): React.JSX.Element {
     ? (data.levels.symbol as string)
     : (symbols[0] ?? null);
   const active = chosen !== null && symbols.includes(chosen) ? chosen : fallback;
-  const candles: Candle[] = active === null ? [] : (data.instruments[active] ?? []);
+  const perFrame: Record<string, Candle[]> =
+    active === null ? {} : (data.instruments[active] ?? {});
+
+  /**
+   * الإطار المعروض. الافتراض **إطار القرار** — فهو ما يُقاس عليه فعلاً،
+   * وعرضُ غيره ابتداءً يوحي بأن النظام يقرّر عليه.
+   */
+  const available = (data.resolutions ?? []).filter((r) => perFrame[r] !== undefined);
+  const fallbackFrame = available.includes(data.decision_resolution)
+    ? data.decision_resolution
+    : (available[0] ?? null);
+  const activeFrame = frame !== null && available.includes(frame) ? frame : fallbackFrame;
+  const candles: Candle[] = activeFrame === null ? [] : (perFrame[activeFrame] ?? []);
 
   /**
    * المستويات — لأداة المركز وحدها، وبعد قراءتها أرقاماً.
@@ -146,7 +159,42 @@ export default function ChartScreen(): React.JSX.Element {
             ))}
           </View>
 
-          <Card testID="chart-card" title={active ?? '—'}>
+          {/* منتقي الإطار. وإطار القرار موسومٌ صراحةً: تصفّح إطارٍ آخر
+              لا يعني أن النظام يقرّر عليه، وقيدُ الوسيط يمنع التداول على
+              ما دون اليومي أصلاً. */}
+          {available.length > 1 ? (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.sm }}>
+              {available.map((resolution) => (
+                <View key={resolution} style={{ minWidth: 88 }}>
+                  <Button
+                    testID={`chart-frame-${resolution}`}
+                    label={
+                      resolution === data.decision_resolution
+                        ? `${t.chart.frames[resolution] ?? resolution} ★`
+                        : (t.chart.frames[resolution] ?? resolution)
+                    }
+                    kind={resolution === activeFrame ? 'primary' : 'secondary'}
+                    onPress={() => {
+                      setFrame(resolution);
+                    }}
+                    accessibilityLabel={`${t.chart.frame}: ${t.chart.frames[resolution] ?? resolution}`}
+                    accessibilityHint={
+                      resolution === data.decision_resolution
+                        ? t.chart.decisionFrameHint
+                        : t.chart.viewOnlyFrameHint
+                    }
+                  />
+                </View>
+              ))}
+            </View>
+          ) : null}
+
+          <Card testID="chart-card" title={`${active ?? '—'} · ${t.chart.frames[activeFrame ?? ''] ?? activeFrame ?? ''}`}>
+            {activeFrame !== null && activeFrame !== data.decision_resolution ? (
+              <Text variant="caption" tone="caution" testID="chart-view-only">
+                {t.chart.viewOnly}
+              </Text>
+            ) : null}
             <CandleChart testID="chart-canvas" prepared={prepared} />
 
             <View style={{ flexDirection: 'row', gap: theme.spacing.lg }}>

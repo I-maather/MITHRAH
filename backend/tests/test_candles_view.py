@@ -41,13 +41,16 @@ class Session:
 class Sys:
     def __init__(self, bars=None) -> None:
         self.last_bars = bars if bars is not None else {}
+        #: أطر العرض — منفصلة عن `last_bars` الذي يقرأه القرار.
+        self.chart_bars: dict = {}
+        self.candle_resolution = "DAY"
         self.session_state = Session()
 
 
 def test_the_candles_reach_the_phone_with_all_four_prices():
     view = _candles(Sys({"EURUSD": [bar(0), bar(1)]}))
     assert view["symbols"] == ["EURUSD"]
-    row = view["instruments"]["EURUSD"][0]
+    row = view["instruments"]["EURUSD"]["DAY"][0]
     assert set(row) == {"t", "o", "h", "l", "c"}
     assert row["h"] == "1.1010" and row["l"] == "1.0990"
 
@@ -58,7 +61,7 @@ def test_prices_are_strings_not_floats():
     يُدخل خطأ تقريبٍ على سعرٍ من خمس خانات — وهو ما بُني كل الحساب العشري
     في هذا المشروع لتجنّبه.
     """
-    row = _candles(Sys({"EURUSD": [bar(0)]}))["instruments"]["EURUSD"][0]
+    row = _candles(Sys({"EURUSD": [bar(0)]}))["instruments"]["EURUSD"]["DAY"][0]
     for key in ("o", "h", "l", "c"):
         assert isinstance(row[key], str), f"{key} ليس نصاً"
 
@@ -75,8 +78,10 @@ def test_the_note_admits_the_candles_are_as_old_as_the_decision():
     مصدره — وهو صنف العطل الحاكم لهذا المشروع.
     """
     view = _candles(Sys({"EURUSD": [bar(0)]}))
-    assert "آخر دورة مسح" in view["note_ar"]
+    assert "لا أحدث منها" in view["note_ar"]
     assert "مباشر" not in view["note_ar"]
+    # ويُسمّى إطار القرار صراحةً: تصفّحُ إطارٍ آخر لا يعني أن القرار يُقاس عليه.
+    assert view["decision_resolution"] in view["note_ar"]
 
 
 def test_position_levels_are_null_when_there_is_no_position():
@@ -154,8 +159,49 @@ def test_five_decimal_candles_survive_the_journey():
         symbol="EURUSD", start_utc=NOW, open=D("1.15876"), high=D("1.15904"),
         low=D("1.15841"), close=D("1.15869"), volume=D(0), source=DataSource.HISTORICAL,
     )
-    row = _candles(Sys({"EURUSD": [detailed]}))["instruments"]["EURUSD"][0]
+    row = _candles(Sys({"EURUSD": [detailed]}))["instruments"]["EURUSD"]["DAY"][0]
     assert row == {
         "t": NOW.isoformat(), "o": "1.15876", "h": "1.15904",
         "l": "1.15841", "c": "1.15869",
     }
+
+
+# ---------------------------------------------------------------------------
+# أطر متعددة — للعرض لا للقرار
+# ---------------------------------------------------------------------------
+
+def test_every_fetched_timeframe_reaches_the_phone():
+    """
+    طلبت المالكة بقيّة الشموع (٤ ساعات · ساعة · نصف · ربع). وهي **للعرض**:
+    قيدُ الوسيط (أدنى وقف 100 نقطة) يمنع التداول على ما دون اليومي.
+    """
+    sys = Sys({})
+    sys.chart_bars = {
+        "EURUSD": {"DAY": [bar(0)], "HOUR_4": [bar(1)], "MINUTE_15": [bar(2)]}
+    }
+    view = _candles(sys)
+    assert set(view["instruments"]["EURUSD"]) == {"DAY", "HOUR_4", "MINUTE_15"}
+    # مرتّبة من الأطول إلى الأقصر، لا بحسب ما جُلب أوّلاً.
+    assert view["resolutions"] == ["DAY", "HOUR_4", "MINUTE_15"]
+
+
+def test_the_decision_frame_is_named_and_never_guessed():
+    sys = Sys({"EURUSD": [bar(0)]})
+    sys.candle_resolution = "DAY"
+    view = _candles(sys)
+    assert view["decision_resolution"] == "DAY"
+    # وإطار القرار يظهر ولو لم تدُر دورة الرسم بعد.
+    assert "DAY" in view["instruments"]["EURUSD"]
+
+
+def test_browsing_another_frame_does_not_touch_what_the_decision_reads():
+    """
+    الفصل بين `chart_bars` و`last_bars` ليس تنظيماً: خلطُهما يجعل تغيير
+    إطار العرض يغيّر ما يُقاس عليه القرار — وهو أسوأ ما يقع في نظام قرار.
+    """
+    sys = Sys({"EURUSD": [bar(0)]})
+    sys.chart_bars = {"EURUSD": {"MINUTE_15": [bar(1), bar(2)]}}
+    view = _candles(sys)
+    assert view["decision_resolution"] == "DAY"
+    assert len(view["instruments"]["EURUSD"]["DAY"]) == 1
+    assert len(view["instruments"]["EURUSD"]["MINUTE_15"]) == 2

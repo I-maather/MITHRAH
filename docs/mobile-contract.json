@@ -379,7 +379,20 @@
         "reason_code": "string",
         "reason_ar": "string",
         "stage": "string",
-        "needs_a_hand": "boolean"
+        "needs_a_hand": "boolean",
+        "strategies": [
+          {
+            "key": "string",
+            "summary_ar": "string",
+            "checks": [
+              {
+                "name_ar": "string",
+                "passed": "boolean",
+                "detail_ar": "string"
+              }
+            ]
+          }
+        ]
       }
     ],
     "scanned": "number",
@@ -388,19 +401,34 @@
   },
   "candles": {
     "instruments": {
-      "EURUSD": [
-        {
-          "t": "string",
-          "o": "string",
-          "h": "string",
-          "l": "string",
-          "c": "string"
-        }
-      ]
+      "EURUSD": {
+        "DAY": [
+          {
+            "t": "string",
+            "o": "string",
+            "h": "string",
+            "l": "string",
+            "c": "string"
+          }
+        ],
+        "HOUR_4": [
+          {
+            "t": "string",
+            "o": "string",
+            "h": "string",
+            "l": "string",
+            "c": "string"
+          }
+        ]
+      }
     },
     "symbols": [
       "string"
     ],
+    "resolutions": [
+      "string"
+    ],
+    "decision_resolution": "string",
     "levels": {
       "symbol": "nullable",
       "entry": "nullable",

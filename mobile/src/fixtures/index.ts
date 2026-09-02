@@ -314,9 +314,19 @@ const performance: PerformanceData = {
 const scan: ScanData = {
   instruments: [
     {
-      symbol: 'EURUSD', decision: 'NO_TRADE', reason_code: 'NO_APPROVED_STRATEGY',
-      reason_ar: 'لا استراتيجية معتمدة — الثلاث ما زالت قيد البحث.',
+      symbol: 'EURUSD', decision: 'NO_TRADE', reason_code: 'NO_SETUP',
+      reason_ar: 'لا فرصة مطابقة.',
       stage: 'strategy', needs_a_hand: false,
+      strategies: [
+        {
+          key: 'TREND_PULLBACK@2.0.0',
+          summary_ar: 'الظرف: ADX14 = 18.3 دون 25 — سوقٌ متذبذب لا متّجه.',
+          checks: [
+            { name_ar: 'المؤشرات', passed: true, detail_ar: 'EMA10 = 1.10420 · EMA30 = 1.10310 · ATR14 = 0.00810' },
+            { name_ar: 'الظرف', passed: false, detail_ar: 'ADX14 = 18.3 دون 25 — سوقٌ متذبذب لا متّجه.' },
+          ],
+        },
+      ],
     },
     {
       symbol: 'GBPUSD', decision: 'NO_TRADE', reason_code: 'NO_APPROVED_STRATEGY',
@@ -417,8 +427,10 @@ const previewCandles = (): Candle[] => {
 };
 
 const candles: CandlesData = {
-  instruments: { EURUSD: previewCandles() },
+  instruments: { EURUSD: { DAY: previewCandles(), HOUR_4: previewCandles() } },
   symbols: ['EURUSD'],
+  resolutions: ['DAY', 'HOUR_4'],
+  decision_resolution: 'DAY',
   // لا مركز في المعاينة ⇒ أربعتها `null`. وصفرٌ هنا كان يرسم خطّاً عند الصفر
   // فيسحب المقياس ويجعل الشموع خيطاً.
   levels: { symbol: null, entry: null, stop: null, target: null },

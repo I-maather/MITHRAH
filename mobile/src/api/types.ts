@@ -441,6 +441,8 @@ export interface ScanInstrument {
   stage: string | null;
   /** عطلٌ عندنا لا حالةُ سوق — يُعرض مميَّزاً لأنه يحتاج يداً. */
   needs_a_hand: boolean;
+  /** فارغةٌ حين يقف الخط قبل مرحلة الاستراتيجية — وذلك صادق: لم تُسأل. */
+  strategies?: StrategyAssessment[];
 }
 
 /**
@@ -450,6 +452,26 @@ export interface ScanInstrument {
  * لم أتداول». والأربعة هنا غير قابلة للغياب (`__non_nullable_paths__`):
  * تُقرأ في كل عرض بلا حارس.
  */
+/** شرطٌ واحد من شروط الاستراتيجية، وحكمه، **ورقمه**. */
+export interface StrategyCheck {
+  name_ar: string;
+  passed: boolean;
+  detail_ar: string;
+}
+
+/**
+ * تشخيص استراتيجيةٍ واحدة على أداةٍ واحدة.
+ *
+ * كان الرفض جملةً واحدة («لا فرصة مطابقة») هي نفسها سواء كان ADX عند 24.9
+ * أو عند 8 — والفرق بينهما هو الفرق بين «انتظري» و«الاستراتيجية في السوق
+ * الخطأ».
+ */
+export interface StrategyAssessment {
+  key: string;
+  summary_ar: string;
+  checks: StrategyCheck[];
+}
+
 export interface ScanData {
   instruments: ScanInstrument[];
   scanned: number;
@@ -499,10 +521,19 @@ export interface CandleLevels {
  * «مباشر» أبداً.
  */
 export interface CandlesData {
-  /** خريطة: رمز الأداة ⇐ شموعها بالترتيب الزمني. */
-  instruments: Record<string, Candle[]>;
+  /** خريطة: أداة ⇐ إطار ⇐ شموعه بالترتيب الزمني. */
+  instruments: Record<string, Record<string, Candle[]>>;
   /** الرموز مرتّبة — الخادم يرتّبها فلا تختلف الشاشة عن السجلّ. */
   symbols: string[];
+  /** الأطر المتاحة، من الأطول إلى الأقصر. الترتيب من الخادم لا من العميل. */
+  resolutions: string[];
+  /**
+   * الإطار الذي **يُقاس عليه القرار**.
+   *
+   * يُعرض مميَّزاً: تصفّح إطارٍ آخر لا يعني أن النظام يقرّر عليه. وقيدُ
+   * الوسيط (أدنى وقف 100 نقطة) يمنع التداول على ما دون اليومي أصلاً.
+   */
+  decision_resolution: string;
   levels: CandleLevels;
   note_ar: string;
 }

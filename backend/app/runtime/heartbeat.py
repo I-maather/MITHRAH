@@ -46,6 +46,7 @@ logger = logging.getLogger(__name__)
 
 DECISION_JOB = "decision-loop"
 CALENDAR_JOB = "calendar-refresh"
+CHART_JOB = "chart-refresh"
 BROKER_JOB = "broker-keepalive"
 
 #: تواتر إعادة التقييم. قصيرٌ كفايةً ليبدو حياً، وطويلٌ كفايةً ألّا يُرهق
@@ -69,6 +70,22 @@ BLACKOUT_AFTER = timedelta(minutes=30)
 
 #: كم يوماً تُحفَظ تأكيداته. يومان يكفيان القرار، والباقي نموٌّ بلا فائدة.
 CONFIRMED_DAYS_KEPT = 2
+
+#: أطر الرسم التي تُجلَب للعرض. **للعرض لا للقرار**: القرار يقرأ إطاره
+#: وحده (`candle_resolution`)، وقيدُ الوسيط يمنع التداول على ما دون اليومي
+#: — أدنى وقفٍ 100 نقطة، ووقف الاستراتيجيات 1.5×ATR وهو 8-90 نقطة تحته.
+CHART_RESOLUTIONS: tuple[str, ...] = ("DAY", "HOUR_4", "HOUR", "MINUTE_30", "MINUTE_15")
+
+#: **زوجٌ واحد في كل دورة**، بالتناوب.
+#:
+#: أوّل كتابةٍ جلبت الأطر كلّها في نداءٍ واحد مع `sleep` بينها. وهي خطأ من
+#: وجهين: `sleep` داخل مهمّةٍ يحجز خيط الجدولة فيتأخّر القرار خلفه، ودفعةٌ
+#: من عشرين نداءً دفعةً واحدة تصطدم بحدّ معدّل الوسيط — وقد رُصد ذلك في
+#: مسح التاريخ.
+#:
+#: فالجلب الآن زوجٌ واحد كل عشرين ثانية بالتناوب: لا نوم، ولا دفعة، ودورةٌ
+#: كاملة على عشرين زوجاً في نحو سبع دقائق.
+CHART_REFRESH_SECONDS = 20
 
 #: تواتر إبقاء جلسة الوسيط حيّة وإعادة وصلها.
 #:
@@ -356,6 +373,38 @@ def register_runtime_jobs(state, *, interval_seconds: int = DEFAULT_INTERVAL_SEC
         # عند منتصف الليل إلى أن تدور المهمة من جديد.
         state.blackouts.confirmed_for.add((now + timedelta(days=1)).date())
         _prune_confirmations(state.blackouts.confirmed_for, now.date())
+
+    def refresh_chart() -> None:
+        """
+        يجلب **زوجاً واحداً** (أداة، إطار) في كل دورة، بالتناوب. `READ_ONLY`.
+
+        **منفصلة عن حلقة القرار عمداً.** القرار يقرأ إطاره وحده؛ وهذه تملأ
+        أطر العرض. وخلطُهما يجعل تصفّح المالكة لإطارٍ آخر يغيّر ما يُقاس
+        عليه القرار — وهو أسوأ ما يقع في نظام قرار.
+
+        وإخفاق زوجٍ لا يمحو ما سبقه: القيمة القديمة تبقى، ولا يُترك فراغ.
+        """
+        symbols = sorted(getattr(state.limits, "allowed_instruments", ()) or ())
+        store = getattr(state, "chart_bars", None)
+        if not symbols or store is None:
+            return
+        pairs = [(sym, res) for sym in symbols for res in CHART_RESOLUTIONS]
+        index = getattr(state, "_chart_cursor", 0) % len(pairs)
+        state._chart_cursor = index + 1
+        symbol, resolution = pairs[index]
+        try:
+            rows = _bars(state.broker, symbol, resolution)
+        except Exception:  # noqa: BLE001
+            return
+        if rows:
+            store.setdefault(symbol, {})[resolution] = list(rows[-CHART_BARS:])
+
+    state.scheduler.register(
+        CHART_JOB,
+        kind=JobKind.READ_ONLY,
+        interval=timedelta(seconds=CHART_REFRESH_SECONDS),
+        func=refresh_chart,
+    )
 
     state.scheduler.register(
         CALENDAR_JOB,

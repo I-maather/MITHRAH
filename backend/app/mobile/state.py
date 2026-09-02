@@ -554,6 +554,13 @@ def _scan(sys: Any) -> dict[str, Any]:
     }
 
 
+#: ترتيب الأطر من الأطول إلى الأقصر — للعرض، كي لا يختلف ترتيبها بين نداءٍ
+#: وآخر بحسب ما جُلب أوّلاً.
+CHART_RESOLUTION_ORDER: tuple[str, ...] = (
+    "DAY", "HOUR_4", "HOUR", "MINUTE_30", "MINUTE_15",
+)
+
+
 def _candles(sys: Any) -> dict[str, Any]:
     """
     الشموع كما رآها النظام — **من الذاكرة لا من الشبكة**.
@@ -574,24 +581,47 @@ def _candles(sys: Any) -> dict[str, Any]:
     فتختلف الشاشة عن القرار في العدد نفسه. والشاشة ترسم السعر ومستويات
     المركز، والباقي يأتي من `scan/latest` بنصّه.
     """
-    stored = dict(getattr(sys, "last_bars", {}) or {})
-    instruments: dict[str, Any] = {}
-    for symbol, bars in stored.items():
-        rows = []
-        for bar in bars:
-            rows.append({
+    def rows_of(bars) -> list[dict[str, Any]]:
+        return [
+            {
                 "t": _iso(getattr(bar, "start_utc", None)),
                 "o": _price(getattr(bar, "open", None)),
                 "h": _price(getattr(bar, "high", None)),
                 "l": _price(getattr(bar, "low", None)),
                 "c": _price(getattr(bar, "close", None)),
-            })
-        instruments[symbol] = rows
+            }
+            for bar in bars
+        ]
+
+    decision_resolution = str(getattr(sys, "candle_resolution", "DAY"))
+    charts = dict(getattr(sys, "chart_bars", {}) or {})
+    decided = dict(getattr(sys, "last_bars", {}) or {})
+
+    instruments: dict[str, Any] = {}
+    for symbol in sorted(set(charts) | set(decided)):
+        per_resolution: dict[str, Any] = {}
+        for resolution, bars in (charts.get(symbol) or {}).items():
+            per_resolution[str(resolution)] = rows_of(bars)
+        # إطار القرار يُضاف من `last_bars` إن لم يكن قد جُلب للرسم بعد:
+        # الرسم يتحدّث كل عشر دقائق، والقرار كل دقيقة — فأوّل دقائق التشغيل
+        # يكون إطار القرار وحده موجوداً، ولا يصحّ أن تُرى الشاشة فارغة.
+        if decision_resolution not in per_resolution and symbol in decided:
+            per_resolution[decision_resolution] = rows_of(decided[symbol])
+        if per_resolution:
+            instruments[symbol] = per_resolution
+
+    resolutions = sorted(
+        {r for per in instruments.values() for r in per},
+        key=lambda r: CHART_RESOLUTION_ORDER.index(r) if r in CHART_RESOLUTION_ORDER else 99,
+    )
 
     position = _position(sys)
     return {
         "instruments": instruments,
         "symbols": sorted(instruments),
+        "resolutions": resolutions,
+        # الإطار الذي يُقاس عليه القرار — يُميَّز في الشاشة عن أطر العرض.
+        "decision_resolution": decision_resolution,
         "levels": {
             # مستويات المركز المفتوح — تُرسَم على السعر. و`None` تعني
             # «لا مركز»، لا «صفر».
@@ -603,34 +633,90 @@ def _candles(sys: Any) -> dict[str, Any]:
         "note_ar": (
             "لم تُقرأ شموعٌ بعد — دورة المسح لم تكتمل."
             if not instruments
-            else "الشموع كما رآها النظام في آخر دورة مسح، لا أحدث منها."
+            else (
+                "الشموع كما رآها النظام، لا أحدث منها. "
+                f"والقرار يُقاس على إطار {decision_resolution} وحده — "
+                "وقيدُ الوسيط يمنع التداول على ما دونه."
+            )
         ),
     }
 
 
-def build_mobile_state(sys: Any) -> dict[str, Any]:
+class _LazySections(dict):
+    """
+    أقسام الحالة **تُبنى عند الطلب لا كلّها في كل نداء**.
+
+    ## لماذا
+
+    `build_mobile_state` يُستدعى عند **كل** طلب قراءة، وكان يبني الأقسام
+    الاثني عشر كلّها ثم يُرمى أحد عشر منها. وكان ذلك محتملاً حين كان قسم
+    الشموع إطاراً واحداً؛ ولمّا صار خمسة أطر لثلاث أدوات، صار كل استعلام
+    عن الحالة يحمل مئات الشموع التي لم تُطلَب.
+
+    وهذا القاموس يحفظ **دوالّ** لا قيماً، ويستدعي الدالّة عند أوّل قراءةٍ
+    لمفتاحها ويحفظ ناتجها. فالسلوك من الخارج قاموسٌ عادي (`.get`, `[]`,
+    `in`) — ولا تتغيّر طبقة الـAPI حرفاً.
+    """
+
+    def __init__(self, builders: dict[str, Any]) -> None:
+        super().__init__()
+        self._builders = builders
+        self._built: dict[str, Any] = {}
+
+    def __getitem__(self, key: str) -> Any:
+        if key not in self._built:
+            if key not in self._builders:
+                raise KeyError(key)
+            self._built[key] = self._builders[key]()
+        return self._built[key]
+
+    def get(self, key: str, default: Any = None) -> Any:
+        try:
+            return self[key]
+        except KeyError:
+            return default
+
+    def __contains__(self, key: object) -> bool:
+        return key in self._builders
+
+    def keys(self):  # noqa: D102
+        return self._builders.keys()
+
+    def __iter__(self):
+        return iter(self._builders)
+
+    def __len__(self) -> int:
+        return len(self._builders)
+
+    def materialise(self) -> dict[str, Any]:
+        """كل الأقسام مبنيّة — للعقد والاختبارات، لا لمسار الطلب."""
+        return {key: self[key] for key in self._builders}
+
+
+def build_mobile_state(sys: Any) -> Any:
     """
     يُستدعى عند كل طلب قراءة. رخيص عمداً: لا شبكة ولا وسيط.
+
+    والأقسام **كسولة**: يُبنى منها ما يُقرأ فقط. انظري `_LazySections`.
 
     `sys` هو `SystemState`؛ النوع غير مُصرَّح كي لا تستورد طبقة الجوال
     وحدات التنفيذ — ويوجد اختبار AST يفحص أن هذه الحزمة لا تستوردها.
     """
-    return {
-        "status": _status(sys),
-        "risk": _risk(sys),
-        "profiles": _profiles(sys),
-        "decision": _decision(sys),
-        "intelligence": _intelligence(sys),
-        "position": _position(sys),
+    return _LazySections({
+        "status": lambda: _status(sys),
+        "risk": lambda: _risk(sys),
+        "profiles": lambda: _profiles(sys),
+        "decision": lambda: _decision(sys),
+        "intelligence": lambda: _intelligence(sys),
+        "position": lambda: _position(sys),
         # قائمة فارغة صادقة هنا: لم يُرسَل أمرٌ قط، فلا صفقة أُغفلت.
-        # وعقد العميل لهذا القسم بلا قناة «غير معلوم» — وهي ثغرة مُسجَّلة.
-        "trades": [],
-        "performance": _performance(sys),
-        "providers": _providers(sys),
-        "scan": _scan(sys),
-        "candles": _candles(sys),
-        "notifications": _notifications(sys),
-    }
+        "trades": lambda: [],
+        "performance": lambda: _performance(sys),
+        "providers": lambda: _providers(sys),
+        "scan": lambda: _scan(sys),
+        "candles": lambda: _candles(sys),
+        "notifications": lambda: _notifications(sys),
+    })
 
 
 __all__ = ["build_mobile_state"]

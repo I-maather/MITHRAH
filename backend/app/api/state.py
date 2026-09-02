@@ -91,6 +91,10 @@ class SystemState:
     #: يُستدعى عند كل طلب قراءة، وجلبُ شموعٍ فيه يحوّل تصفّحاً عادياً إلى
     #: عشرات النداءات على الوسيط — وحدودُه تُستهلَك فيُحرَم القرار منها.
     last_bars: dict = field(default_factory=dict)
+    #: شموع الرسم لكل أداة **ولكل إطار**: `{symbol: {resolution: [Bar]}}`.
+    #: منفصلةٌ عن `last_bars` عمداً: تلك ما رآه القرار، وهذه ما تتصفّحه
+    #: المالكة. وخلطُهما يجعل تغييرَ إطارِ العرض يغيّر ما يُقاس عليه القرار.
+    chart_bars: dict = field(default_factory=dict)
     last_intelligence: Optional[IntelligenceResult] = None
     #: دقّة الشموع التي تقرأها حلقة القرار. `DAY` افتراضاً، ولا تُغيَّر إلا
     #: عبر تجربة التجريبي (`app/runtime/demo_trial.py`).

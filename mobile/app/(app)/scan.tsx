@@ -129,6 +129,46 @@ export default function ScanScreen(): React.JSX.Element {
                 {t.scan.stage}: {row.stage}
               </Text>
             ) : null}
+
+            {/*
+              شروط الاستراتيجية بالأرقام.
+
+              كان الرفض جملةً واحدة تصل سواء كان ADX عند 24.9 أو عند 8 —
+              والفرق بينهما هو الفرق بين «انتظري» و«هذه الاستراتيجية في
+              السوق الخطأ». والشرط الساقط يُعرض بلونٍ ونصّ، والمارّة تُعرض
+              كي يُرى **كم قطعنا** لا أين وقفنا فقط.
+            */}
+            {(row.strategies ?? []).map((assessment) => (
+              <View
+                key={assessment.key}
+                testID={`scan-why-${row.symbol}-${assessment.key}`}
+                style={{ gap: theme.spacing.xxs, marginTop: theme.spacing.xs }}
+              >
+                <Text variant="micro" tone="tertiary">
+                  {assessment.key}
+                </Text>
+                {assessment.checks.map((check, index) => (
+                  <View
+                    key={`${check.name_ar}-${index}`}
+                    accessible
+                    accessibilityRole="text"
+                    accessibilityLabel={`${check.name_ar}. ${check.detail_ar}`}
+                    style={{ flexDirection: 'row', gap: theme.spacing.sm }}
+                  >
+                    <Text variant="caption" tone={check.passed ? 'positive' : 'caution'}>
+                      {check.passed ? '✓' : '✕'}
+                    </Text>
+                    <Text
+                      variant="caption"
+                      tone={check.passed ? 'tertiary' : 'primary'}
+                      style={{ flex: 1 }}
+                    >
+                      {check.name_ar} — {check.detail_ar}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            ))}
           </Card>
         ))
       )}

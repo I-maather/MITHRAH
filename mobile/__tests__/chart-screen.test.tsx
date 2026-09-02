@@ -33,14 +33,19 @@ const bar = (o: string, h: string, l: string, c: string, hour: number) => ({
 const candles = (over: Record<string, unknown> = {}) =>
   envelope('market/candles', {
     instruments: {
-      EURUSD: [
-        bar('1.10000', '1.10200', '1.09900', '1.10150', 0),
-        bar('1.10150', '1.10400', '1.10100', '1.10300', 1),
-        bar('1.10300', '1.10350', '1.10050', '1.10100', 2),
-      ],
-      GOLD: [bar('2400.00', '2410.00', '2395.00', '2405.00', 0)],
+      EURUSD: {
+        DAY: [
+          bar('1.10000', '1.10200', '1.09900', '1.10150', 0),
+          bar('1.10150', '1.10400', '1.10100', '1.10300', 1),
+          bar('1.10300', '1.10350', '1.10050', '1.10100', 2),
+        ],
+        MINUTE_15: [bar('1.10300', '1.10320', '1.10280', '1.10290', 3)],
+      },
+      GOLD: { DAY: [bar('2400.00', '2410.00', '2395.00', '2405.00', 0)] },
     },
     symbols: ['EURUSD', 'GOLD'],
+    resolutions: ['DAY', 'MINUTE_15'],
+    decision_resolution: 'DAY',
     levels: {
       symbol: 'EURUSD',
       entry: '1.10150',
@@ -155,6 +160,7 @@ describe('شاشة الشموع', () => {
       candles({
         instruments: {},
         symbols: [],
+        resolutions: [],
         levels: { symbol: null, entry: null, stop: null, target: null },
         note_ar: 'لم تُقرأ شموعٌ بعد — دورة المسح لم تكتمل.',
       }),
@@ -175,5 +181,43 @@ describe('شاشة الشموع', () => {
     for (const forbidden of ['شراء', 'بيع', 'أغلق المركز', 'نفّذ']) {
       expect(view.queryByText(forbidden)).toBeNull();
     }
+  });
+});
+
+describe('أطر الشموع', () => {
+  beforeEach(async () => {
+    await tokenStore.save({
+      accessToken: 'test-access',
+      refreshToken: 'test-refresh',
+      deviceId: 'test-device',
+      accessExpiresAt: Date.now() + 900_000,
+    });
+  });
+
+  it('تبدأ على إطار القرار لا على أقصر إطار', async () => {
+    /**
+     * عرضُ الربع ساعة ابتداءً يوحي بأن النظام يقرّر عليه — وهو لا يقرّر،
+     * وقيدُ الوسيط يمنعه أصلاً.
+     */
+    const view = render(candles());
+    expect(await view.findByTestId('candle-0')).toBeTruthy();
+    expect(view.getByTestId('candle-2')).toBeTruthy();
+    expect(view.queryByTestId('chart-view-only')).toBeNull();
+  });
+
+  it('**تقول صراحةً أن الإطار الآخر للعرض وحده**', async () => {
+    const view = render(candles());
+    await view.findByTestId('candle-0');
+    fireEvent.press(view.getByTestId('chart-frame-MINUTE_15'));
+    expect(view.getByTestId('chart-view-only')).toBeTruthy();
+    // شمعةٌ واحدة في هذا الإطار — أي أن المعروض تغيّر فعلاً لا الوسم وحده.
+    expect(view.queryByTestId('candle-1')).toBeNull();
+  });
+
+  it('أداةٌ بإطارٍ واحد لا تعرض منتقي أطر', async () => {
+    const view = render(candles());
+    await view.findByTestId('candle-0');
+    fireEvent.press(view.getByTestId('chart-pick-GOLD'));
+    expect(view.queryByTestId('chart-frame-MINUTE_15')).toBeNull();
   });
 });
