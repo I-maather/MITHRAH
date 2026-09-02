@@ -258,6 +258,7 @@ def build_system(settings: Settings | None = None) -> SystemState:
         blackouts=blackouts, allow_live_submission=False,
         trial_strategies=trial.strategies,
         instruments=instruments,
+        resolution=trial.resolution,
     )
 
     # قفل التنفيذ: مغلقٌ إلا في تجربةٍ تجريبيةٍ صريحة بمرجع موافقة مكتوب.

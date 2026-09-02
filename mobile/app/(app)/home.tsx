@@ -406,12 +406,32 @@ export default function HomeScreen(): React.JSX.Element {
             /* السبب يسبق النوع حين يوجد: «غير متصل» وحدها لا يُتصرَّف عليها. */
             hint={s.broker.note_ar ?? (s.broker.is_demo ? t.system.demo : t.system.live)}
           />
+          {/*
+            **نطاق هذه الحالة يُقال، وحالةُ كل أداةٍ تُعرض معها.**
+
+            كانت البطاقة تقول «سوق الفوركس مفتوح» عن ذهبٍ يقول الوسيط إنه
+            مقفل — والمحرّك يرفضه بـMARKET_CLOSED في اللحظة نفسها. فقرأت
+            المالكة «مفتوح» ولم تفهم لماذا لا يتداول.
+          */}
           <Field
             testID="market-field"
             label={t.home.marketStatus}
             value={presentMarket(s.market.is_open).labelAr}
-            hint={s.market.reason_ar}
+            hint={[s.market.reason_ar, s.market.scope_ar].filter(Boolean).join(' · ')}
           />
+          {/* قراءةٌ دفاعية: العقد يعد بالحقل، والاستجابة قد تنقص —
+              وشاشةٌ تنهار على حقلٍ ناقص أسوأ من شاشةٍ بلا تفصيل.
+              (أسقطها `sparse-data.test.tsx` فور كتابتها.) */}
+          {(s.market.per_instrument ?? []).map((row) => (
+            <Field
+              key={row.symbol}
+              testID={`market-instrument-${row.symbol}`}
+              label={row.symbol}
+              value={row.status}
+              hint={row.reason_ar}
+              tone={row.tradable === false ? 'caution' : undefined}
+            />
+          ))}
           <Field
             testID="completeness-field"
             label={t.home.completeness}

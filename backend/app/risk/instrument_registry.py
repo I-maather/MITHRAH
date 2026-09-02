@@ -73,6 +73,13 @@ class MeasuredInstrument:
             self.economics.provenance is ValueProvenance.BROKER_DISCOVERY
             and self.economics.min_stop_distance is not None
             and self.spread_samples > 0
+            # **والسبريد نفسه مقيسٌ لا موروث.** كان الشرط عدد الرصدات
+            # وحده؛ وصفٌّ برصداتٍ بلا `spread_price` يرث احتياطي
+            # `CfdCostAssumptions.default()` — و`0.00006` سبريدُ **اليورو**
+            # (0.6 نقطة). على الذهب سبريدُه المقيس 0.50 دولار: الفارق نحو
+            # ثمانية آلاف ضعف، ويدخل حساب التعادل ونسبة التكلفة بلا أن
+            # يُقال إنه موروث.
+            and self.assumptions.spread_provenance is ValueProvenance.BROKER_DISCOVERY
         )
 
 
@@ -178,6 +185,11 @@ class InstrumentRegistry:
             return f"{epic}: أدنى مسافة وقف غير معلومة — الأمر سيُرفض عند الوسيط."
         if row.spread_samples <= 0:
             return f"{epic}: لم يُرصد سبريد."
+        if row.assumptions.spread_provenance is not ValueProvenance.BROKER_DISCOVERY:
+            return (
+                f"{epic}: السبريد موروثٌ من افتراضٍ لا مقيسٌ من الوسيط "
+                f"({row.assumptions.spread_provenance.value}) — والافتراض سبريدُ اليورو."
+            )
         return f"{epic}: قابلة للتنفيذ."
 
     def measured_epics(self) -> tuple[str, ...]:

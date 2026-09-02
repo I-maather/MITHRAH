@@ -46,9 +46,26 @@ export interface BrokerView {
   note_ar: string | null;
 }
 
+export interface InstrumentMarketView {
+  symbol: string;
+  /** ما أعلنه الوسيط عن هذه الأداة. `null` = لم يُعلن. */
+  status: string | null;
+  tradable: boolean | null;
+  reason_ar: string;
+}
+
 export interface MarketView {
   is_open: boolean;
   reason_ar: string;
+  /**
+   * **نطاق هذه الحالة** — ساعات الفوركس، لا حالةَ كل أداة.
+   *
+   * كانت اللوحة تقول «سوق الفوركس مفتوح» عن ذهبٍ يقول الوسيط إنه مقفل:
+   * الفوركس متّصلٌ من الأحد إلى الجمعة بلا انقطاع، وللذهب استراحةٌ يومية
+   * عند إقفال شيكاغو. فالنطاق يُقال، وحالةُ كل أداةٍ تُعرض معه.
+   */
+  scope_ar: string;
+  per_instrument: InstrumentMarketView[];
   next_open_utc: string | null;
   next_close_utc: string | null;
 }

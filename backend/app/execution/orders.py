@@ -73,6 +73,25 @@ def build_idempotency_key(
     return hashlib.sha256(canonical_json(payload).encode()).hexdigest()[:40]
 
 
+def _price(value: Decimal) -> str:
+    """
+    السعر **بدقّته هو**، لا بمنزلتين دائماً.
+
+    كان `f"{price:.2f}"`. وهو صحيحٌ للذهب (4389.12) وللين (146.82)، ويهدم
+    اليورو: وقفٌ عند 1.14523 يُسجَّل «1.15» — بعيدٌ عن الوقف الحقيقي 47.7
+    نقطة، أي نحو نصف أدنى مسافةٍ يقبلها الوسيط.
+
+    وهذا النصّ يُكتب في **خط التدقيق** سبباً لـ`ORDER_INTENT_CREATED`: أي
+    أنه السجلّ البشري لما أُمر به من حماية. فرقمٌ مقرَّبٌ فيه ليس تجميلاً.
+
+    والدقّة تُشتقّ من القيمة نفسها: `Decimal` يحفظ منازل مصدره، فيُطبع
+    بها بلا جدولٍ يُصان. ولا تُستعمل `normalize()` — تقصّ الأصفار فتكتب
+    وقف «1.10000» على أنه «1.1»، وهي القيمة ذاتها لكنها تُقرأ أقلّ دقّةً
+    في سجلٍّ غايتُه الدقّة.
+    """
+    return format(value, "f")
+
+
 def build_order_intent(
     *,
     signal: Signal,
@@ -102,8 +121,8 @@ def build_order_intent(
         risk_amount_usd=decision.expected_risk_usd,
         commission_estimate_usd=decision.expected_costs_usd,
         exit_plan_ar=(
-            f"وقف عند {signal.stop_price:.2f} وهدف عند {signal.take_profit_price:.2f}. "
-            f"إبطال: {signal.invalidation_ar}"
+            f"وقف عند {_price(signal.stop_price)} وهدف عند "
+            f"{_price(signal.take_profit_price)}. إبطال: {signal.invalidation_ar}"
         ),
         instrument_snapshot=instrument_snapshot,
         created_at_utc=now,

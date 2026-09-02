@@ -61,6 +61,19 @@ const status: StatusData = {
   market: {
     is_open: false,
     reason_ar: 'خارج جلسة التداول (معاينة).',
+    scope_ar: 'ساعات الفوركس — ولكل أداةٍ حالتُها أدناه. (معاينة)',
+    // الأوّل هو **حالة الغياب** عمداً: العقد يصف شكل العنصر من أوّله،
+    // و«لم يُعلن» هي الحالة التي يجب أن تبقى مقبولةً في العقد — فلا يصير
+    // حقلٌ إلزاميّاً لأن أوّل مثالٍ صادف أن يحمل قيمة.
+    per_instrument: [
+      {
+        symbol: 'EURUSD',
+        status: null,
+        tradable: null,
+        reason_ar: 'الوسيط لم يُعلن حالتها — لا تُملأ بحالة الفوركس. (معاينة)',
+      },
+      { symbol: 'GOLD', status: 'CLOSED', tradable: false, reason_ar: 'الوسيط يقول: CLOSED' },
+    ],
     next_open_utc: '2026-01-16T14:30:00+00:00',
     next_close_utc: null,
   },

@@ -93,7 +93,16 @@
       "is_open": "boolean",
       "next_close_utc": "nullable",
       "next_open_utc": "string",
-      "reason_ar": "string"
+      "reason_ar": "string",
+      "scope_ar": "string",
+      "per_instrument": [
+        {
+          "symbol": "string",
+          "status": "nullable",
+          "tradable": "nullable",
+          "reason_ar": "string"
+        }
+      ]
     },
     "no_trade_reason_ar": "string",
     "strategy_state": {

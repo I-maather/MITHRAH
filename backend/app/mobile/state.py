@@ -125,9 +125,24 @@ def _status(sys: Any) -> dict[str, Any]:
             "account_masked": None,
             "execution_locked": True,
         },
+        # ---------------------------------------------------------------
+        # **حالةُ السوق تُقرأ من الوسيط لكل أداة — لا ساعاتُ الفوركس للكلّ.**
+        #
+        # أُصلح هذا في بوّابة الأهلية، ولم يُصلَح في **الشاشة التي تنظر
+        # إليها المالكة**. فبينما يرفض المحرّك الذهب بـ`MARKET_CLOSED`
+        # لأن الوسيط يقول `CLOSED`، تقول اللوحة «سوق الفوركس مفتوح».
+        #
+        # وقد وقع ذلك فعلاً: 21:21 UTC أربعاء — الفوركس مفتوح والذهب في
+        # استراحته اليومية عند إقفال شيكاغو.
+        #
+        # فتُذكر ساعاتُ الفوركس بوصفها ما هي، وتُذكر معها حالةُ كل أداةٍ
+        # كما أعلنها الوسيط. والشاشة تعرض الاثنتين ولا تخلطهما.
+        # ---------------------------------------------------------------
         "market": {
             "is_open": market.is_open,
             "reason_ar": market.reason_ar,
+            "scope_ar": "ساعات الفوركس — ولكل أداةٍ حالتُها أدناه.",
+            "per_instrument": _instrument_market_status(sys),
             "next_open_utc": _iso(market.session_open_utc),
             "next_close_utc": _iso(market.session_close_utc),
         },
@@ -176,6 +191,34 @@ _PROVIDER_NAMES_AR: dict[str, str] = {
 def _provider_name_ar(kind: Any) -> str:
     key = getattr(kind, "value", str(kind))
     return _PROVIDER_NAMES_AR.get(key, key)
+
+
+def _instrument_market_status(sys: Any) -> list[dict[str, Any]]:
+    """
+    حالةُ كل أداةٍ **كما أعلنها الوسيط**، لا كما تستنتجها ساعاتنا.
+
+    وما لم يُعلنه الوسيط يُقال «غير معلومة» — لا يُملأ بحالة الفوركس، لأن
+    ملأه بها هو العطب نفسه في صورةٍ أهدأ.
+    """
+    rows: list[dict[str, Any]] = []
+    for symbol in sorted(getattr(sys.limits, "allowed_instruments", ()) or ()):
+        declared = None
+        try:
+            details = sys.broker.get_instrument_details(symbol)
+            declared = getattr(details, "market_status", None)
+        except Exception:  # noqa: BLE001
+            declared = None
+        rows.append({
+            "symbol": symbol,
+            "status": declared,
+            "tradable": None if declared is None else declared.upper() == "TRADEABLE",
+            "reason_ar": (
+                "الوسيط لم يُعلن حالتها — لا تُملأ بحالة الفوركس."
+                if declared is None
+                else f"الوسيط يقول: {declared}"
+            ),
+        })
+    return rows
 
 
 def _risk(sys: Any) -> dict[str, Any]:

@@ -263,7 +263,8 @@ def register_runtime_jobs(state, *, interval_seconds: int = DEFAULT_INTERVAL_SEC
         for symbol in symbols:
             # الدقّة من الحالة لا مثبّتة: الحلقة كانت تقرأ شموعاً **يومية**
             # وتكرّر السؤال 1440 مرّة في اليوم على نفس الشمعة.
-            bars = _bars(state.broker, symbol, getattr(state, "candle_resolution", "DAY"))
+            resolution = getattr(state, "candle_resolution", "DAY")
+            bars = _bars(state.broker, symbol, resolution)
             if len(bars) < BARS_NEEDED // 2:
                 scan.append((symbol, _no_trade(
                     "INSUFFICIENT_BARS",

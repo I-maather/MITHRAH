@@ -106,6 +106,23 @@ INSTRUMENT_ECONOMICS_UNMEASURED = "INSTRUMENT_ECONOMICS_UNMEASURED"
 STOP_BELOW_BROKER_MINIMUM = "STOP_BELOW_BROKER_MINIMUM"
 
 
+#: أسماء الأطر كما يسمّيها الوسيط ⇐ كما تُعلنها الاستراتيجيات.
+#:
+#: كل استراتيجيةٍ تُعلن `metadata.timeframe`، ولا يقرأه شيء. جرّبتُ البحث
+#: في الخادم كلّه: يظهر عند تعريفه وفي أربعة نصوصٍ حرفية، ولا مقارنة.
+#:
+#: وأثرُه ليس نظرياً: `DEMO_TRIAL_RESOLUTION` يقبل خمسة أطر، فتُشغَّل
+#: استراتيجيةٌ تُعلن «1D» على شمعة ربع ساعة. وعلى EURUSD تُرفض عند حدّ
+#: الوسيط فيُكشف الخلط؛ وعلى الذهب — حدُّه عُشر سنت — **تمرّ وتُنفَّذ**.
+#: أي أن الخلط نفسه يُكشف على أداةٍ ويصمت على أخرى.
+#:
+#: ولا يُمنع التشغيل على إطارٍ آخر: التجريبي موضعُ اختبار الفرضيات. لكنه
+#: **يُقال**، فتُقرأ النتيجة على أنها فرضيةٌ أخرى لا الفرضية المعلَنة.
+TIMEFRAME_NAMES = {
+    "DAY": "1D", "HOUR_4": "4H", "HOUR": "1H",
+    "MINUTE_30": "30M", "MINUTE_15": "15M",
+}
+
 @dataclass(frozen=True)
 class CfdReview:
     """نتيجة بناء اقتصاديات CFD: إمّا أرقام، وإمّا سببٌ يُقرأ."""
@@ -164,6 +181,8 @@ class Pipeline:
         trial_strategies: frozenset[str] = frozenset(),
         #: اقتصاديات الأدوات المقيسة من الوسيط. فارغةٌ ⇒ لا قرار CFD.
         instruments: Optional[InstrumentRegistry] = None,
+        #: الإطار المُشغَّل — يُقارَن بما تُعلنه كل استراتيجية.
+        resolution: str = "DAY",
     ) -> None:
         self.broker = broker
         self.risk = risk_engine
@@ -177,6 +196,7 @@ class Pipeline:
         self.allow_live_submission = allow_live_submission
         self.trial_strategies = frozenset(trial_strategies)
         self.instruments = instruments if instruments is not None else InstrumentRegistry.empty()
+        self.resolution = resolution
 
     # -- helpers ------------------------------------------------------------
     def _no_trade(self, stage: str, code: str, message: str, at: datetime) -> PipelineResult:
@@ -394,9 +414,25 @@ class Pipeline:
                 "لا توجد استراتيجية معتمدة. كل الاستراتيجيات في حالة بحث أو معطّلة.", now,
             )
 
+        # **الإطار المُعلَن يُقارَن بالإطار المُشغَّل، ويُقال الخلاف.**
+        running_on = TIMEFRAME_NAMES.get(
+            str(getattr(self, "resolution", "") or "").upper(), None
+        )
         signal: Optional[Signal] = None
         assessments: list[tuple[str, object]] = []
         for strategy in approved:
+            declared = getattr(strategy.metadata, "timeframe", None)
+            if running_on is not None and declared and declared != running_on:
+                self.audit.record(
+                    actor=Actor.PIPELINE, action=AuditAction.CONFIG_CHANGE,
+                    decision="TIMEFRAME_MISMATCH",
+                    reason_ar=(
+                        f"{strategy.metadata.name}@{strategy.metadata.version} تُعلن "
+                        f"إطار {declared} وتُشغَّل على {running_on}. "
+                        "فرضيةٌ أخرى تُختبَر، لا الفرضية المعلَنة تُقاس."
+                    ),
+                    source="Pipeline", at=now,
+                )
             assessment = strategy.assess(
                 symbol=symbol, bars=list(bars), quote=quote, now=now
             )
