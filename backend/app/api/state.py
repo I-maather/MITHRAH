@@ -252,9 +252,12 @@ def build_system(settings: Settings | None = None) -> SystemState:
     pipeline = Pipeline(
         broker=broker, risk_engine=risk_engine, kill_switch=kill_switch, audit=audit,
         execution=execution, strategies=registry.all(),
+        # جدول IBKR يبقى **لمسار الأسهم وحده**؛ وصفقات كابيتال تُسعَّر من
+        # `instruments` أدناه. وقبل هذا كان الجدول يُطبَّق على الاثنين.
         schedule=IBKR_PRO_TIERED_US_STOCK, assumptions=CostAssumptions.default(),
         blackouts=blackouts, allow_live_submission=False,
         trial_strategies=trial.strategies,
+        instruments=instruments,
     )
 
     # قفل التنفيذ: مغلقٌ إلا في تجربةٍ تجريبيةٍ صريحة بمرجع موافقة مكتوب.

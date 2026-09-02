@@ -29,7 +29,7 @@ from ..audit.log import Actor, AuditAction, AuditLog
 from ..brokers.base import BrokerAdapter, BrokerNotConnected
 from ..clock import now_utc, forex_market_status
 from ..contracts import Bar, Decision, RiskDecision, Signal
-from ..eligibility.allowlist import check_eligibility
+from ..eligibility.allowlist import CFD_ASSET_CLASSES, check_eligibility
 from ..execution.orders import (
     ExecutionService,
     SubmissionOutcome,
@@ -40,8 +40,10 @@ from ..execution.orders import (
 from ..killswitch.engine import KillSwitch, KillSwitchTrigger
 from ..money import D
 from ..risk.constitution import NEWS_BLACKOUT_MINUTES
+from ..risk.capital_costs import CfdTradeEconomics
 from ..risk.costs import CommissionSchedule, CostAssumptions
 from ..risk.engine import RiskEngine, SessionRiskState
+from ..risk.instrument_registry import InstrumentRegistry
 from ..strategies.base import Strategy
 
 
@@ -85,6 +87,32 @@ class BlackoutCalendar:
             if e.covers(at, symbol):
                 return e
         return None
+
+
+def is_cfd(details) -> bool:
+    """
+    أهذه الأداة عقد فروقات؟
+
+    **بالمُسنَد نفسه الذي وجّه فحص الأهلية** (`allowlist.py:139`)، لا بنسخةٍ
+    منه: نسخةٌ ثانية من الشرط تعني أن أداةً تُفحَص أهليتها كـCFD ثم تُسعَّر
+    كسهم — وهو بالضبط ما وقع.
+    """
+    return getattr(details, "asset_class", None) in CFD_ASSET_CLASSES
+
+
+#: رمزُ رفضٍ جديد: أداة CFD بلا اقتصادياتٍ مقيسة.
+INSTRUMENT_ECONOMICS_UNMEASURED = "INSTRUMENT_ECONOMICS_UNMEASURED"
+#: وقفُ الإشارة أضيق مما يقبله الوسيط.
+STOP_BELOW_BROKER_MINIMUM = "STOP_BELOW_BROKER_MINIMUM"
+
+
+@dataclass(frozen=True)
+class CfdReview:
+    """نتيجة بناء اقتصاديات CFD: إمّا أرقام، وإمّا سببٌ يُقرأ."""
+
+    economics: Optional[CfdTradeEconomics] = None
+    reason_code: Optional[str] = None
+    reason_ar: str = ""
 
 
 @dataclass(frozen=True)
@@ -134,6 +162,8 @@ class Pipeline:
         #: أسماء استراتيجيات مسموحة **على التجريبي وحده**. انظري
         #: `app/runtime/demo_trial.py`. فارغةٌ في كل مسارٍ آخر.
         trial_strategies: frozenset[str] = frozenset(),
+        #: اقتصاديات الأدوات المقيسة من الوسيط. فارغةٌ ⇒ لا قرار CFD.
+        instruments: Optional[InstrumentRegistry] = None,
     ) -> None:
         self.broker = broker
         self.risk = risk_engine
@@ -146,6 +176,7 @@ class Pipeline:
         self.blackouts = blackouts
         self.allow_live_submission = allow_live_submission
         self.trial_strategies = frozenset(trial_strategies)
+        self.instruments = instruments if instruments is not None else InstrumentRegistry.empty()
 
     # -- helpers ------------------------------------------------------------
     def _no_trade(self, stage: str, code: str, message: str, at: datetime) -> PipelineResult:
@@ -154,6 +185,79 @@ class Pipeline:
             reason_ar=message, source=stage, at=at,
         )
         return PipelineResult(Decision.NO_TRADE, code, message, stage, at_utc=at)
+
+    def cfd_review(self, signal: Signal) -> CfdReview:
+        """
+        اقتصاديات هذه الإشارة **من قياس الوسيط**، لا من جدول عمولاتٍ لوسيطٍ آخر.
+
+        ## لماذا هذه دالّة لا سطرٌ داخل `run`
+
+        لأن الخطأ الذي تصلحه كان سطراً داخل `run`: كان الخط يستدعي
+        `risk.evaluate` — مسار **أسهم IBKR** — على كل صفقة، بعمولات
+        `IBKR_PRO_TIERED_US_STOCK` وبكميةٍ تُحلّ عكسياً بالسهم الواحد. بينما
+        `evaluate_cfd` و`CapitalComCostModel` و`InstrumentRegistry` — أي كل
+        ما قيس من الوسيط فعلاً — لم يكن يُستدعى إلا في الظلّ
+        (`shadow.py`). فالنظام كان **يقيس اقتصاديات كابيتال، ويعرضها،
+        ويقرّر بغيرها**.
+
+        وسطرٌ داخل `run` لا يُستدعى من اختبارٍ إلا بتشغيل الخط كاملاً؛
+        فيُكتب له اختبارٌ ينسخ منطقه، ونسخةٌ في اختبار لا تسقط حين يتغيّر
+        الأصل. فالمنطق هنا، والاختبار يستدعيه.
+
+        ## والكمية ليست متغيّراً
+
+        كابيتال يفرض كميةً دنيا (100 وحدة على EUR/USD، و0.01 أونصة على
+        الذهب). فالسؤال ليس «كم أشتري؟» بل «هل الخسارة الكاملة عند الكمية
+        الدنيا تقع ضمن الميزانية؟». والجواب لا ⇒ لا صفقة، ولا تصغير.
+        """
+        model = self.instruments.cost_model_for(signal.symbol)
+        if model is None:
+            return CfdReview(
+                reason_code=INSTRUMENT_ECONOMICS_UNMEASURED,
+                reason_ar=self.instruments.why_not(signal.symbol),
+            )
+
+        pip = model.economics.pip_size
+        if pip <= 0:
+            return CfdReview(
+                reason_code=INSTRUMENT_ECONOMICS_UNMEASURED,
+                reason_ar=f"{signal.symbol}: حجم النقطة غير صالح في القياس.",
+            )
+
+        stop_price_distance = abs(signal.entry_price - signal.stop_price)
+        tp_price_distance = abs(signal.take_profit_price - signal.entry_price)
+        if stop_price_distance <= 0:
+            return CfdReview(
+                reason_code=STOP_BELOW_BROKER_MINIMUM,
+                reason_ar="لا صفقة بلا وقف: مسافة الوقف صفر.",
+            )
+
+        # أدنى مسافة وقف يفرضها الوسيط. تجاوزُها يعني أمراً يُرفَض عنده —
+        # ورفضُه هناك أغلى من رفضنا هنا، لأنه يقع بعد أن صار للأمر أثر.
+        minimum = model.economics.min_stop_distance
+        if minimum is not None and stop_price_distance < minimum:
+            return CfdReview(
+                reason_code=STOP_BELOW_BROKER_MINIMUM,
+                reason_ar=(
+                    f"مسافة الوقف {stop_price_distance} أضيق من أدنى ما يقبله الوسيط "
+                    f"({minimum}) على {signal.symbol}. ولا يُوسَّع الوقف تلقائياً: "
+                    "التوسيع يغيّر المخاطرة التي وافقتِ عليها."
+                ),
+            )
+
+        try:
+            economics = model.estimate(
+                size=model.economics.min_deal_size,
+                entry_price=signal.entry_price,
+                stop_distance_pips=stop_price_distance / pip,
+                take_profit_distance_pips=tp_price_distance / pip,
+            )
+        except (ValueError, ArithmeticError) as exc:
+            return CfdReview(
+                reason_code=INSTRUMENT_ECONOMICS_UNMEASURED,
+                reason_ar=f"تعذّر حساب اقتصاديات {signal.symbol}: {exc}",
+            )
+        return CfdReview(economics=economics)
 
     def runnable_strategies(self) -> list:
         """
@@ -322,12 +426,36 @@ class Pipeline:
             after=signal.model_dump(mode="json"), at=now,
         )
 
-        # 6) Risk review
-        decision = self.risk.evaluate(
-            signal=signal, state=state, balances=balances, schedule=self.schedule,
-            assumptions=self.assumptions, fractional_allowed=eligibility.fractional_allowed,
-            kill_switch_active=self.kill_switch.is_active, now=now,
-        )
+        # 6) Risk review — **بالنموذج الذي يخصّ هذا الوسيط**
+        #
+        # كان هذا السطر يستدعي `risk.evaluate` دائماً: مسار أسهم IBKR،
+        # بجدول عمولاته وبكميةٍ تُحلّ عكسياً بالسهم — على صفقة CFD في
+        # كابيتال. والاقتصاديات المقيسة من كابيتال كانت تُحمَّل في
+        # `build_system` وتُعرَض في الشاشة ثم **لا تدخل القرار**.
+        if is_cfd(details):
+            review = self.cfd_review(signal)
+            if review.economics is None:
+                # يُسجَّل كغيره: رفضٌ لا يظهر في خط التدقيق رفضٌ لا يُراجَع.
+                self.audit.record(
+                    actor=Actor.RISK_ENGINE, action=AuditAction.NO_TRADE,
+                    decision=review.reason_code or "CFD_ECONOMICS_UNAVAILABLE",
+                    reason_ar=review.reason_ar, source="Pipeline.cfd_review", at=now,
+                )
+                return PipelineResult(
+                    Decision.NO_TRADE, review.reason_code, review.reason_ar, "risk",
+                    signal=signal, at_utc=now,
+                )
+            decision = self.risk.evaluate_cfd(
+                signal=signal, state=state, balances=balances,
+                economics=review.economics,
+                kill_switch_active=self.kill_switch.is_active, now=now,
+            )
+        else:
+            decision = self.risk.evaluate(
+                signal=signal, state=state, balances=balances, schedule=self.schedule,
+                assumptions=self.assumptions, fractional_allowed=eligibility.fractional_allowed,
+                kill_switch_active=self.kill_switch.is_active, now=now,
+            )
         self.audit.record(
             actor=Actor.RISK_ENGINE, action=AuditAction.RISK_DECISION,
             decision=decision.decision.value if decision.approved else (decision.reason_code or "REJECTED"),
