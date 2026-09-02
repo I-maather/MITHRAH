@@ -6,6 +6,7 @@ import { ApiError } from '@/api/client';
 import {
   AnimatedNumber,
   Banner,
+  CandleChart,
   Card,
   Divider,
   ErrorState,
@@ -21,6 +22,9 @@ import {
   StatusPill,
   Text,
   Vacancy,
+  prepareChart,
+  spanLabel,
+  type ChartLevel,
 } from '@/components';
 import { fixtures, isPreviewMode, previewOr } from '@/fixtures';
 import { formatCooling, formatInstant, formatRatio, formatSince, formatToday, t } from '@/i18n';
@@ -70,6 +74,16 @@ export default function HomeScreen(): React.JSX.Element {
   const position = useEndpoint((c) => c.getCurrentPosition(), {
     previewData: previewOr(fixtures.position),
   });
+  /**
+   * الشموع في الرئيسية.
+   *
+   * قالت المالكة: «الشموع والمستويات المفروض يكونوا في الرئيسية». ولها حقّ:
+   * الحكم يقول «لم أتداول»، والسؤال الذي يليه فوراً «على أيّ سعرٍ حكمتَ؟» —
+   * وكان جوابُه شاشةً خلف لمستين.
+   */
+  const candles = useEndpoint((c) => c.getCandles(), {
+    previewData: previewOr(fixtures.candles),
+  });
 
   const refreshAll = useCallback(() => {
     status.refresh();
@@ -77,7 +91,8 @@ export default function HomeScreen(): React.JSX.Element {
     risk.refresh();
     profiles.refresh();
     position.refresh();
-  }, [status, decision, risk, profiles, position]);
+    candles.refresh();
+  }, [status, decision, risk, profiles, position, candles]);
 
   const offline =
     status.error instanceof ApiError && status.error.kind === 'OFFLINE';
@@ -88,6 +103,58 @@ export default function HomeScreen(): React.JSX.Element {
   const r = risk.data;
   const p = profiles.data;
   const pos = position.data;
+
+  /**
+   * ما يُرسَم في الرئيسية — أداةً واحدة، وإطاراً واحداً، وبلا منتقيات.
+   *
+   * الرئيسية ليست شاشة تصفّح: منتقي أربع أدواتٍ وخمسة أطرٍ فيها يجعلها شاشة
+   * الشموع مكرّرة، ويوحي بأن النظام يقرّر على أيّها اختير. فالمعروض هنا **ما
+   * يعني المالكة الآن**: أداة مركزها إن كان لها مركز، وإلا أول رمزٍ رتّبه
+   * الخادم — على الإطار الذي يُقاس عليه القرار وحده. وما عداه خلف صفّ الانتقال.
+   *
+   * وكل حقلٍ يُقرأ دفاعياً: العقد يعد بها والاستجابة قد تنقص، ولوحةٌ تنهار على
+   * حقلٍ ناقص أسوأ من لوحةٍ بلا رسم. (حرسه `sparse-data.test.tsx`، وسقط فيه
+   * هذا الرسم أوّل يوم.)
+   */
+  const home = ((): {
+    symbol: string;
+    resolution: string;
+    prepared: NonNullable<ReturnType<typeof prepareChart>>;
+    levels: ChartLevel[];
+  } | null => {
+    const cd = candles.data;
+    if (cd === null) {
+      return null;
+    }
+    const symbols = cd.symbols ?? [];
+    const owner = cd.levels?.symbol ?? null;
+    const symbol = owner !== null && symbols.includes(owner) ? owner : (symbols[0] ?? null);
+    if (symbol === null) {
+      return null;
+    }
+    const perFrame = cd.instruments?.[symbol] ?? {};
+    const available = (cd.resolutions ?? []).filter((r) => Array.isArray(perFrame[r]));
+    const resolution = available.includes(cd.decision_resolution)
+      ? cd.decision_resolution
+      : (available[0] ?? null);
+    if (resolution === null) {
+      return null;
+    }
+    /** المستويات لأداة المركز وحدها — ورسمُها على أداةٍ أخرى كذبةٌ في المعنى. */
+    const levels: ChartLevel[] =
+      owner === symbol
+        ? ([
+            { key: 'entry' as const, label: t.chart.entry, raw: cd.levels?.entry ?? null, color: theme.colors.textPrimary },
+            { key: 'stop' as const, label: t.chart.stop, raw: cd.levels?.stop ?? null, color: theme.colors.negative },
+            { key: 'target' as const, label: t.chart.target, raw: cd.levels?.target ?? null, color: theme.colors.positive },
+          ]
+            .map((row) => ({ ...row, value: Number(row.raw) }))
+            .filter((row) => row.raw !== null && Number.isFinite(row.value))
+            .map(({ key, label, value, color }) => ({ key, label, value, color })) as ChartLevel[])
+        : [];
+    const prepared = prepareChart(perFrame[resolution] ?? [], levels);
+    return prepared === null ? null : { symbol, resolution, prepared, levels };
+  })();
 
   /** المتبقّي رقماً — للعدّ المتدرّج. نصٌّ غير قابل للتحويل ⇒ `null` بلا تخمين. */
   const remainingToday = ((): number | null => {
@@ -183,6 +250,25 @@ export default function HomeScreen(): React.JSX.Element {
             </View>
           ))}
         </View>
+      ) : null}
+
+      {/* ---- الشموع والمستويات: على أيّ سعرٍ كان هذا الحكم ---- */}
+      {home !== null ? (
+        <Card
+          testID="home-chart-card"
+          title={`${home.symbol} · ${t.chart.frames[home.resolution] ?? home.resolution}`}
+        >
+          <CandleChart testID="home-chart" prepared={home.prepared} height={188} />
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+            <Text variant="micro" tone="tertiary" testID="home-chart-span">
+              {spanLabel(home.prepared.bars)}
+            </Text>
+            <Text variant="micro" tone="tertiary">
+              {home.levels.length === 0 ? t.chart.noPosition : t.chart.levelsOn}
+            </Text>
+          </View>
+          <NavRow testID="nav-chart" label={t.nav.chart} hint={t.navHint.chart} href="/(app)/chart" />
+        </Card>
       ) : null}
 
       {/* ---- المحفظة: المال قبل الحدود ---- */}

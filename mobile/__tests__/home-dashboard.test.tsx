@@ -11,6 +11,9 @@ import { renderWithHarness } from './helpers';
  */
 
 const REQUIRED_CARDS = [
+  // الشموع والمستويات صعدت إلى الرئيسية: الحكم يقول «لم أتداول»، والسؤال
+  // الذي يليه فوراً «على أيّ سعرٍ حكمتَ؟» — وكان جوابُه شاشةً خلف لمستين.
+  'home-chart-card',
   'system-card', // حالة النظام · اتصال الوسيط · حالة السوق · اكتمال البيانات · آخر تحديث
   'risk-card', // المخاطرة المستهلكة والمتبقية
   'profile-card', // الملف المختار والفعّال
@@ -53,6 +56,32 @@ describe('محتوى اللوحة', () => {
     expect(screen.getByTestId('no-trade-reason')).toHaveTextContent(
       fixtures.status.no_trade_reason_ar!,
     );
+  });
+
+  it('**رسم الرئيسية على إطار القرار وحده** — لا منتقيات ولا إيحاء بغيره', () => {
+    /**
+     * الرئيسية ليست شاشة تصفّح: منتقي أربع أدواتٍ وخمسة أطرٍ فيها يجعلها
+     * شاشة الشموع مكرّرة — ويوحي بأن النظام يقرّر على أيّها اختير.
+     */
+    expect(screen.getByTestId('home-chart')).toBeTruthy();
+    expect(screen.getByTestId('home-chart-card')).toHaveTextContent(
+      new RegExp(t.chart.frames[fixtures.candles.decision_resolution]!),
+    );
+    expect(screen.queryByTestId('chart-frame-HOUR_4')).toBeNull();
+    expect(screen.queryByTestId('chart-pick-EURUSD')).toBeNull();
+    // وصفٌّ إلى الشاشة الكاملة: التفصيل يُتاح ولا يُحشَر.
+    expect(screen.getByTestId('nav-chart')).toBeTruthy();
+  });
+
+  it('**بلا مركز: لا خطوط على الرسم، ويُقال ذلك** — لا خطٌّ عند الصفر', () => {
+    expect(fixtures.candles.levels.symbol).toBeNull();
+    expect(screen.queryByTestId('chart-level-stop')).toBeNull();
+    expect(screen.getByTestId('home-chart-card')).toHaveTextContent(/لا مركز مفتوح/);
+  });
+
+  it('محور الوقت في الرئيسية يوافق إطار القرار', () => {
+    // اليومي يُوسَم بالتاريخ لا بالساعة.
+    expect(screen.getByTestId('chart-time-axis')).toHaveTextContent(/\d{2}\/\d{2}/);
   });
 
   it('تقول صراحةً إنها لا تأذن بتنفيذ', () => {

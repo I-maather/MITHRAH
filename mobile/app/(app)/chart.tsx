@@ -16,6 +16,7 @@ import {
   Text,
   Vacancy,
   prepareChart,
+  spanLabel,
   type ChartLevel,
 } from '@/components';
 import { fixtures, isPreviewMode, previewOr } from '@/fixtures';
@@ -203,6 +204,10 @@ export default function ChartScreen(): React.JSX.Element {
                 setShown(visible);
               }}
             />
+            {/* مدى التواريخ كاملاً: «14:30» بلا يومٍ نصفُ وسم. */}
+            <Text variant="micro" tone="tertiary" testID="chart-span">
+              {spanLabel(prepared.bars)}
+            </Text>
             <Text variant="micro" tone="tertiary" testID="chart-window">
               {t.chart.gesture}
               {shown !== null && shown < candles.length

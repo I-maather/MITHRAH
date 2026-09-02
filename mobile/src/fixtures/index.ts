@@ -405,7 +405,12 @@ const audit: AuditData = {
  * وتُقرَّب إلى خمس خانات لأن الخادم يرسل نصّاً بكامل دقّة `Decimal`؛ فلو
  * أعطتها المعاينة خانتين لاختُبر الرسم على دقّةٍ غير التي يعمل عليها.
  */
-const previewCandles = (): Candle[] => {
+/**
+ * شموع المعاينة. و**الخطوة الزمنية وسيطٌ للإطار**: كانت ساعةً واحدة لكل
+ * الأطر، فيقرأ محورُ الوقت «09:00 10:00» على إطارٍ اسمه «يومي» — ووسمٌ
+ * يناقض عنوانه يعلّم قراءةً خاطئة حتى في معاينة.
+ */
+const previewCandles = (stepMs: number): Candle[] => {
   const rows: Candle[] = [];
   const base = 1.1;
   for (let i = 0; i < 40; i += 1) {
@@ -414,7 +419,7 @@ const previewCandles = (): Candle[] => {
     const close = base + Math.sin((i + 1) / 6) * 0.004 + (i + 1) * 0.00012;
     const high = Math.max(open, close) + 0.0007;
     const low = Math.min(open, close) - 0.0007;
-    const at = new Date(Date.parse('2026-01-14T00:00:00Z') + i * 3_600_000);
+    const at = new Date(Date.parse('2026-01-14T00:00:00Z') + i * stepMs);
     rows.push({
       t: at.toISOString().replace('.000Z', '+00:00'),
       o: open.toFixed(5),
@@ -427,7 +432,9 @@ const previewCandles = (): Candle[] => {
 };
 
 const candles: CandlesData = {
-  instruments: { EURUSD: { DAY: previewCandles(), HOUR_4: previewCandles() } },
+  instruments: {
+    EURUSD: { DAY: previewCandles(86_400_000), HOUR_4: previewCandles(14_400_000) },
+  },
   symbols: ['EURUSD'],
   resolutions: ['DAY', 'HOUR_4'],
   decision_resolution: 'DAY',
