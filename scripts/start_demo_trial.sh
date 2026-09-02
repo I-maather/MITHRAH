@@ -200,15 +200,23 @@ fi
 
 step "٣ب · المرجع الذي تُحسب منه الحدود"
 # **يُقرأ بعد الإقلاع لا يُفترض قبله.** كتابةُ إعدادٍ ليست سرياناً.
+#
+# وأوّل كتابةٍ لهذا الفحص سألت `/api/risk` عن `equity_used` — وهو **ليس
+# فيها**؛ يسكن في حمولة الجوال. فرجع فارغاً، فطُبع «لم يُقرأ المرجع» عن
+# مرجعٍ مضبوطٍ فعلاً. أي أنني قرأتُ القيمة من موضعٍ لا يحملها ثم عرضتُ
+# غيابها حقيقةً عن النظام — العيب الحاكم نفسه، في أداة تحقّقي أنا.
+#
+# والحقل الصحيح `limits.baseline_equity` في `/api/risk`.
 BASE_SEEN="$("${SSH[@]}" 'curl -s --max-time 10 http://127.0.0.1:8000/api/risk' 2>/dev/null \
-  | grep -oE '"equity_used"[^,]*' | head -1)"
-if [ -n "$BASE_SEEN" ]; then
-  dim "   الخادم يقول: $BASE_SEEN"
+  | grep -oE '"baseline_equity"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 \
+  | sed -E 's/.*:[[:space:]]*"([^"]*)"/\1/')"
+if [ -z "$BASE_SEEN" ]; then
+  printf '\033[33m⚠️  لم يُقرأ الحقل من الخادم — ولا يُستنتج من غيابه شيء.\033[0m\n'
+elif [ -n "$BASELINE" ] && [ "$BASE_SEEN" != "$BASELINE" ]; then
+  red "⛔ المرجع لم يسرِ: مرّرتِ $BASELINE والخادم يقول $BASE_SEEN."
+  dim "   الحدود كلها تُحسب من رقم الخادم — راجعي قبل أي شيء."
 else
-  printf '\033[33m⚠️  لم يُقرأ المرجع من الخادم — لا يُدّعى أنه ضُبط.\033[0m\n'
-fi
-if [ -n "$BASELINE" ]; then
-  dim "   وأنتِ مرّرتِ: $BASELINE. إن اختلفا فالمكتوب لم يسرِ — راجعي قبل أي شيء."
+  green "✅ المرجع الفعّال على الخادم: $BASE_SEEN دولاراً"
 fi
 echo
 
@@ -223,9 +231,20 @@ if printf '%s' "$OUT" | grep -q '"local_trading_paused": *true\|"local_trading_p
       -H 'Content-Type: application/json' \
       -d '{\"reason_ar\": \"بدء تجربة الحساب التجريبي على الذهب — إطار $RESOLUTION.\", \"confirm_phrase\": \"$RESUME_PHRASE_REQUIRED\"}'" 2>/dev/null)"
     printf '%s\n' "$RESUME_OUT" | head -5
-    # **يُقرأ الأثر لا الاستجابة.** استجابةٌ ناجحة ليست حالةً مرفوعة.
-    if "${SSH[@]}" 'curl -s --max-time 10 http://127.0.0.1:8000/api/status' 2>/dev/null \
-        | grep -q '"local_trading_paused": *false\|"local_trading_paused":false'; then
+    # **يُقرأ الأثر لا الاستجابة** — من الموضع الذي يحمله فعلاً.
+    #
+    # وأوّل كتابةٍ لهذا الفحص سألت `/api/status`، و`local_trading_paused`
+    # ليس فيها: موضعه `/api/broker`. فرجع الغياب، فطُبع «⛔ لم يُرفع» بينما
+    # كانت الاستجابة قبله بسطر تقول `false` — أي أنه رُفع.
+    #
+    # فأفزعتُ المالكة عن نظامٍ يعمل، لأنني قرأتُ من موضعٍ لا يحمل القيمة ثم
+    # سمّيتُ الغياب نفياً. وهذا **ثالث** مواضع العيب الحاكم في أدواتي اليوم.
+    PAUSED_SEEN="$("${SSH[@]}" 'curl -s --max-time 10 http://127.0.0.1:8000/api/broker' 2>/dev/null \
+      | grep -oE '"local_trading_paused"[[:space:]]*:[[:space:]]*(true|false)' | head -1)"
+    if [ -z "$PAUSED_SEEN" ]; then
+      printf '\033[33m⚠️  لم يُقرأ الحقل من الخادم — لا يُدّعى رفعٌ ولا يُنفى.\033[0m\n'
+      dim  "   تحقّقي من التطبيق: النظام ← الطوارئ."
+    elif printf '%s' "$PAUSED_SEEN" | grep -q false; then
       green "✅ رُفع الإيقاف المحلي — والخادم يقوله عن نفسه."
       dim  "   التداول الحقيقي يبقى مقفلاً: أقفال البيئة وملف الموافقة وقفل الكود."
       dim  "   والنظام يقيّم كل دقيقة، فيبدأ وحده عند فتح السوق — بلا أمرٍ منك."
