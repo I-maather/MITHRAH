@@ -580,3 +580,37 @@ def analyse_parameter_stability(
             continue
         results[config.digest()] = outcome.summary()
     return ParameterStabilityReport(results=results, metric=metric)
+
+
+def breakeven_win_rate(cost_model, config, reference_price) -> float:
+    """
+    معدّل الفوز الذي يجعل الإعداد يتعادل — **محسوباً من الإعداد المُختبَر**.
+
+    ## لماذا هذه الدالّة هنا لا في سكربت
+
+    كانت مكتوبةً في `run_history_sweep.py` وحده، ومكتوبةً في `run_backtest.py`
+    **ثابتاً منقولاً**: `0.364`. وذلك الرقم محسوبٌ لعائدٍ إلى مخاطرة صافٍ
+    1.75؛ فمن يشغّل الاختبار بوقف 50 وهدف 60 (صافيه نحو 1.1، وتعادله نحو
+    48٪) يقرأ عن معدّل فوزٍ 40٪: «✅ فوق حدّ التعادل 36.4٪ — إشارة أوّلية».
+
+    أي أن الاستراتيجية الخاسرة تُعلَن واعدة. وهو العيب الحاكم: رقمٌ يُقارَن
+    به لم يُقرأ من الإعداد الذي أنتج ما يُقارَن.
+
+    وقد أُصلح في `run_history_sweep.py` ولم يُصلَح في `run_backtest.py` —
+    لأن العلاج كان نسخةً في ملف، لا موضعاً واحداً يُستدعى. فهو هنا الآن.
+
+    الحدّ = 1 ÷ (1 + العائد إلى المخاطرة الصافي)، والصافي من نموذج التكلفة
+    نفسه للإعداد الجاري.
+    """
+    economics = cost_model.estimate(
+        size=config.size,
+        entry_price=reference_price,
+        stop_distance_pips=config.stop_distance_pips,
+        take_profit_distance_pips=config.take_profit_distance_pips,
+        stop_kind=config.stop_kind,
+        nights_held=0,
+    )
+    net_rr = float(economics.net_reward_risk_ratio)
+    if net_rr <= 0:
+        return 1.0          # عائدٌ غير موجب: لا معدّل فوز ينقذه
+    return 1.0 / (1.0 + net_rr)

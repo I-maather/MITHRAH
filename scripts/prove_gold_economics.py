@@ -57,7 +57,10 @@ TOO_TIGHT = Decimal("0.5")
 def main() -> int:
     ap = argparse.ArgumentParser(description="إثبات اقتصاديات أداة من الوسيط")
     ap.add_argument("--epic", default="GOLD")
-    ap.add_argument("--baseline", default="300", help="رأس المال المرجعي للحساب")
+    ap.add_argument(
+        "--baseline", default=None,
+        help="رأس المال المرجعي. الافتراض: يُقرأ من إعدادات الخادم، ولا يُفترض رقم.",
+    )
     ap.add_argument(
         "--prove", action="store_true",
         help="يرسل أمرين على التجريبي: واحدٌ يُرفض وواحدٌ يُقبل ثم يُغلق.",
@@ -138,8 +141,23 @@ def main() -> int:
     size = row.economics.min_deal_size
     min_pips = row.economics.min_stop_distance / pip
 
-    limits = RiskLimits.for_mode(RiskMode.VALIDATION, D(a.baseline), Broker.CAPITAL_COM)
-    budget = min(limits.target_risk_per_trade, limits.effective_max_risk(D(a.baseline)))
+    # ---------------------------------------------------------------------
+    # **المرجع يُقرأ من إعدادات الخادم، ولا يُفترض.**
+    #
+    # كان `--baseline` يفترض 300 دولاراً — والميزانية وكل صفٍّ في الجدول
+    # يُقاسان عليه. فلو كان مرجع الخادم 150 لكانت الميزانية 0.375 لا 0.75،
+    # وكان الجدول يقول «صالحة» عن أوقافٍ لا تمرّ.
+    #
+    # وهو العيب الحاكم نفسه صعوداً درجةً: بعد أن كان المِسطرة وقفاً مفترضاً،
+    # صار المِسطرة **رأس مالٍ مفترضاً**. فيُقرأ الآن من `settings`، ويُقال
+    # مصدره، ويبقى `--baseline` لسؤال «ماذا لو».
+    # ---------------------------------------------------------------------
+    if a.baseline is not None:
+        baseline, baseline_source = D(a.baseline), "أنتِ مرّرتِه"
+    else:
+        baseline, baseline_source = D(settings.baseline_equity_usd), "إعدادات الخادم"
+    limits = RiskLimits.for_mode(RiskMode.VALIDATION, baseline, Broker.CAPITAL_COM)
+    budget = min(limits.target_risk_per_trade, limits.effective_max_risk(baseline))
 
     # ---------------------------------------------------------------------
     # **سلّم الأوقاف نسبةٌ من السعر، لا مضاعفاتٌ لأدنى حدّ الوسيط.**
@@ -159,7 +177,7 @@ def main() -> int:
     )
 
     print(
-        f"\n{BOLD}ما يمرّ عند مرجع {a.baseline} دولار "
+        f"\n{BOLD}ما يمرّ عند مرجع {baseline} دولار ({baseline_source}) "
         f"(ميزانية الصفقة {budget:.2f}، أدنى عائد/مخاطرة صافٍ {limits.min_reward_risk_ratio}){END}"
     )
     print(
@@ -187,8 +205,11 @@ def main() -> int:
         rr2_ok = e2.net_reward_risk_ratio >= limits.min_reward_risk_ratio
 
         # أقلّ مضاعِف هدفٍ يبلغ الحدّ الصافي — **يُبحَث عنه ولا يُفترَض**.
+        # **يبدأ البحث من الضِّعف الواحد لا من 1.5.** بدؤه عند 1.5 يجعل أقلّ
+        # النتائج الممكنة 1.5 دائماً — فيُعرض حدُّ البحث كأنه قياس. ويمتدّ إلى
+        # 20 ضعفاً كي لا يُقال «لا يبلغ» عمّا يبلغ عند 12.
         needed = None
-        for tenth in range(15, 101):
+        for tenth in range(10, 201):
             candidate = model.estimate(
                 size=size, entry_price=entry, stop_distance_pips=stop_pips,
                 take_profit_distance_pips=stop_pips * (Decimal(tenth) / 10),
@@ -217,7 +238,7 @@ def main() -> int:
     if not passing:
         print(
             f"\n{BAD}⛔ لا وقفَ يجمع بين الميزانية والعائد الصافي على {epic} "
-            f"بمرجع {a.baseline}.{END}"
+            f"بمرجع {baseline}.{END}"
         )
         print(
             f"{DIM}   وهذا يعني أن {epic} لا تصلح على هذا الحجم — لا أن الحساب معطوب.{END}"
@@ -226,7 +247,7 @@ def main() -> int:
         narrowest, widest = passing[0], passing[-1]
         best_multiple = min(p[1] for p in passing)
         print(
-            f"\n{OK}✅{END} {epic} صالحة على مرجع {a.baseline}: "
+            f"\n{OK}✅{END} {epic} صالحة على مرجع {baseline}: "
             f"وقفٌ من {narrowest[0]} إلى {widest[0]} دولار "
             f"(مخاطرة {narrowest[2]:.2f}–{widest[2]:.2f} دولار)، "
             f"وأقلّ هدفٍ مقبول {best_multiple}× الوقف."
@@ -326,11 +347,19 @@ def main() -> int:
         # **الرفض من حارسنا ليس إثباتاً.** حارسنا يقارن بالرقم الذي قرأناه
         # نحن، فرفضُه يثبت أن الحارس يعمل — لا أن الوسيط يرفض. والإثبات لا
         # يكون إلا برفضٍ صادرٍ عن كابيتال.
+        # **رفضُ حارسنا ليس إثباتاً، ولا يمضي إلى سطر «أُثبت».**
+        #
+        # حارسنا يقارن بالرقم الذي قرأناه نحن، فرفضُه يثبت أن الحارس يعمل لا
+        # أن الوسيط يرفض. وكان هذا الفرع يطبع تنبيهه ثم **يسقط إلى ما بعده**
+        # بلا `return`، فيصل إلى «✅ أُثبت: رُفض ما دونها» عن رفضٍ لم تُصدره
+        # كابيتال قط. أي أن السطر الأخير كان يعِد بدليلٍ لم يقع.
         ours = isinstance(exc, BrokerRejected) and "حدّ الوسيط" in str(exc)
-        mark = f"{WARN}○ رفضه حارسُنا قبل الإرسال{END}" if ours else f"{OK}✔ رفضه الوسيط{END}"
-        print(f"  {mark} — {type(exc).__name__}: {exc}")
         if ours:
+            print(f"  {WARN}○ رفضه حارسُنا قبل الإرسال{END} — {exc}")
             print(f"  {DIM}  وهذا يثبت أن الحارس يعمل، لا أن الوسيط يرفض.{END}")
+            print(f"  {DIM}  ولا إثبات هنا: الأمر لم يبلغ كابيتال.{END}")
+            return 11
+        print(f"  {OK}✔ رفضه الوسيط{END} — {type(exc).__name__}: {exc}")
 
     at_min = intent(min_pips, "ATMIN")
     print(f"  {DIM}ب · وقفٌ عند {at_min.stop_price} (المُعلَن) — يُنتظر قبول…{END}")

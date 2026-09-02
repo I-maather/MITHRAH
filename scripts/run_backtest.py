@@ -34,7 +34,9 @@ from app.secretstore.provider import (                              # noqa: E402
 from app.brokers.capital.models import CapitalCandle                    # noqa: E402
 from app.live_readonly.session import LiveAuthError, LiveSession        # noqa: E402
 from app.live_readonly.transport import LiveReadOnlyTransport           # noqa: E402
-from app.strategies.backtest import Backtester, BacktestConfig, InsufficientData  # noqa: E402
+from app.strategies.backtest import (
+    Backtester, BacktestConfig, InsufficientData, breakeven_win_rate,
+)  # noqa: E402
 from app.strategies.trend_pullback_v1 import TrendPullbackV1        # noqa: E402
 
 
@@ -56,6 +58,35 @@ def to_bars(candles, symbol: str) -> list[Bar]:
     ]
 
 
+#: نموذج التكلفة **للأداة المطلوبة**، مقروءاً من القياس — أو رفضٌ بسببٍ يُقرأ.
+#:
+#: كان هنا `CapitalComCostModel(PROVISIONAL_EURUSD)` مهما كانت `--epic`.
+#: وحجم نقطة اليورو 0.0001 وحجم نقطة الذهب 0.01 — مئة ضعف؛ وسبريد اليورو
+#: 0.00007 وسبريد الذهب 0.75 — عشرة آلاف ضعف. فتشغيلُ هذا السكربت على
+#: الذهب كان يُخرج جدول نتائج كامل الثقة وكلّ رقمٍ فيه خاطئ.
+#:
+#: ولم يكن ذلك ضاراً يوم كُتب: الاستراتيجيات كانت تُعلن `EURUSD` وحدها،
+#: فلا تُنتج إشارةً على غيرها. ثم صارت `FX_MARKETS` أربعاً — فانقلب سطرٌ
+#: كان صحيحاً إلى سطرٍ يكذب، بلا أن يُلمَس. وهذا صنفُ عطبٍ لا يُكتشف
+#: بمراجعة السطر: يُكتشف بسؤال «ما الذي تغيّر تحته؟».
+#:
+#: و`run_history_sweep.py` يرفض هذا بالضبط منذ يومه. فالرفض ينتقل هنا.
+def cost_model_for_or_refuse(epic: str):
+    from app.risk.instrument_registry import InstrumentRegistry
+    registry = InstrumentRegistry.load()
+    model = registry.cost_model_for(epic)
+    if model is None or epic.upper() not in registry.executable_epics():
+        print(
+            f"\u26d4 \u0644\u0627 \u0642\u064a\u0627\u0633 \u0627\u0642\u062a\u0635\u0627\u062f\u064a\u0627\u062a \u0644\u0640{epic}: {registry.why_not(epic)}\n"
+            "   \u0648\u0644\u0627 \u064a\u064f\u0633\u0639\u0651\u064e\u0631 \u0628\u0646\u0645\u0648\u0630\u062c \u0623\u062f\u0627\u0629\u064d \u0623\u062e\u0631\u0649: \u062d\u062c\u0645 \u0627\u0644\u0646\u0642\u0637\u0629 \u0648\u0627\u0644\u0633\u0628\u0631\u064a\u062f \u0648\u0627\u0644\u0643\u0645\u064a\u0629\n"
+            "   \u0627\u0644\u062f\u0646\u064a\u0627 \u062a\u062e\u062a\u0644\u0641 \u0628\u064a\u0646\u0647\u0627 \u0645\u0626\u0627\u062a \u0627\u0644\u0623\u0636\u0639\u0627\u0641\u060c \u0641\u062a\u062e\u0631\u062c \u0623\u0631\u0642\u0627\u0645\u064c \u0648\u0627\u062b\u0642\u0629 \u0648\u062e\u0627\u0637\u0626\u0629.",
+            file=sys.stderr,
+        )
+        return None
+    return model
+
+
+
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(description="Backtest على شموع Capital.com")
     p.add_argument("--source", default="live", choices=["live", "demo"],
@@ -65,7 +96,9 @@ def main(argv=None) -> int:
                    choices=["MINUTE", "MINUTE_5", "MINUTE_15", "MINUTE_30",
                             "HOUR", "HOUR_4", "DAY", "WEEK"])
     p.add_argument("--max", type=int, default=200, help="عدد الشموع (سقف الوسيط 200 لكل نداء)")
-    p.add_argument("--size", default="100", help="الكمية — الحد الأدنى للوسيط")
+    # الكمية الدنيا **تُقرأ من قياس الأداة**: 100 وحدة لليورو، و0.01 أونصة
+    # للذهب. وثابتُ 100 على الذهب تعرّضٌ بـ437 ألف دولار على حسابٍ بـ300.
+    p.add_argument("--size", default=None, help="الكمية. الافتراض: الكمية الدنيا المقيسة.")
     p.add_argument("--stop-pips", default="30")
     p.add_argument("--tp-pips", default="60")
     a = p.parse_args(argv)
@@ -148,9 +181,12 @@ def main(argv=None) -> int:
         print("⛔ الوسيط أعاد صفر شمعة. المحرّك لا يولّد بيانات.", file=sys.stderr)
         return 1
 
-    model = CapitalComCostModel(PROVISIONAL_EURUSD)
+    model = cost_model_for_or_refuse(a.epic)
+    if model is None:
+        return 2
+    size = D(a.size) if a.size is not None else model.economics.min_deal_size
     config = BacktestConfig(
-        size=D(a.size),
+        size=size,
         stop_distance_pips=D(a.stop_pips),
         take_profit_distance_pips=D(a.tp_pips),
         stop_kind=StopKind.NORMAL,
@@ -186,11 +222,23 @@ def main(argv=None) -> int:
     if r.trade_count < need:
         print(f"\n  ⛔ غير حاسم: {r.trade_count} صفقة أقلّ من {need}."
               f"\n     وسّعي المدى (--resolution HOUR) قبل أي استنتاج.")
-    elif r.win_rate is not None and r.win_rate > D("0.364"):
-        print(f"\n  ✅ فوق حدّ التعادل 36.4٪ — إشارة أوّلية، وليست اعتماداً."
-              f"\n     البوابة التالية: Walk-forward ثم Shadow.")
     else:
-        print("\n  ❌ تحت حدّ التعادل 36.4٪ بعد التكلفة — لا حافّة في هذا الإعداد.")
+        # **حدّ التعادل يُحسَب من الإعداد المُختبَر، ولا يُنقَل ثابتاً.**
+        #
+        # كان `0.364` — وهو محسوبٌ لعائدٍ صافٍ 1.75. فمن يشغّل بوقف 50 وهدف
+        # 60 (صافيه نحو 1.1، وتعادله نحو 48٪) يقرأ عن معدّل فوز 40٪:
+        # «✅ فوق حدّ التعادل» — أي أن الخاسرة تُعلَن واعدة.
+        #
+        # وقد أُصلح هذا في `run_history_sweep.py` ولم يُصلَح هنا، لأن العلاج
+        # كان نسخةً في ملف لا موضعاً واحداً يُستدعى. فالدالّة الآن مع النموذج.
+        threshold = D(str(breakeven_win_rate(model, config, bars[-1].close)))
+        if r.win_rate is not None and r.win_rate > threshold:
+            print(f"\n  ✅ فوق حدّ التعادل {threshold * 100:.1f}٪ لهذا الإعداد"
+                  f" — إشارة أوّلية، وليست اعتماداً."
+                  f"\n     البوابة التالية: Walk-forward ثم Shadow.")
+        else:
+            print(f"\n  ❌ تحت حدّ التعادل {threshold * 100:.1f}٪ بعد التكلفة"
+                  f" — لا حافّة في هذا الإعداد.")
 
     print("\n  لم يُرسَل أمر. قفل التنفيذ مغلق طوال التشغيل.\n")
     return 0

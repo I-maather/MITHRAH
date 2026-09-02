@@ -89,34 +89,25 @@ LADDER = {
 }
 PAGE = 200  # سقف الوسيط لكل نداء
 
-#: الأداة الوحيدة التي يملك المشروع لها نموذج تكلفة. انظري الشرح أعلاه.
-PRICED_EPICS = ("EURUSD",)
+#: الأدوات التي **قيست** اقتصادياتها — تُقرأ من السجلّ لا تُكتب ثابتاً.
+#:
+#: كانت `("EURUSD",)`، وصارت كذباً بالنقصان يوم قيست أربع أدوات: يرفض
+#: المسحُ الذهبَ بحجّة أنه بلا نموذج تكلفة وله نموذجٌ مقيس. والثابت الذي
+#: يصف حالةً ماضية يكذب في الاتجاهين.
+def priced_epics() -> tuple[str, ...]:
+    from app.risk.instrument_registry import InstrumentRegistry
+    measured = tuple(sorted(InstrumentRegistry.load().executable_epics()))
+    return measured or ("EURUSD",)
 
 #: فاصلٌ بين نداءات الأسعار. أوّل تشغيل نجح، والثاني بعده مباشرةً أعاد
 #: `CapitalTransportError` على ثلاث دقّات — الوسيط يحدّ المعدّل.
 PAGE_PAUSE_SECONDS = 0.6
 
-#: حدّ التعادل **يُحسَب من الإعداد المُختبَر**، لا يُنقَل ثابتاً.
+#: حدّ التعادل يسكن مع نموذج التكلفة، ويُستدعى من هناك.
 #:
-#: كان هنا `0.364` منقولاً من §5 في `PROJECT-TRUTH` — وهو محسوب لعائدٍ إلى
-#: مخاطرة صافٍ 1.75. والمسح يُشغَّل بوقف 30 وهدف 60، وصافيهما بعد التكلفة
-#: أقلّ من ذلك. فكنّا نقيس معدّل فوز إعدادٍ ونقارنه بحدّ تعادل إعدادٍ آخر.
-#:
-#: والصحيح أن الحدّ = 1 ÷ (1 + العائد إلى المخاطرة الصافي)، ويُؤخذ الصافي
-#: من نموذج التكلفة نفسه للإعداد الجاري. قياسٌ من المصدر لا نقلٌ من وثيقة.
-def breakeven_win_rate(cost_model, config, reference_price) -> float:
-    economics = cost_model.estimate(
-        size=config.size,
-        entry_price=reference_price,
-        stop_distance_pips=config.stop_distance_pips,
-        take_profit_distance_pips=config.take_profit_distance_pips,
-        stop_kind=config.stop_kind,
-        nights_held=0,
-    )
-    net_rr = float(economics.net_reward_risk_ratio)
-    if net_rr <= 0:
-        return 1.0          # عائدٌ غير موجب: لا معدّل فوز ينقذه
-    return 1.0 / (1.0 + net_rr)
+#: كان محسوباً هنا وحده — و`run_backtest.py` يحمل ثابتاً منقولاً `0.364`
+#: أُصلح هنا ولم يُصلَح هناك، لأن العلاج كان نسخةً في ملف لا موضعاً واحداً.
+from app.strategies.backtest import breakeven_win_rate  # noqa: E402
 
 
 def breakeven_from_trades(result, cost_model, stop_kind) -> float | None:
@@ -327,7 +318,7 @@ def verdict(
 def main() -> int:
     ap = argparse.ArgumentParser(description="مسح التاريخ وقياس الاستراتيجية عليه")
     ap.add_argument("--source", choices=["live", "demo"], default="live")
-    ap.add_argument("--epics", nargs="*", default=list(PRICED_EPICS))
+    ap.add_argument("--epics", nargs="*", default=None)
     ap.add_argument("--resolutions", nargs="*", default=list(LADDER))
     ap.add_argument("--stop-pips", default="30")
     ap.add_argument("--tp-pips", default="60")
@@ -343,12 +334,17 @@ def main() -> int:
     ap.add_argument("--report", default=str(REPO / "data" / "history-sweep.json"))
     a = ap.parse_args()
 
-    unpriced = [e for e in a.epics if e not in PRICED_EPICS]
+    priced = priced_epics()
+    if a.epics is None:
+        a.epics = list(priced)
+    unpriced = [e for e in a.epics if e.upper() not in priced]
     if unpriced:
+        from app.risk.instrument_registry import InstrumentRegistry
+        registry = InstrumentRegistry.load()
         print(
-            f"{BAD}⛔ لا نموذج تكلفة لـ{'، '.join(unpriced)}.{END}\n"
-            f"   نموذج المشروع الوحيد لـEUR/USD، وحجم نقطته 0.0001 — يستحيل\n"
-            f"   لزوجٍ مقوَّم بالين. تشغيلُه عليها يُنتج أرقاماً خاطئة بمئة ضعف.",
+            f"{BAD}⛔ لا قياس اقتصاديات لـ{'، '.join(unpriced)}.{END}\n"
+            + "\n".join(f"   {registry.why_not(e)}" for e in unpriced)
+            + f"\n   المقيس الآن: {'، '.join(priced)}.",
             file=sys.stderr,
         )
         return 2
@@ -403,13 +399,35 @@ def main() -> int:
         stop_kind=StopKind.NORMAL,
         allow_overnight=False,
     )
-    cost_model = CapitalComCostModel(PROVISIONAL_EURUSD)
+    # ---------------------------------------------------------------------
+    # **نموذج التكلفة لكل أداة على حدة، ولا نموذج واحد للكلّ.**
+    #
+    # كان `PROVISIONAL_EURUSD` واحداً للمسح كلّه، وكان ذلك **سليماً** ما دام
+    # المسح مقصوراً على `EURUSD`. ثم وسّعتُ البوّابة لتقرأ الأدوات المقيسة من
+    # السجلّ — فصار المسح يقبل الذهب ويسعّره بنموذج اليورو: حجم نقطةٍ أصغر
+    # مئة مرّة وسبريدٌ أصغر عشرة آلاف مرّة.
+    #
+    # أي أنني وسّعتُ بوّابةً ونسيتُ ما خلفها — وهو العطب نفسه الذي جاء هذا
+    # المسح ليمنعه. فيُبنى النموذج الآن **داخل الحلقة** من قياس كل أداة.
+    # ---------------------------------------------------------------------
+    from app.risk.instrument_registry import InstrumentRegistry
+    registry = InstrumentRegistry.load()
+    models = {e: registry.cost_model_for(e) for e in a.epics}
+    missing = [e for e, m in models.items() if m is None]
+    if missing:
+        print(f"{BAD}⛔ لا نموذج تكلفة لـ{'، '.join(missing)}.{END}", file=sys.stderr)
+        return 2
+    # المرجع الأوّل للطباعة وحده — والحكم يُحسَب لكل أداة في محلّه.
+    cost_model = models[a.epics[0]]
     engine = Backtester(cost_model=cost_model, config=config)
 
     # عدد الإعدادات المخطَّطة — يُحسَب **قبل** التشغيل. انظري `corrected_z`.
     planned = len(wanted) * len(a.epics) * len(a.resolutions)
     min_z = corrected_z(planned)
-    reference = breakeven_win_rate(cost_model, config, D("1.15837"))
+    reference = breakeven_win_rate(
+        cost_model, config, cost_model.economics.min_stop_distance and D("1.15837")
+        if a.epics[0].upper() == "EURUSD" else D("1.15837")
+    )
 
     print(f"{DIM}   الأدوات المُسعَّرة (وهي وحدها ما يُقاس): "
           f"{'، '.join(a.epics)}{END}")
@@ -427,7 +445,7 @@ def main() -> int:
             "breakeven_source": "يُحسَب لكل إعداد من مستويات صفقاته (breakeven_from_trades)",
             "planned_comparisons": planned,
             "min_z_corrected": round(min_z, 3),
-            "cost_model": "PROVISIONAL_EURUSD",
+            "cost_model": "InstrumentRegistry (مقيس لكل أداة)",
             "transplanted": bool(a.transplant),
         },
         "runs": [],
@@ -444,7 +462,7 @@ def main() -> int:
             strategy_class=strategy_class, strategy_name=strategy_name,
             declared=declared, epics=a.epics, resolutions=a.resolutions,
             adapter=adapter, engine=engine, config=config,
-            cost_model=cost_model, min_z=min_z,
+            cost_model=cost_model, models=models, min_z=min_z,
             transplant=a.transplant, report=report, to_bars=to_bars,
         )
     return finish(report, a.report)
@@ -452,11 +470,20 @@ def main() -> int:
 
 def run_one_strategy(
     *, strategy_class, strategy_name, declared, epics, resolutions,
-    adapter, engine, config, cost_model, min_z, transplant, report, to_bars,
+    adapter, engine, config, cost_model, models, min_z, transplant, report, to_bars,
 ):
     from app.strategies.backtest import InsufficientData
 
+    # الاستيراد محلّيّ لأن الوحدة تستورده داخل `main` وحدها — و`Backtester`
+    # هنا اسمٌ حرّ لا وجود له في نطاق الوحدة. (أسقطه
+    # `test_scripts_have_no_undefined_names` فور كتابته — وهو الفحص الذي
+    # كُتب بعد أن انفجر سكربتٌ على الخادم بالسبب نفسه.)
+    from app.strategies.backtest import Backtester
+
     for epic in epics:
+        # النموذج **لهذه الأداة**، لا نموذج الأداة الأولى.
+        cost_model = models.get(epic.upper()) or models.get(epic) or cost_model
+        engine = Backtester(cost_model=cost_model, config=config)
         # **يُسأل أوّلاً: هل تنظر الاستراتيجية إلى هذه الأداة أصلاً؟**
         # صفرُ صفقة من استراتيجية رفضت الأداة ليس «لا حافّة» ولا «عيّنة
         # صغيرة» — هو لا شيء. وقولُ غير ذلك يُرسل القارئ إلى المكان الخطأ.

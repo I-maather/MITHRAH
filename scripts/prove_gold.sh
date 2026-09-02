@@ -30,7 +30,7 @@
 set -uo pipefail
 
 EPIC="GOLD"
-BASELINE="300"
+BASELINE=""
 PROVE=""
 APPROVAL=""
 SERVER_IP="${MATHRAH_SERVER:-167.233.234.236}"
@@ -38,7 +38,7 @@ SERVER_IP="${MATHRAH_SERVER:-167.233.234.236}"
 while [ $# -gt 0 ]; do
   case "$1" in
     --epic)     EPIC="${2:-GOLD}"; shift 2 ;;
-    --baseline) BASELINE="${2:-300}"; shift 2 ;;
+    --baseline) BASELINE="${2:-}"; shift 2 ;;
     --server)   SERVER_IP="${2:-$SERVER_IP}"; shift 2 ;;
     --prove)    PROVE="1"; APPROVAL="${2:-}"; shift 2 ;;
     *)          printf '\033[31m⛔ خيار غير معروف: %s\033[0m\n' "$1"; exit 2 ;;
@@ -69,8 +69,12 @@ step "٢ · قياس اقتصاديات الأدوات (قراءةٌ محضة �
   exit 1
 }
 
-step "٣ · ماذا يعني ذلك لحدودك عند مرجع $BASELINE دولار"
-"${SSH[@]}" "$REMOTE ../scripts/prove_gold_economics.py --epic $EPIC --baseline $BASELINE" || {
+# المرجع لا يُفترض هنا: السكربت على الخادم يقرأه من الإعدادات إن لم يُمرَّر.
+BASE_ARG=""
+[ -n "$BASELINE" ] && BASE_ARG="--baseline $BASELINE"
+
+step "٣ · ماذا يعني ذلك لحدودك (المرجع من إعدادات الخادم)"
+"${SSH[@]}" "$REMOTE ../scripts/prove_gold_economics.py --epic $EPIC $BASE_ARG" || {
   red "⛔ تعذّر الحساب."
   exit 1
 }
@@ -90,7 +94,7 @@ fi
 
 step "٤ · التجربة على الحساب التجريبي"
 dim "أمران: وقفٌ أضيق من المُعلَن (يُنتظر رفضه)، ووقفٌ عنده (يُنتظر قبوله ثم يُغلق فوراً)."
-"${SSH[@]}" "$REMOTE ../scripts/prove_gold_economics.py --epic $EPIC --baseline $BASELINE \
+"${SSH[@]}" "$REMOTE ../scripts/prove_gold_economics.py --epic $EPIC $BASE_ARG \
   --prove --approval-ref $(printf '%q' "$APPROVAL")"
 STATUS=$?
 

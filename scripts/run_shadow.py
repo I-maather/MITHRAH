@@ -50,6 +50,34 @@ def fallback_balances(equity):
     )
 
 
+#: نموذج التكلفة **للأداة المطلوبة**، مقروءاً من القياس — أو رفضٌ بسببٍ يُقرأ.
+#:
+#: كان هنا `CapitalComCostModel(PROVISIONAL_EURUSD)` مهما كانت `--epic`.
+#: وحجم نقطة اليورو 0.0001 وحجم نقطة الذهب 0.01 — مئة ضعف؛ وسبريد اليورو
+#: 0.00007 وسبريد الذهب 0.75 — عشرة آلاف ضعف. فتشغيلُ هذا السكربت على
+#: الذهب كان يُخرج جدول نتائج كامل الثقة وكلّ رقمٍ فيه خاطئ.
+#:
+#: ولم يكن ذلك ضاراً يوم كُتب: الاستراتيجيات كانت تُعلن `EURUSD` وحدها،
+#: فلا تُنتج إشارةً على غيرها. ثم صارت `FX_MARKETS` أربعاً — فانقلب سطرٌ
+#: كان صحيحاً إلى سطرٍ يكذب، بلا أن يُلمَس. وهذا صنفُ عطبٍ لا يُكتشف
+#: بمراجعة السطر: يُكتشف بسؤال «ما الذي تغيّر تحته؟».
+#:
+#: و`run_history_sweep.py` يرفض هذا بالضبط منذ يومه. فالرفض ينتقل هنا.
+def cost_model_for_or_refuse(epic: str):
+    from app.risk.instrument_registry import InstrumentRegistry
+    registry = InstrumentRegistry.load()
+    model = registry.cost_model_for(epic)
+    if model is None or epic.upper() not in registry.executable_epics():
+        print(
+            f"\u26d4 \u0644\u0627 \u0642\u064a\u0627\u0633 \u0627\u0642\u062a\u0635\u0627\u062f\u064a\u0627\u062a \u0644\u0640{epic}: {registry.why_not(epic)}\n"
+            "   \u0648\u0644\u0627 \u064a\u064f\u0633\u0639\u0651\u064e\u0631 \u0628\u0646\u0645\u0648\u0630\u062c \u0623\u062f\u0627\u0629\u064d \u0623\u062e\u0631\u0649: \u062d\u062c\u0645 \u0627\u0644\u0646\u0642\u0637\u0629 \u0648\u0627\u0644\u0633\u0628\u0631\u064a\u062f \u0648\u0627\u0644\u0643\u0645\u064a\u0629\n"
+            "   \u0627\u0644\u062f\u0646\u064a\u0627 \u062a\u062e\u062a\u0644\u0641 \u0628\u064a\u0646\u0647\u0627 \u0645\u0626\u0627\u062a \u0627\u0644\u0623\u0636\u0639\u0627\u0641\u060c \u0641\u062a\u062e\u0631\u062c \u0623\u0631\u0642\u0627\u0645\u064c \u0648\u0627\u062b\u0642\u0629 \u0648\u062e\u0627\u0637\u0626\u0629.",
+            file=sys.stderr,
+        )
+        return None
+    return model
+
+
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(description="Shadow Mode — قرار حيّ بلا تنفيذ")
     p.add_argument("--epic", default="EURUSD")
@@ -94,9 +122,12 @@ def main(argv=None) -> int:
 
     equity = D(a.equity)
     limits = RiskLimits.for_mode(RiskMode.VALIDATION, equity, Broker.CAPITAL_COM)
+    model = cost_model_for_or_refuse(a.epic)
+    if model is None:
+        return 2
     runner = ShadowRunner(
         strategy=TrendPullbackV1(),
-        cost_model=CapitalComCostModel(PROVISIONAL_EURUSD),
+        cost_model=model,
         risk_engine=RiskEngine(limits),
         stop_distance_pips=D(a.stop_pips),
         take_profit_distance_pips=D(a.tp_pips),
