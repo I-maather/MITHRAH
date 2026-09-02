@@ -43,6 +43,28 @@ class Strategy(ABC):
     def evaluate(self, *, symbol: str, bars: Sequence[Bar], quote: Quote, now: datetime) -> Optional[Signal]:
         """يعيد Signal أو None. لا يرمي استثناءً على 'لا توجد فرصة'."""
 
+    def assess(self, *, symbol: str, bars: Sequence[Bar], quote: Quote, now: datetime):
+        """
+        القرار **ومعه سببه**. الافتراضي هنا صادقٌ لا مفيد: يقول إن هذه
+        الاستراتيجية لا تُفصّل شروطها بعد — ولا يختلق سبباً.
+
+        واستراتيجيةٌ تُفصّل تُعيد تعريفها؛ و`evaluate` تبقى هي القرار في
+        الحالتين، فلا يتغيّر سلوكٌ قائم بإضافة التشخيص.
+        """
+        from .assessment import Assessment, Check
+
+        signal = self.evaluate(symbol=symbol, bars=bars, quote=quote, now=now)
+        return Assessment(
+            signal,
+            (
+                Check(
+                    "التقييم",
+                    signal is not None,
+                    "هذه الاستراتيجية لا تُفصّل شروطها بعد — لا سبب مفصّل.",
+                ),
+            ),
+        )
+
     def inputs_digest(self, symbol: str, bars: Sequence[Bar]) -> str:
         payload = {
             "strategy": self.metadata.name,

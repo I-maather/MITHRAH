@@ -20,7 +20,7 @@ Macro و News يستطيعان المنع فقط، ولا يستطيعان فر�
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional, Sequence
@@ -98,6 +98,9 @@ class PipelineResult:
     submission: Optional[SubmissionResult] = None
     reconciliation_ok: Optional[bool] = None
     at_utc: datetime = field(default_factory=now_utc)
+    #: تشخيص كل استراتيجية شُغّلت — «لماذا لم تُشِر» بالأرقام.
+    #: فارغةٌ حين يقف الخط قبل مرحلة الاستراتيجية، وذلك صادق: لم تُسأل.
+    assessments: tuple = ()
 
     @property
     def one_line_ar(self) -> str:
@@ -272,13 +275,30 @@ class Pipeline:
             )
 
         signal: Optional[Signal] = None
+        assessments: list[tuple[str, object]] = []
         for strategy in approved:
-            signal = strategy.evaluate(symbol=symbol, bars=list(bars), quote=quote, now=now)
+            assessment = strategy.assess(
+                symbol=symbol, bars=list(bars), quote=quote, now=now
+            )
+            assessments.append((
+                f"{strategy.metadata.name}@{strategy.metadata.version}", assessment,
+            ))
+            signal = assessment.signal
             if signal is not None:
                 break
 
         if signal is None:
-            return self._no_trade("strategy", "NO_SETUP", "لا توجد فرصة مطابقة لشروط الاستراتيجية.", now)
+            # **السبب لا الجملة.** كان يُعاد «لا توجد فرصة مطابقة» وحدها،
+            # وهي نفسها سواء كان ADX عند 24.9 أو عند 8. والفرق بينهما هو
+            # الفرق بين «انتظري» و«هذه الاستراتيجية لا تناسب هذا السوق».
+            detail = " · ".join(
+                f"{key}: {a.summary_ar}" for key, a in assessments
+            ) or "لم تُشغَّل استراتيجية."
+            result = self._no_trade(
+                "strategy", "NO_SETUP",
+                f"لا فرصة مطابقة. {detail}", now,
+            )
+            return replace(result, assessments=tuple(assessments))
 
         self.audit.record(
             actor=Actor.PIPELINE, action=AuditAction.SIGNAL_GENERATED, decision="SIGNAL",

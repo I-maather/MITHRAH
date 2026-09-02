@@ -33,6 +33,7 @@ from typing import Optional, Sequence
 
 from ..contracts import Bar, Quote, Side, Signal, StrategyState
 from .base import Strategy, StrategyMetadata
+from .assessment import Assessment, Recorder
 from .fx_common import D, FX_MARKETS, TRENDING_ADX, closes, sane_levels
 from .indicators import adx, atr, ema
 
@@ -97,10 +98,27 @@ class TrendPullbackV2(Strategy):
     def evaluate(
         self, *, symbol: str, bars: Sequence[Bar], quote: Quote, now: datetime
     ) -> Optional[Signal]:
+        """القرار وحده — **لم يتغيّر حرفاً**. التشخيص في `assess`."""
+        return self.assess(symbol=symbol, bars=bars, quote=quote, now=now).signal
+
+    def assess(
+        self, *, symbol: str, bars: Sequence[Bar], quote: Quote, now: datetime
+    ) -> Assessment:
+        """
+        نفس القرار، **ومعه سببه بالأرقام**.
+
+        كان كل رفضٍ هنا `return None` مجرّداً، فيصل إلى المالكة «لا توجد
+        فرصة» سواء كان ADX عند 24.9 أو عند 8. والفرق بينهما هو الفرق بين
+        «انتظري» و«هذه الاستراتيجية لا تناسب هذا السوق».
+        """
+        r = Recorder()
         if symbol not in self.metadata.markets:
-            return None
+            return r.fail("الأداة", f"{symbol} ليس من أسواق هذه الاستراتيجية.")
         if len(bars) < self.metadata.min_bars_required:
-            return None
+            return r.fail(
+                "عدد الشموع",
+                f"{len(bars)} شمعة، والمطلوب {self.metadata.min_bars_required}.",
+            )
 
         prices = closes(bars)
         fast = ema(prices, FAST)
@@ -108,40 +126,71 @@ class TrendPullbackV2(Strategy):
         volatility = atr(bars, ATR_PERIOD)
         strength = adx(bars, ATR_PERIOD)
         if fast is None or slow is None or volatility is None or strength is None:
-            return None
+            return r.fail("المؤشرات", "تعذّر حساب EMA أو ATR أو ADX من هذه الشموع.")
         if volatility <= 0:
-            return None
+            return r.fail("التقلّب", f"ATR14 = {volatility} — لا تقلّب يُقاس عليه وقف.")
+        r.ok("المؤشرات", f"EMA10 = {fast:.5f} · EMA30 = {slow:.5f} · ATR14 = {volatility:.5f}")
 
         # --- حارس الظرف: يُفحَص **قبل** أي شرط دخول ----------------------
         # ترتيبه مقصود: لو فُحص أخيراً لقرأ القارئ شروط الدخول ظانّاً أنها
         # الحاكمة، وهي ليست كذلك — الظرف يحكم قبلها.
         if strength <= TRENDING_ADX:
-            return None
+            return r.fail(
+                "الظرف",
+                f"ADX14 = {strength:.1f} دون {TRENDING_ADX} — سوقٌ متذبذب لا متّجه.",
+            )
+        r.ok("الظرف", f"ADX14 = {strength:.1f} فوق {TRENDING_ADX} — اتجاهٌ مؤكَّد.")
 
         last = bars[-1]
         long = fast > slow
+        direction_ar = "صاعد" if long else "هابط"
+        r.ok("الاتجاه", f"{direction_ar} — EMA10 {'فوق' if long else 'تحت'} EMA30.")
         if long:
-            if not (last.close > slow and last.low <= fast and last.close > fast):
-                return None
+            if not last.close > slow:
+                return r.fail("سلامة الاتجاه", f"الإغلاق {last.close:.5f} تحت EMA30 — الاتجاه مكسور.")
+            if not last.low <= fast:
+                return r.fail(
+                    "الارتداد",
+                    f"أدنى الشمعة {last.low:.5f} لم يبلغ EMA10 {fast:.5f} — لا ارتداد وقع.",
+                )
+            if not last.close > fast:
+                return r.fail(
+                    "رفض الارتداد",
+                    f"الإغلاق {last.close:.5f} تحت EMA10 {fast:.5f} — الارتداد لم يُرفَض.",
+                )
             entry = quote.ask
             stop = entry - ATR_STOP * volatility
             target = entry + ATR_TARGET * volatility
             side = Side.BUY
             touch = last.low
         else:
-            if not (last.close < slow and last.high >= fast and last.close < fast):
-                return None
+            if not last.close < slow:
+                return r.fail("سلامة الاتجاه", f"الإغلاق {last.close:.5f} فوق EMA30 — الاتجاه مكسور.")
+            if not last.high >= fast:
+                return r.fail(
+                    "الارتداد",
+                    f"أعلى الشمعة {last.high:.5f} لم يبلغ EMA10 {fast:.5f} — لا ارتداد وقع.",
+                )
+            if not last.close < fast:
+                return r.fail(
+                    "رفض الارتداد",
+                    f"الإغلاق {last.close:.5f} فوق EMA10 {fast:.5f} — الارتداد لم يُرفَض.",
+                )
             entry = quote.bid
             stop = entry + ATR_STOP * volatility
             target = entry - ATR_TARGET * volatility
             side = Side.SELL
             touch = last.high
+        r.ok("الارتداد", f"لمست الشمعة EMA10 ثم أُغلقت في جهته — ارتدادٌ مرفوض.")
 
         if not sane_levels(entry=entry, stop=stop, target=target, long=long):
-            return None
+            return r.fail(
+                "المستويات",
+                f"دخول {entry:.5f} · وقف {stop:.5f} · هدف {target:.5f} — ترتيبٌ غير منطقي.",
+            )
+        r.ok("المستويات", f"دخول {entry:.5f} · وقف {stop:.5f} · هدف {target:.5f}")
 
-        direction_ar = "صاعد" if long else "هابط"
-        return Signal(
+        return r.signal(Signal(
             strategy_name=self.metadata.name,
             strategy_version=self.metadata.version,
             symbol=symbol,
@@ -162,4 +211,4 @@ class TrendPullbackV2(Strategy):
                 f"EMA10 عكسياً، أو هبوط ADX تحت 25 — أيٌّ منها يلغي الفرضية."
             ),
             inputs_digest=self.inputs_digest(symbol, bars),
-        )
+        ))

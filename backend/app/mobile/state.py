@@ -517,6 +517,24 @@ def _scan(sys: Any) -> dict[str, Any]:
             "reason_ar": getattr(result, "reason_ar", "") or None,
             "stage": getattr(result, "stage", None),
             "needs_a_hand": bool(code and code in _NEEDS_A_HAND),
+            # **الشروط بالأرقام.** كان السبب جملةً واحدة («لا فرصة مطابقة»)
+            # هي نفسها سواء كان ADX عند 24.9 أو عند 8. وهذه القائمة هي
+            # الفرق بين «انتظري» و«الاستراتيجية لا تناسب هذا السوق».
+            "strategies": [
+                {
+                    "key": key,
+                    "summary_ar": getattr(a, "summary_ar", ""),
+                    "checks": [
+                        {
+                            "name_ar": c.name_ar,
+                            "passed": bool(c.passed),
+                            "detail_ar": c.detail_ar,
+                        }
+                        for c in getattr(a, "checks", ()) or ()
+                    ],
+                }
+                for key, a in (getattr(result, "assessments", ()) or ())
+            ],
         })
     faults = [i for i in instruments if i["needs_a_hand"]]
     return {
