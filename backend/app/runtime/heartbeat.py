@@ -31,14 +31,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import timedelta
+from datetime import date, timedelta
 from typing import Optional
 
 from ..brokers.capital.errors import CapitalAuthLockout
 from ..clock import now_utc
 from ..contracts import Bar, DataSource, Decision
 from ..money import D
-from ..pipeline.runner import MacroAssessment, PipelineResult
+from ..pipeline.runner import MacroAssessment, NewsBlackout, PipelineResult
 from ..risk.session_state import load_session_state
 from ..scheduling import JobKind
 
@@ -59,6 +59,16 @@ TICK_SECONDS = 1.0
 #: لكن الغرض ليس الطزاجة وحدها بل **التعافي**: انقطاعٌ عابر يُصلَح في
 #: الساعة التالية بدل أن يُعطّل الحارس حتى يُعاد تشغيل الخدمة.
 CALENDAR_REFRESH_SECONDS = 3600
+
+#: نافذة الحظر حول حدثٍ عالي الأثر — قبله وبعده.
+#:
+#: القيمتان **افتراضٌ معلَن** لا قياس: لا يملك المشروع دليلاً على المدّة
+#: الصحيحة، والمتحفّظ أسلم. وأي تضييقٍ لهما يحتاج قياساً لا رأياً.
+BLACKOUT_BEFORE = timedelta(minutes=30)
+BLACKOUT_AFTER = timedelta(minutes=30)
+
+#: كم يوماً تُحفَظ تأكيداته. يومان يكفيان القرار، والباقي نموٌّ بلا فائدة.
+CONFIRMED_DAYS_KEPT = 2
 
 #: تواتر إبقاء جلسة الوسيط حيّة وإعادة وصلها.
 #:
@@ -84,6 +94,27 @@ BARS_NEEDED = 120
 #: كم شمعة تُحفَظ للعرض. ستّون تكفي لقراءة السياق على الشاشة،
 #: وحفظُ المئة والعشرين كلها يضخّم حمولة الجوال بلا فائدة بصرية.
 CHART_BARS = 60
+
+
+#: العملات التي يُسأل عنها التقويم — عملات أدوات الاكتشاف.
+CALENDAR_CURRENCIES: tuple[str, ...] = ("USD", "EUR", "GBP", "JPY")
+
+#: مستويات الأثر التي تُنشئ نافذة حظر. المتوسط والمنخفض لا يوقفان التداول.
+HIGH_IMPACT: frozenset[str] = frozenset({"HIGH"})
+
+#: أي أداة تتأثر بأي عملة. الذهب مسعَّرٌ بالدولار فيتأثر به.
+SYMBOLS_BY_CURRENCY: dict[str, tuple[str, ...]] = {
+    "USD": ("EURUSD", "GBPUSD", "USDJPY", "GOLD"),
+    "EUR": ("EURUSD",),
+    "GBP": ("GBPUSD",),
+    "JPY": ("USDJPY",),
+}
+
+
+def _prune_confirmations(confirmed: set, today: date) -> None:
+    """يُبقي اليوم وما بعده. تأكيدُ الأمس لا يفيد قراراً ولا يُترك ينمو."""
+    for day in [d for d in confirmed if d < today]:
+        confirmed.discard(day)
 
 
 def _no_trade(code: str, reason_ar: str, stage: str) -> PipelineResult:
@@ -252,19 +283,79 @@ def register_runtime_jobs(state, *, interval_seconds: int = DEFAULT_INTERVAL_SEC
 
     def refresh_calendar() -> None:
         """
-        يُحدّث التقويم الاقتصادي. `READ_ONLY`: يقرأ تغذيةً عامة ولا يلمس شيئاً.
+        يُحدّث التقويم الاقتصادي **ويُغذّي الحارس الذي يقرأه**.
 
-        وهذه المهمة هي ما يجعل الحارس **يتعافى**. لو جُلب التقويم عند الإقلاع
-        وحده، لكان انقطاع شبكةٍ لثوانٍ لحظةَ الإقلاع يُبقي `configured=False`
-        حتى يُعاد تشغيل الخدمة — أي حارسٌ ميّتٌ بلا أن يقول أحدٌ شيئاً.
+        ## العطل الذي فرض إعادة كتابة هذه الدالّة
 
-        وإخفاق الجلب لا يُرفَع: `SafeScheduler.tick` يعزل الخطأ ويسجّله،
-        والمزوّد يبقى غير مُعدّ — فتسقط أهلية التداول. يفشل مغلقاً.
+        كانت تستدعي `calendar.refresh()` وتقف. والخط يقرأ حارساً آخر:
+        `BlackoutCalendar.confirmed_for` — وهو `set()` يُنشأ فارغاً في
+        `build_system` **ولا يُكتب فيه سطرٌ واحد في المشروع كلّه**. بحثتُ:
+        يُعلَن في `runner.py:78`، ويُقرأ في `runner.py:228`، ويُعرَض في
+        `main.py:566`، ولا يُكتب أبداً.
+
+        ⇒ `is_confirmed(today)` **زائفةٌ دائماً**، فيقف كل تقييمٍ عند المرحلة
+        الثالثة بـ`NEWS_CALENDAR_UNCONFIRMED` قبل أن يبلغ الاستراتيجية.
+        **لم يكن النظام قادراً على فتح صفقة واحدة منذ كُتب.**
+
+        وهو العطل الحاكم في المشروع بأخطر صوره: بوّابةٌ موصولةٌ بمصدرٍ لم
+        يوصلها أحد به — تقول «لا أعرف» فيُقرأ ذلك حذراً، وهو عطل.
+
+        ## القاعدة
+
+        اليوم يُؤكَّد **بعد جلبٍ ناجح فعلاً**، لا بمحاولة. وإخفاق الجلب لا
+        يؤكّد شيئاً ولا يمحو تأكيداً سابقاً: يومٌ جُلب تقويمُه بنجاح يبقى
+        مجلوباً وإن سقطت الشبكة بعده.
         """
         calendar = getattr(state.providers, "calendar", None)
+        if calendar is None:
+            return
         refresh = getattr(calendar, "refresh", None)
         if callable(refresh):
             refresh()
+        if not getattr(calendar, "configured", False):
+            # مزوّدٌ غير مُعدّ لا يؤكّد يوماً. يفشل مغلقاً.
+            return
+
+        now = now_utc()
+        start = now - timedelta(hours=12)
+        end = now + timedelta(hours=36)
+        try:
+            events = calendar.events(
+                currencies=CALENDAR_CURRENCIES,
+                window_start_utc=start,
+                window_end_utc=end,
+            )
+        except Exception as exc:  # noqa: BLE001
+            # **لا تأكيد على إخفاق.** والسبب يُكتب: «غير مؤكد» بلا سببٍ
+            # ترسل المالكة تبحث في مكانٍ سليم.
+            logging.getLogger(__name__).warning(
+                "تعذّر جلب التقويم الاقتصادي: %s", type(exc).__name__
+            )
+            return
+
+        blackouts = []
+        for event in events:
+            if getattr(event.impact, "value", str(event.impact)).upper() not in HIGH_IMPACT:
+                continue
+            at = event.scheduled_utc
+            for currency in event.currencies:
+                for symbol in SYMBOLS_BY_CURRENCY.get(currency.upper(), ()):
+                    blackouts.append(
+                        NewsBlackout(
+                            symbol=symbol,
+                            starts_utc=at - BLACKOUT_BEFORE,
+                            ends_utc=at + BLACKOUT_AFTER,
+                            title_ar=event.name,
+                            source=event.provider,
+                        )
+                    )
+
+        state.blackouts.entries = blackouts
+        state.blackouts.confirmed_for.add(now.date())
+        # التأكيد للغد أيضاً حين تشمله النافذة المجلوبة — وإلّا وقف النظام
+        # عند منتصف الليل إلى أن تدور المهمة من جديد.
+        state.blackouts.confirmed_for.add((now + timedelta(days=1)).date())
+        _prune_confirmations(state.blackouts.confirmed_for, now.date())
 
     state.scheduler.register(
         CALENDAR_JOB,
