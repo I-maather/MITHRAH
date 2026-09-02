@@ -280,9 +280,44 @@ def _check_cfd(
         return fail(PERMISSIONS_INSUFFICIENT, "صلاحيات الحساب تخالف سياسة CFD: " + "؛ ".join(problems))
     checks.append(("PERMISSIONS", True, "حساب CFD تجزئة، بلا خيارات ولا آجلة ولا كريبتو."))
 
-    if not market_is_open:
-        return fail(MARKET_CLOSED, "سوق الفوركس مغلق — لا تقييم خارج الجلسة.")
-    checks.append(("SESSION", True, "سوق الفوركس مفتوح."))
+    # ---------------------------------------------------------------------
+    # **حالة السوق من الوسيط أوّلاً — لكل أداةٍ ساعاتُها.**
+    #
+    # `market_is_open` يأتي من `forex_market_status`: مفتوحٌ متّصلاً من أحدٍ
+    # 17:00 نيويورك إلى جمعةٍ 17:00. وذلك **صحيحٌ عن الفوركس**، وخطأٌ عن
+    # الذهب: له استراحةٌ يومية قرابة ساعةٍ عند إقفال شيكاغو.
+    #
+    # وقد انكشف هذا بسؤالٍ من المالكة: «مو السوق يفتح من الاثنين للجمعة؟»
+    # — والوقت 21:21 UTC أربعاء، فكودنا يقول «مفتوح» والوسيط يقول
+    # `CLOSED`. فمضت الدورة كاملةً على حالةٍ خاطئة حتى ارتدّت عند المعاينة
+    # المحلية، وقالت الشاشة «السوق مفتوح» عن أداةٍ مقفلة.
+    #
+    # والوسيط **يرسل حالة كل أداةٍ على حدة** في `market_status`. فتُقرأ منه،
+    # وتبقى ساعاتُنا احتياطاً حين لا يقول شيئاً — لا حَكَماً فوق قوله.
+    # ---------------------------------------------------------------------
+    declared_status = (getattr(details, "market_status", None) or "").upper()
+    if declared_status:
+        if declared_status != "TRADEABLE":
+            return fail(
+                MARKET_CLOSED,
+                f"{symbol} غير قابلة للتداول الآن عند الوسيط ({declared_status}) — "
+                "وهذه حالتها هي، لا حالة الفوركس.",
+            )
+        checks.append((
+            "SESSION", True,
+            f"{symbol} قابلة للتداول الآن بقول الوسيط ({declared_status}).",
+        ))
+    elif not market_is_open:
+        return fail(
+            MARKET_CLOSED,
+            "الوسيط لم يُعلن حالة الأداة، وساعات الفوركس تقول مغلق — لا تقييم.",
+        )
+    else:
+        checks.append((
+            "SESSION", True,
+            "الوسيط لم يُعلن حالة الأداة؛ ساعات الفوركس تقول مفتوح "
+            "— **احتياطٌ لا قولُ الوسيط**.",
+        ))
 
     quality = assess_quote(quote, now=now)
     if not quality.tradable:

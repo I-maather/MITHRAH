@@ -254,3 +254,60 @@ def test_a_foreign_quote_currency_is_still_refused_declared_or_not():
     result = evaluate("USDJPY", det=details("USDJPY", quote_currency="JPY"))
     assert not result.eligible
     assert result.reason_code == CONVERSION_COST_UNMEASURED
+
+
+# ---------------------------------------------------------------------------
+# ساعات السوق: لكل أداةٍ ساعاتُها
+# ---------------------------------------------------------------------------
+
+def test_the_brokers_own_status_beats_our_forex_clock():
+    """
+    **العطل الذي كشفه سؤال المالكة:** «مو السوق يفتح من الاثنين للجمعة؟»
+
+    كان الوقت 21:21 UTC أربعاء. و`forex_market_status` تقول مفتوح — وهي
+    صادقة عن الفوركس، فهو متّصلٌ من أحدٍ 17:00 نيويورك إلى جمعةٍ 17:00.
+    والوسيط يقول عن الذهب `CLOSED`، لأن للذهب استراحةً يومية عند إقفال
+    شيكاغو لا يعرفها الفوركس.
+
+    فمضت الدورة على «مفتوح» حتى ارتدّت عند المعاينة المحلية، وقالت الشاشة
+    «سوق الفوركس مفتوح» عن أداةٍ مقفلة. وهو النمط نفسه للمرّة الرابعة:
+    قاعدةٌ صحيحة عن أداةٍ، مفروضةٌ على أربع.
+    """
+    result = evaluate(
+        "GOLD",
+        det=details("GOLD", asset_class=AssetClass.CFD_COMMODITY,
+                    market_status="CLOSED"),
+        open_=True,   # ساعاتنا تقول مفتوح — والوسيط يقول لا
+    )
+    assert not result.eligible
+    assert result.reason_code == "MARKET_CLOSED"
+    assert "CLOSED" in result.reason_ar
+
+
+def test_a_tradeable_instrument_passes_even_at_an_odd_hour():
+    """والعكس: أداةٌ يقول الوسيط إنها قابلة للتداول لا تُمنع بساعاتنا."""
+    result = evaluate(
+        "GOLD",
+        det=details("GOLD", asset_class=AssetClass.CFD_COMMODITY,
+                    market_status="TRADEABLE"),
+        open_=False,  # ساعاتنا تقول مغلق — والوسيط يقول قابلة للتداول
+    )
+    assert result.eligible, result.reason_ar
+    check = next(c for c in result.checks if c[0] == "SESSION")
+    assert "بقول الوسيط" in check[2]
+
+
+def test_without_a_declared_status_our_clock_still_guards():
+    """
+    ولا يُخفَّف الحارس: وسيطٌ صامتٌ عن الحالة يُعامَل بساعاتنا، **ويُقال
+    إنها احتياطٌ لا قولُ الوسيط** — كي لا يُقرأ الاحتياط دليلاً.
+    """
+    from app.eligibility.allowlist import MARKET_CLOSED
+
+    closed = evaluate("EURUSD", det=details("EURUSD", market_status=None), open_=False)
+    assert not closed.eligible and closed.reason_code == MARKET_CLOSED
+
+    opened = evaluate("EURUSD", det=details("EURUSD", market_status=None), open_=True)
+    assert opened.eligible, opened.reason_ar
+    check = next(c for c in opened.checks if c[0] == "SESSION")
+    assert "احتياطٌ لا قولُ الوسيط" in check[2]
