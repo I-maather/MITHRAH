@@ -188,6 +188,60 @@ def _mobile_resume(reason_ar: str) -> None:
     )
 
 
+def _install_broker(sys_state, candidate) -> None:
+    """
+    يضع الوسيط الجديد في **كل موضعٍ يحمله** — لا في واحدٍ فيتفرّق الحقّ.
+
+    ## العطل الذي فرض هذه الدالّة
+
+    كان التبديل يكتب `sys_state.broker` وحده. والخط (`pipeline.broker`)
+    وخدمة التنفيذ (`execution.broker`) يحملان **مرجعهما الخاص** المضبوط عند
+    الإقلاع. فالنتيجة بعد التبديل:
+
+        الشاشة تقرأ من الحساب الجديد · والقرار والتنفيذ على القديم.
+
+    والاتجاه الخطير واضح: تبديلٌ من الحقيقي إلى التجريبي يُري المالكة
+    «تجريبي» بينما النظام ما زال ينفّذ على حسابها الحقيقي.
+
+    وهو العطل الحاكم في هذا المشروع بصورةٍ تاسعة: نسختان لحقيقةٍ واحدة
+    تفترقان.
+
+    ## وما يُعاد تقييمه مع الوسيط
+
+    التجربة التجريبية تُقرأ من جديد وتُصفّى بالوسيط الجديد: حقيقيٌّ ⇒ تُلغى
+    قائمة الاستراتيجيات ويبقى قفل التنفيذ مغلقاً على المحوّل الجديد (يُبنى
+    مغلقاً افتراضاً). فالانتقال إلى الحقيقي **لا يحمل معه إذن التجربة**.
+    """
+    from .runtime.demo_trial import demo_trial_for, read_demo_trial
+
+    sys_state.broker = candidate
+    for holder, attribute in (
+        (getattr(sys_state, "pipeline", None), "broker"),
+        (getattr(sys_state, "execution", None), "broker"),
+    ):
+        if holder is not None:
+            setattr(holder, attribute, candidate)
+
+    trial = demo_trial_for(candidate, read_demo_trial())
+    pipeline = getattr(sys_state, "pipeline", None)
+    if pipeline is not None:
+        pipeline.trial_strategies = trial.strategies
+    sys_state.demo_trial_note_ar = trial.note_ar
+
+    if trial.active:
+        # المحوّل الجديد يُبنى بقفلٍ مغلق؛ يُفتح فقط إن بقيت التجربة صالحة.
+        try:
+            candidate.execution_lock = candidate.execution_lock.authorise(
+                owner_authorization_reference=trial.approval_reference,
+                reason_ar=(
+                    "تجربة الحساب التجريبي — أُعيد تركيب القفل بعد تبديل الحساب."
+                ),
+                at=now_utc(),
+            )
+        except Exception:  # noqa: BLE001
+            logging.getLogger(__name__).warning("تعذّر تركيب قفل التنفيذ بعد التبديل.")
+
+
 def _mobile_switch_environment(target: str) -> dict:
     """
     يبدّل حساب الوسيط المقروء منه — **ولا يفتح تداولاً**.
@@ -228,7 +282,7 @@ def _mobile_switch_environment(target: str) -> dict:
             status=502,
         ) from exc
 
-    sys_state.broker = candidate
+    _install_broker(sys_state, candidate)
     sys_state.broker_note_ar = ""
     sys_state.audit.record(
         actor=Actor.OWNER, action=AuditAction.CONFIG_CHANGE,
