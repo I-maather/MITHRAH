@@ -337,3 +337,68 @@ def test_a_stop_tighter_than_the_broker_allows_is_refused_here_not_there():
     assert result.decision is Decision.NO_TRADE
     assert result.reason_code == STOP_BELOW_BROKER_MINIMUM, result.reason_ar
     assert "0.0100" in result.reason_ar or "0.01" in result.reason_ar
+
+
+# ---------------------------------------------------------------------------
+# ٤ · الرقم الذي تقرأه المالكة
+# ---------------------------------------------------------------------------
+
+def test_a_rejected_stop_is_readable_not_twenty_eight_decimals():
+    """
+    **ظهر على شاشتها بالحرف:**
+
+        مسافة الوقف 0.0023321165761706818242605020 أضيق من أدنى ما يقبله
+        الوسيط (0.01) على EURUSD
+
+    ثمانٍ وعشرون منزلة — دقّةُ `Decimal` بعد قسمة، لا دقّةُ سعرٍ عند وسيط.
+    ورقمٌ بهذا الطول لا يُقرأ، فيُقرأ أنه عطب: تنظر المالكة إلى رفضٍ صحيح
+    فتظنّ النظام مكسوراً.
+
+    وهو العيب الحاكم في وجهه الآخر: قيمةٌ تُعرَض **بغير الدقّة التي تعنيها**.
+    """
+    pipeline, state, _ = build(
+        # **وقفٌ بذيلٍ طويل كالذي أنتجته `1.5×ATR` فعلاً.**
+        #
+        # أوّل كتابةٍ لهذا الفحص استعملت وقفاً عند 1.15900 — فرقُه 0.001،
+        # رقمٌ نظيف بلا قسمة. فمرّ الفحص تحت الطفرة: لا ذيل ليُقصّ.
+        # واختبارٌ لا يُعيد إنتاج الشرط لا يفحصه — وهو فخّ «المقارنة
+        # الفارغة» نفسه للمرّة الثالثة اليوم.
+        symbol="EURUSD", entry="1.16000",
+        stop="1.157667883423829318175739498", target="1.16300",
+        baseline="10000", bid="1.15993", ask="1.16000",
+    )
+    result = run(pipeline, state, "EURUSD")
+    assert result.reason_code == STOP_BELOW_BROKER_MINIMUM, result.reason_ar
+    longest = max(
+        (len(part.split(".")[1]) for part in result.reason_ar.replace("(", " ").split()
+         if "." in part and part.replace(".", "").replace(",", "").isdigit()),
+        default=0,
+    )
+    assert longest <= 8, f"رقمٌ بـ{longest} منزلة في نصٍّ تقرأه المالكة."
+
+
+def test_the_rejection_also_speaks_in_pips():
+    """
+    و«0.00233 مقابل 0.01» صحيحٌ ولا يُقرأ. والمتداولة تفكّر بالنقاط:
+    **23.32 نقطة مقابل 100** — وهي الجملة التي تُفهَم بلا حساب.
+    """
+    pipeline, state, _ = build(
+        symbol="EURUSD", entry="1.16000",
+        stop="1.157667883423829318175739498", target="1.16300",
+        baseline="10000", bid="1.15993", ask="1.16000",
+    )
+    result = run(pipeline, state, "EURUSD")
+    assert "نقطة" in result.reason_ar
+    assert "100" in result.reason_ar
+
+
+def test_a_value_smaller_than_a_pip_is_still_shown():
+    """
+    وأدنى وقفٍ على الذهب `0.001` وحجم نقطته `0.01`: القصُّ على منازل النقطة
+    وحدها يطبعه «0.000» — أي يمحو الرقم الذي جاء السطر ليقوله.
+    """
+    from app.pipeline.runner import _at_pip
+
+    assert _at_pip(D("0.001"), D("0.01")) == "0.00100"
+    assert _at_pip(D("0.0005"), D("0.01")) == "0.000500"
+    assert D(_at_pip(D("0.0005"), D("0.01"))) > 0

@@ -89,6 +89,26 @@ class BlackoutCalendar:
         return None
 
 
+def _at_pip(value: Decimal, pip: Decimal) -> str:
+    """
+    رقمُ سعرٍ بدقّة نقطة أداته — منزلةٌ عُشرية إضافية لا أكثر.
+
+    القسمة في `Decimal` تُخرج ثمانياً وعشرين منزلة، وتسرّبها إلى نصٍّ
+    تقرأه المالكة يجعل الرقم غير مقروء — فيُقرأ عطباً وهو صحيح.
+    """
+    if pip is None or pip <= 0:
+        return format(value, "f")
+    places = max(0, -pip.normalize().as_tuple().exponent) + 1
+    # **وقيمةٌ أصغر من نقطةٍ تُرى.** أدنى وقفٍ على الذهب `0.001` وحجم نقطته
+    # `0.01`: القصُّ على منازل النقطة وحدها يطبعه «0.000» — أي يمحو الرقم
+    # الذي جاء السطر ليقوله. فتُوسَّع المنازل بقدر ما يُظهر ثلاثة أرقامٍ
+    # دالّة، وتُقصَر عند عشرٍ كي لا يعود الطول.
+    if value != 0:
+        places = max(places, -value.normalize().adjusted() + 2)
+    places = min(places, 10)
+    return format(value.quantize(Decimal(1).scaleb(-places)), "f")
+
+
 def is_cfd(details) -> bool:
     """
     أهذه الأداة عقد فروقات؟
@@ -259,9 +279,20 @@ class Pipeline:
             return CfdReview(
                 reason_code=STOP_BELOW_BROKER_MINIMUM,
                 reason_ar=(
-                    f"مسافة الوقف {stop_price_distance} أضيق من أدنى ما يقبله الوسيط "
-                    f"({minimum}) على {signal.symbol}. ولا يُوسَّع الوقف تلقائياً: "
-                    "التوسيع يغيّر المخاطرة التي وافقتِ عليها."
+                    # **الرقم بدقّة الأداة، لا بدقّة القسمة.**
+                    #
+                    # ظهر على شاشة المالكة: «مسافة الوقف
+                    # 0.0023321165761706818242605020» — ثمانٍ وعشرون منزلة،
+                    # وهي دقّة `Decimal` بعد قسمةٍ لا دقّةُ سعرٍ عند وسيط.
+                    # ورقمٌ بهذا الطول لا يُقرأ، فيُقرأ أنه عطب.
+                    #
+                    # والدقّة تُشتقّ من حجم نقطة الأداة نفسها — 0.0001 على
+                    # اليورو و0.01 على الذهب — فتصحّ للأربع بلا جدول.
+                    f"مسافة الوقف {_at_pip(stop_price_distance, pip)} أضيق من أدنى "
+                    f"ما يقبله الوسيط ({_at_pip(minimum, pip)}) على {signal.symbol}"
+                    f" — أي {_at_pip(stop_price_distance / pip, D('0.1'))} نقطة "
+                    f"مقابل {_at_pip(minimum / pip, D('0.1'))}. "
+                    "ولا يُوسَّع الوقف تلقائياً: التوسيع يغيّر المخاطرة التي وافقتِ عليها."
                 ),
             )
 
