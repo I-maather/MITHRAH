@@ -265,46 +265,76 @@ def main() -> int:
     # وكان هذا آخر مجهولٍ في خطّة الذهب، ووُصف بأنه «تقدير». والتقدير لا
     # يُبنى عليه قرارُ مال.
     # ---------------------------------------------------------------------
-    print(f"\n{BOLD}والوقف الذي ستطلبه الاستراتيجية{END}")
-    try:
-        from app.contracts import Bar, DataSource
-        from app.strategies.indicators import atr
+    print(f"\n{BOLD}والوقف الذي ستطلبه الاستراتيجية — على كل إطار{END}")
+    print(
+        f"  {DIM}النظام مثبَّت على اليومي بسبب أدنى وقفٍ لليورو (100 نقطة). "
+        f"وحدُّ {epic} {row.economics.min_stop_distance} — قيدٌ لا يمنع شيئاً،{END}"
+    )
+    print(f"  {DIM}فالأطر الأقصر مفتوحةٌ لها. وهذا يُقاس هنا ولا يُفترض.{END}")
 
-        raw = adapter.get_candles(epic, resolution="DAY", max_bars=100)
+    from app.contracts import Bar, DataSource
+    from app.strategies.indicators import atr
+
+    def bars_for(resolution: str):
+        """شموع إطارٍ واحد. وما لا يُقرأ يُقال ولا يُخمَّن."""
+        try:
+            raw = adapter.get_candles(epic, resolution=resolution, max_bars=100)
+        except Exception as exc:  # noqa: BLE001
+            return None, f"{type(exc).__name__}: {exc}"
         two = D("2")
-        bars = [
-            Bar(
-                symbol=epic, start_utc=c.snapshot_time_utc,
-                open=(c.open_bid + c.open_ask) / two,
-                high=(c.high_bid + c.high_ask) / two,
-                low=(c.low_bid + c.low_ask) / two,
-                close=(c.close_bid + c.close_ask) / two,
-                volume=c.volume if c.volume is not None else D(0),
-                source=DataSource.HISTORICAL,
-            )
-            for c in raw
-        ]
-    except Exception as exc:  # noqa: BLE001
-        # شمعةٌ لم تُقرأ لا تُخمَّن، ولا يُقال «يمرّ» عمّا لم يُقَس.
-        print(f"  {WARN}○ تعذّر قراءة الشموع: {type(exc).__name__}: {exc}{END}")
-        print(f"  {DIM}  فيبقى وقف الاستراتيجية مجهولاً — ولا يُبنى عليه.{END}")
-        bars = []
+        try:
+            return [
+                Bar(
+                    symbol=epic, start_utc=c.snapshot_time_utc,
+                    open=(c.open_bid + c.open_ask) / two,
+                    high=(c.high_bid + c.high_ask) / two,
+                    low=(c.low_bid + c.low_ask) / two,
+                    close=(c.close_bid + c.close_ask) / two,
+                    volume=c.volume if c.volume is not None else D(0),
+                    source=DataSource.HISTORICAL,
+                )
+                for c in raw
+            ], None
+        except Exception as exc:  # noqa: BLE001
+            return None, f"شموع غير صالحة: {exc}"
 
-    if len(bars) < 30:
-        if bars:
-            print(f"  {WARN}○ {len(bars)} شمعة فقط — أقلّ من أن يُحسب عليها ATR14.{END}")
-    else:
+    STRATEGIES = (
+        ("BREAKOUT_RETEST", D("1.2"), D("2.4")),
+        ("TREND_PULLBACK", D("1.5"), D("3.0")),
+    )
+    FRAMES = (
+        ("DAY", "يومي"), ("HOUR_4", "٤ ساعات"), ("HOUR", "ساعة"),
+        ("MINUTE_30", "نصف ساعة"), ("MINUTE_15", "ربع ساعة"),
+    )
+
+    header = (
+        f"  {'الإطار':<10}{'ATR14':>9}{'٪ سعر':>8}"
+        + "".join(f"{n.split('_')[0]:>26}" for n, _, _ in STRATEGIES)
+    )
+    print(f"{DIM}{header}{END}")
+
+    workable_frames = []
+    for resolution, label in FRAMES:
+        bars, problem = bars_for(resolution)
+        if bars is None:
+            print(f"  {label:<10} {WARN}○ لم تُقرأ — {problem}{END}")
+            continue
+        if len(bars) < 30:
+            print(f"  {label:<10} {WARN}○ {len(bars)} شمعة فقط — لا يُحسب ATR14{END}")
+            continue
+
         volatility = atr(bars, 14)
         last = bars[-1].close
-        print(
-            f"  {DIM}{len(bars)} شمعة · السعر {last} · "
-            f"ATR14 = {volatility:.2f} ({volatility / last * 100:.2f}٪ من السعر){END}"
-        )
-        for name, stop_mult, tp_mult in (
-            ("BREAKOUT_RETEST (1.2×ATR)", D("1.2"), D("2.4")),
-            ("TREND_PULLBACK (1.5×ATR)", D("1.5"), D("3.0")),
-        ):
+        if volatility <= 0:
+            print(f"  {label:<10} {WARN}○ ATR14 صفر{END}")
+            continue
+
+        cells, any_fit = "", False
+        for name, stop_mult, tp_mult in STRATEGIES:
             stop_money = stop_mult * volatility
+            if stop_money < row.economics.min_stop_distance:
+                cells += f"{'✘ دون حدّ الوسيط':>26}"
+                continue
             e = model.estimate(
                 size=size, entry_price=last,
                 stop_distance_pips=stop_money / pip,
@@ -313,15 +343,33 @@ def main() -> int:
             fits = e.all_in_risk <= budget
             rr_ok = e.net_reward_risk_ratio >= limits.min_reward_risk_ratio
             if fits and rr_ok:
-                mark, why = f"{OK}✔{END}", "يمرّ"
+                any_fit = True
+                cells += f"{OK}{('✔ ' + f'{stop_money:.2f}$ ⇒ ' + f'{e.all_in_risk:.2f}'):>26}{END}"
             elif not fits:
-                mark, why = f"{BAD}✘{END}", f"خسارة {e.all_in_risk:.2f} فوق الميزانية {budget:.2f}"
+                cells += f"{BAD}{('✘ ' + f'{e.all_in_risk:.2f} فوق الميزانية'):>26}{END}"
             else:
-                mark, why = f"{BAD}✘{END}", f"العائد الصافي {e.net_reward_risk_ratio:.2f} تحت الحدّ"
-            print(
-                f"  {mark} {name}: وقف {stop_money:.2f}$ ⇒ خسارة {e.all_in_risk:.2f} · "
-                f"ع/م {e.net_reward_risk_ratio:.2f} — {why}"
-            )
+                cells += f"{BAD}{('✘ ع/م ' + f'{e.net_reward_risk_ratio:.2f}'):>26}{END}"
+        print(
+            f"  {label:<10}{volatility:>9.2f}{volatility / last * 100:>7.2f}%{cells}"
+        )
+        if any_fit:
+            workable_frames.append(label)
+
+    print()
+    if workable_frames:
+        print(
+            f"{OK}✅{END} أطرٌ يمرّ عليها {epic} بميزانية {budget:.2f} دولار "
+            f"**بلا تغيير أي حدّ**: {'، '.join(workable_frames)}."
+        )
+        print(
+            f"{DIM}   وقيدُ الوسيط الذي ثبّت النظام على اليومي يخصّ اليورو، "
+            f"ولا يمنع {epic} من الأطر الأقصر.{END}"
+        )
+    else:
+        print(
+            f"{BAD}⛔ لا إطار يمرّ عليه {epic} بميزانية {budget:.2f} دولار.{END}"
+        )
+        print(f"{DIM}   والعلاج رفع المرجع، لا تضييق وقف الاستراتيجية.{END}")
 
     if not a.prove:
         print(
