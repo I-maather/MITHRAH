@@ -126,13 +126,17 @@ class FixedSignal(Strategy):
         backtest_evidence_ar="—", walkforward_evidence_ar="—",
     )
 
-    def __init__(self, *, entry: str, stop: str, target: str) -> None:
+    def __init__(self, *, entry: str, stop: str, target: str,
+                 side: Side = Side.BUY) -> None:
         self.entry, self.stop, self.target = D(entry), D(stop), D(target)
+        #: الجهة صارت وسيطاً كي يُبنى زوجٌ متناظر (شراء/بيع) بالمسافة نفسها.
+        #: الافتراض `BUY` — فما كُتب قبل هذا السطر لم يتغيّر سلوكه.
+        self.side = side
 
     def evaluate(self, *, symbol, bars, quote, now):
         return Signal(
             strategy_name="FIXED", strategy_version="1.0.0", symbol=symbol,
-            side=Side.BUY, entry_price=self.entry, stop_price=self.stop,
+            side=self.side, entry_price=self.entry, stop_price=self.stop,
             take_profit_price=self.target, generated_at_utc=now,
             rationale_ar="إشارة ثابتة للاختبار.", invalidation_ar="—",
             inputs_digest="test",
@@ -140,7 +144,8 @@ class FixedSignal(Strategy):
 
 
 def build(*, symbol, entry, stop, target, baseline, bid, ask, registry=None,
-          mode=RiskMode.VALIDATION, broker_kind=None, now=MID_SESSION):
+          mode=RiskMode.VALIDATION, broker_kind=None, now=MID_SESSION,
+          side=Side.BUY):
     broker = CapitalLikeBroker(behaviour=MockBehaviour(stop_on_fractional_supported=True))
     broker.connect()
     broker.balances = make_balances(baseline, at=now)
@@ -160,7 +165,7 @@ def build(*, symbol, entry, stop, target, baseline, bid, ask, registry=None,
         )),
         kill_switch=KillSwitch(), audit=audit,
         execution=ExecutionService(broker=broker, audit=audit, guard=IdempotencyGuard()),
-        strategies=[FixedSignal(entry=entry, stop=stop, target=target)],
+        strategies=[FixedSignal(entry=entry, stop=stop, target=target, side=side)],
         schedule=IBKR_PRO_TIERED_US_STOCK,
         assumptions=CostAssumptions(D("0.01"), D("0.0005"), D("0")),
         blackouts=BlackoutCalendar(entries=[], confirmed_for={now.date()}),

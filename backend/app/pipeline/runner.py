@@ -581,12 +581,35 @@ class Pipeline:
         # 9) Reconciliation
         local = []
         if submission.order and submission.order.filled_quantity > 0:
-            from ..contracts import Position
+            from ..contracts import Position, Side as _Side
+
+            # ---------------------------------------------------------------
+            # **الكمية عندنا تحمل الجهة، لأن كمية الوسيط تحملها.**
+            #
+            # كان يُكتب `filled_quantity` كما هو — رقمٌ موجب دائماً — ثم
+            # تُقارَن بما لدى الوسيط. والوسيط يُبلّغ المركز القصير بإشارة
+            # سالبة (‎-0.01‎). فأوّل صفقة بيعٍ تُملأ كانت ستُنتج فوراً:
+            #
+            #     RECONCILIATION_MISMATCH: لدينا 0.01 ولدى الوسيط -0.01
+            #
+            # أي: أمرٌ نُفِّذ في السوق، ومركزٌ مفتوح، ونظامٌ يوقف نفسه في
+            # اللحظة التالية ظانّاً أن سجلّه اختلف عن حساب الوسيط. وهو لم
+            # يختلف — نحن من كتب الرقم بلا جهته.
+            #
+            # ولم يظهر هذا قط لأن كل صفقةٍ نُفِّذت حتى اليوم كانت شراءً،
+            # والموجب يساوي الموجب. صنفُ اليوم نفسه في ثوبه الأخطر: قيمةٌ
+            # لا تُقرأ من مصدرها، وتصادف أن تطابقه في الحالة الوحيدة
+            # المجرَّبة. والجهة تُقرأ من **الأمر المُنفَّذ** لا من الإشارة،
+            # لأن المطابقة تسأل عمّا في السوق لا عمّا نويناه.
+            # ---------------------------------------------------------------
+            filled = submission.order.filled_quantity
+            if submission.order.side is _Side.SELL:
+                filled = -filled
 
             local = [
                 Position(
                     account_id=balances.account_id, symbol=symbol,
-                    quantity=submission.order.filled_quantity,
+                    quantity=filled,
                     average_cost=submission.order.average_fill_price or signal.entry_price,
                     as_of_utc=now,
                 )
