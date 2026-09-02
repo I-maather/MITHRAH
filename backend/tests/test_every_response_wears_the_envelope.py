@@ -124,3 +124,18 @@ def test_the_action_payload_lives_under_data_not_at_the_top():
         "pause/request", "killswitch/activate", "device/revoke",
         "pause/resume", "broker/environment",
     }
+
+
+def test_the_broker_view_reads_its_lists_from_the_adapter_not_from_a_constant():
+    """
+    كانت `/api/broker` تطبع ثابتَي `capital_discovery.py` بدل قائمتَي
+    المحوّل. فلمّا وُسّعت قائمة التنفيذ بالقياس إلى أربع أدوات، بقيت الشاشة
+    تقول «EURUSD» وحدها — وقرأتها المالكة على أن التوسيع لم يقع.
+
+    فحصٌ ساكن على المصدر: النداء إلى `getattr` على المحوّل يجب أن يبقى.
+    """
+    from pathlib import Path
+
+    body = (Path(__file__).resolve().parents[1] / "app" / "main.py").read_text(encoding="utf-8")
+    assert 'getattr(sys.broker, "execution_allowlist", None)' in body
+    assert 'getattr(sys.broker, "discovery_allowlist", None)' in body

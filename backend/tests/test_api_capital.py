@@ -74,10 +74,30 @@ def test_broker_endpoint_explains_how_to_pause_the_api_key(client):
     assert "أقوى من أي زر" in joined
 
 
-def test_allowlists_are_published(client):
+def test_allowlists_are_published_from_the_adapter_not_from_a_constant(client):
+    """
+    ⚠️ **تغيير مُعلَن (2026-09-02).** كان الفحص يثبّت القائمتين نصّاً، وكان
+    ذلك يوافق ثابتَي `capital_discovery.py` اللذين تطبعهما الواجهة. فلمّا
+    وُسّعت قائمة التنفيذ **بالقياس** إلى أربع أدوات، بقيت الواجهة تقول
+    «EURUSD» وحدها ومرّ الفحص — لأنه كان يحرس الثابت لا الحقيقة.
+
+    فالمطلوب الآن أن المنشور = ما يعمل به المحوّل فعلاً. وهذا **أضيق** من
+    السابق لا أوسع: قائمةٌ تُطبع من ثابتٍ تمرّ مهما كان المحوّل عليه.
+    """
+    from app.main import system
+
+    from app.discovery.capital_discovery import DISCOVERY_EPICS, EXECUTION_EPICS
+
     body = client.get("/api/broker").json()
-    assert body["discovery_allowlist"] == ["EURUSD", "GBPUSD", "USDJPY", "GOLD"]
-    assert body["execution_allowlist"] == ["EURUSD"]
+    broker = system().broker
+    # المحوّل الوهمي لا يحمل القائمتين — والسقوط حينها إلى الثابت **مقصود
+    # ومعلَن**: وسيطٌ لا يعلن قوائمه لا تُخترع له.
+    expected_exec = sorted(getattr(broker, "execution_allowlist", None) or EXECUTION_EPICS)
+    expected_disc = sorted(getattr(broker, "discovery_allowlist", None) or DISCOVERY_EPICS)
+    assert body["execution_allowlist"] == expected_exec
+    assert body["discovery_allowlist"] == expected_disc
+    # ولا يتجاوز التنفيذُ الاكتشافَ بحال.
+    assert set(body["execution_allowlist"]) <= set(body["discovery_allowlist"])
 
 
 # --- الإيقاف المحلي ----------------------------------------------------------

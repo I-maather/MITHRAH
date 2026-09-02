@@ -643,8 +643,20 @@ def broker_state(sys: SystemState = Depends(system)):
             "reason_ar": ks_event.reason_ar if ks_event else None,
         },
         "credentials": sys.secret_presence,
-        "discovery_allowlist": list(DISCOVERY_EPICS),
-        "execution_allowlist": list(EXECUTION_EPICS),
+        # **تُقرأ من المحوّل العامل، لا من ثابتٍ في ملف.**
+        #
+        # كانت هذه السطور تطبع `DISCOVERY_EPICS` و`EXECUTION_EPICS` — وهما
+        # ثابتان في `discovery/capital_discovery.py` لا علاقة لهما بما يعمل
+        # به المحوّل. فلمّا وُسّعت قائمة التنفيذ من القياس إلى أربع أدوات،
+        # بقيت الشاشة تقول «EURUSD» وحدها. قيمةٌ تُعرَض ولا تُقرأ من مصدرها،
+        # للمرّة السابعة في هذا المشروع.
+        "discovery_allowlist": sorted(
+            getattr(sys.broker, "discovery_allowlist", None) or DISCOVERY_EPICS
+        ),
+        "execution_allowlist": sorted(
+            getattr(sys.broker, "execution_allowlist", None) or EXECUTION_EPICS
+        ),
+        "instruments_note_ar": getattr(sys, "instruments_note_ar", ""),
         "api_key_pause_instructions_ar": [
             "افتحي حسابك على Capital.com ← Settings ← API.",
             "أوقفي أو احذفي المفتاح المستخدم هنا لإيقاف كل وصول برمجي فوراً.",
