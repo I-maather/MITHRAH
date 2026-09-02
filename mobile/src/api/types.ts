@@ -198,6 +198,14 @@ export interface DecisionData {
 export interface RiskData {
   profile: string | null;
   profile_name_ar: string | null;
+  /**
+   * أيّ الحدّين يعمل — **بنصّ الخادم لا بتفسير العميل**.
+   *
+   * كانت الشاشة تعرض حدود الملف والمحرّك ينفّذ حدود الدستور، فتَعِد بحدٍّ
+   * أشدّ من العامل: 0.75 لليوم معروضة و6.00 منفَّذة. والأرقام الآن هي
+   * المنفَّذة، وهذا السطر يقول ذلك صراحةً.
+   */
+  profile_binding_ar: string;
   currency: string;
   equity_used: string | null;
   risk_used_today: string | null;

@@ -225,6 +225,7 @@
     },
     "profile": "string",
     "profile_name_ar": "string",
+    "profile_binding_ar": "string",
     "risk_remaining_today": "string",
     "risk_remaining_week": "string",
     "risk_used_today": "string",

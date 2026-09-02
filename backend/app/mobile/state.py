@@ -183,34 +183,68 @@ def _risk(sys: Any) -> dict[str, Any]:
 
     session = sys.session_state
     profile = sys.profiles.effective_profile
-    # حدود **الملف الفعّال** محسوبة على حقوق الملكية الحالية. ودستور
-    # المخاطر (`sys.limits`) يبقى المرجع الأشدّ على الخادم، ولا يُرسَل هنا
-    # كي لا تُعرض مجموعتا حدود متجاورتين فتُقرأ الأضعف.
     spec = ProfileLimits.for_profile(profile, session.current_equity)
 
-    remaining_day = max(Decimal("0"), spec.max_daily_loss - session.day_loss)
-    remaining_week = max(Decimal("0"), spec.max_weekly_loss - session.week_loss)
-    to_boundary = max(Decimal("0"), spec.absolute_loss_boundary - session.total_loss)
+    # ---------------------------------------------------------------------
+    # **الأرقام المعروضة هي التي يُنفّذها المحرّك.**
+    #
+    # كانت هذه الشاشة تعرض حدود **الملف** (`ProfileLimits`)، والمحرّك ينفّذ
+    # حدود **الدستور** (`sys.limits`) — و`ProfileLimits` لا تُستدعى في مسار
+    # القرار إطلاقاً، فقط هنا وفي التحليل. فكان المعروض عند مرجع 300 دولار:
+    # 0.75 لليوم، والمُنفَّذ 6.00 — **أشدّ ثماني مرّاتٍ مما يُنفَّذ**.
+    #
+    # وشاشةٌ تعد بحدٍّ أشدّ من الحدّ العامل ليست تحفّظاً، هي طمأنينةٌ كاذبة:
+    # تُقرأ فيُظنّ أن خسارةً واحدة تُنهي اليوم، والمحرّك يسمح بثمانٍ. وهو
+    # الشكل العاشر من العيب الحاكم: قيمةٌ تُعرَض لم تُقرأ من مصدر تنفيذها.
+    #
+    # فالمصدر الآن هو `sys.limits` وحده، ويُرافقه `profile_binding_ar` يقول
+    # صراحةً أيّ الحدّين يعمل. وسريانُ حدود الملف قرارٌ معلّق عند المالكة —
+    # ولا يُدّعى قبل أن يقع.
+    # ---------------------------------------------------------------------
+    limits = sys.limits
+    equity = session.current_equity
+    enforced_per_trade = limits.effective_max_risk(equity)
+    enforced_daily = limits.daily_loss
+    enforced_weekly = limits.weekly_loss
+    enforced_boundary = limits.hard_total_loss
+
+    remaining_day = max(Decimal("0"), enforced_daily - session.day_loss)
+    remaining_week = max(Decimal("0"), enforced_weekly - session.week_loss)
+    to_boundary = max(Decimal("0"), enforced_boundary - session.total_loss)
+
+    profile_is_tighter = (
+        spec.max_risk_per_trade < enforced_per_trade
+        or spec.max_daily_loss < enforced_daily
+        or spec.max_weekly_loss < enforced_weekly
+    )
+    profile_binding_ar = (
+        f"الأرقام هنا هي التي ينفّذها المحرّك. حدود ملفك «{spec.name_ar}» أشدّ "
+        f"({spec.max_risk_per_trade:.2f} للصفقة و{spec.max_daily_loss:.2f} لليوم) "
+        "ولا تُنفَّذ بعد — سريانها قرارٌ معلّق."
+        if profile_is_tighter
+        else f"الأرقام هنا هي التي ينفّذها المحرّك، وحدود ملفك «{spec.name_ar}» ليست أشدّ منها."
+    )
 
     return {
         "profile": profile.value,
         "profile_name_ar": spec.name_ar,
         "currency": "USD",
-        "equity_used": _money(spec.equity_used),
+        "profile_binding_ar": profile_binding_ar,
+        "equity_used": _money(equity),
         "risk_used_today": _money(session.day_loss),
         "risk_remaining_today": _money(remaining_day),
         "risk_used_week": _money(session.week_loss),
         "risk_remaining_week": _money(remaining_week),
-        "max_risk_per_trade": _money(spec.max_risk_per_trade),
-        "max_daily_loss": _money(spec.max_daily_loss),
-        "max_weekly_loss": _money(spec.max_weekly_loss),
-        "operational_drawdown_stop": _money(spec.operational_drawdown_stop),
-        "absolute_loss_boundary": _money(spec.absolute_loss_boundary),
+        "max_risk_per_trade": _money(enforced_per_trade),
+        "max_daily_loss": _money(enforced_daily),
+        "max_weekly_loss": _money(enforced_weekly),
+        "operational_drawdown_stop": _money(limits.effective_drawdown_stop()),
+        "absolute_loss_boundary": _money(enforced_boundary),
         "distance_to_kill_switch": _money(to_boundary),
         "open_positions": session.open_positions,
-        "max_open_positions": spec.max_open_positions,
+        "max_open_positions": limits.max_open_positions,
         "entry_orders_today": session.entry_orders_today,
-        "max_entry_orders_per_day": spec.max_entry_orders_per_day,
+        "max_entry_orders_per_day": limits.max_entry_orders_per_day,
         "consecutive_losses": session.consecutive_losses,
         "two_loss_lock_active": session.consecutive_losses >= 2,
         # الحدود تُفرَض على الخادم. الثابت يُفحَص في العميل عند كل استجابة.

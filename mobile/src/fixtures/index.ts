@@ -154,6 +154,8 @@ const decision: DecisionData = {
 const risk: RiskData = {
   profile: 'CONSERVATIVE',
   profile_name_ar: 'متحفّظ (معاينة)',
+  profile_binding_ar:
+    'الأرقام هنا هي التي ينفّذها المحرّك. حدود ملفك «متحفّظ» أشدّ ولا تُنفَّذ بعد — سريانها قرارٌ معلّق. (معاينة)',
   currency: 'USD',
   equity_used: '1,000.00',
   risk_used_today: '0.00',

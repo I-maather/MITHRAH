@@ -319,6 +319,17 @@ export default function HomeScreen(): React.JSX.Element {
       {/* ---- كم بقي لي ---- */}
       {r !== null ? (
         <Card testID="risk-card" title={t.home.risk}>
+          {/*
+            **أيّ الحدّين يعمل — بنصّ الخادم لا بتفسير العميل.**
+
+            كانت هذه البطاقة تعرض حدود الملف والمحرّك ينفّذ حدود الدستور:
+            0.75 لليوم معروضة و6.00 منفَّذة. وشاشةٌ تعد بحدٍّ أشدّ من
+            العامل ليست تحفّظاً، هي طمأنينةٌ كاذبة. فالأرقام الآن هي
+            المنفَّذة، وهذا السطر يقول ذلك — والفرق يُقال ولا يُخفى.
+          */}
+          <Text variant="micro" tone="tertiary" testID="risk-binding">
+            {r.profile_binding_ar}
+          </Text>
           <RiskMeter
             testID="risk-meter-daily"
             label="المتبقّي من مخاطرة اليوم"

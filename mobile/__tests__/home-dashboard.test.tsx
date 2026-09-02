@@ -84,6 +84,16 @@ describe('محتوى اللوحة', () => {
     expect(screen.getByTestId('chart-time-axis')).toHaveTextContent(/\d{2}\/\d{2}/);
   });
 
+  it('**تقول أيّ الحدّين يعمل** — لا تَعِد بحدٍّ أشدّ من العامل', () => {
+    /**
+     * كانت البطاقة تعرض حدود الملف والمحرّك ينفّذ حدود الدستور. والنصّ
+     * يأتي من الخادم كاملاً: العميل لا يفسّر أيّهما أشدّ.
+     */
+    expect(screen.getByTestId('risk-binding')).toHaveTextContent(
+      new RegExp(fixtures.risk.profile_binding_ar.slice(0, 24)),
+    );
+  });
+
   it('تقول صراحةً إنها لا تأذن بتنفيذ', () => {
     expect(screen.getByTestId('home-no-execution')).toHaveTextContent(t.common.noExecution);
   });
