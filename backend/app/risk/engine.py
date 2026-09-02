@@ -11,9 +11,11 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
-from ..contracts import Balances, Broker, Decision, RiskDecision, Signal, StopKind
+from ..contracts import Balances, Broker, Decision, RiskDecision, Side, Signal, StopKind
 from ..money import D
 from .constitution import (
+    ALLOW_SHORT,
+    CFD_ALLOW_SHORT,
     PauseScope,
     RiskLimits,
     RiskMode,
@@ -34,6 +36,8 @@ DAILY_ENTRY_LIMIT_REACHED = "DAILY_ENTRY_LIMIT_REACHED"
 REWARD_RISK_TOO_LOW = "REWARD_RISK_TOO_LOW"
 NEWS_BLACKOUT = "NEWS_BLACKOUT"
 NO_EXIT_PLAN = "NO_EXIT_PLAN"
+#: البيع ممنوعٌ **بالسياسة** — لا لأن خطة الخروج مكسورة.
+SHORT_NOT_ALLOWED = "SHORT_NOT_ALLOWED"
 RISK_BUDGET_EXCEEDS_REMAINING = "RISK_BUDGET_EXCEEDS_REMAINING_DAILY_BUDGET"
 LIFETIME_ENTRY_LIMIT_REACHED = "LIFETIME_ENTRY_LIMIT_REACHED"
 PER_ORDER_APPROVAL_REQUIRED = "PER_ORDER_APPROVAL_REQUIRED"
@@ -90,6 +94,18 @@ class RiskEngine:
     def remaining_total_budget(self, state: SessionRiskState) -> Decimal:
         """يقيس المسافة إلى الحد **التشغيلي** لا إلى الحاجز المطلق."""
         return max(Decimal("0"), self.limits.effective_drawdown_stop() - state.total_loss)
+
+    def _short_allowed(self) -> bool:
+        """
+        سياسة البيع **من الدستور**، ولكل وسيطٍ علَمُه.
+
+        وكانت هذه القراءة معدومة: العلَمان مكتوبان ومنشوران في البصمة ولا
+        يُقرآن. فالسياسة تُنشَر ولا تُنفَّذ — وهو العيب الحاكم في صورة
+        نادرة: قيمةٌ تُعرَض ولا تُقرأ **في موضع تنفيذها هي**.
+        """
+        if self.limits.broker is Broker.CAPITAL_COM:
+            return CFD_ALLOW_SHORT
+        return ALLOW_SHORT
 
     def risk_budget_for_next_trade(self, state: SessionRiskState) -> Decimal:
         """
@@ -263,8 +279,40 @@ class RiskEngine:
             return reject(NEWS_BLACKOUT, state.news_blackout_reason_ar or "نافذة حظر أخبار.")
         checks.append(("NEWS_BLACKOUT", True, "خارج نوافذ حظر الأخبار."))
 
-        if signal.take_profit_price <= signal.entry_price or signal.stop_price >= signal.entry_price:
-            return reject(NO_EXIT_PLAN, "خطة الخروج غير صالحة: الهدف والوقف غير منطقيين.")
+        # ---------------------------------------------------------------------
+        # **جهةُ الوقف تُفحَص باتجاه الصفقة، ومنعُ البيع يُقال باسمه.**
+        #
+        # كان الشرط: `take_profit <= entry or stop >= entry` — وهو وصفُ صفقة
+        # شراءٍ وحدها. وفي البيع الوقف **فوق** الدخول والهدف **تحته**،
+        # فيصدق الشرطان معاً فتُرفض كل صفقة بيعٍ برسالة تقول إن خطة الخروج
+        # «غير منطقية» — وهي منطقيةٌ تماماً، والمنطق المكسور هو الفحص.
+        #
+        # وثلاثٌ من أربع استراتيجيات تُصدر بيعاً، وتُعلنه في فرضيّتها:
+        # «صعوداً كان أو هبوطاً». فنحو نصف الإشارات كان يُقتل بسببٍ كاذب.
+        #
+        # وأخطر من ذلك: `CFD_ALLOW_SHORT = False` مكتوبةٌ في الدستور،
+        # ومنشورةٌ في بصمته، **ولا تُقرأ في أي موضع**. فكان منعُ البيع يقع
+        # **بالصدفة** عبر حسابٍ مكسور، ويُبلَّغ برمزٍ يخصّ شيئاً آخر. وسياسةٌ
+        # تُفرَض بالغلط تسقط يوم يُصلَح الغلط — بلا أن ينتبه أحد.
+        #
+        # ⇒ يُفصل السؤالان: الجهةُ تُفحص باتجاه الصفقة، والسياسة تُقرأ من
+        #   موضعها وتُرفض باسمها. والسلوك لم يتغيّر: البيع يبقى ممنوعاً —
+        #   لكن بقرارٍ مكتوب لا بكسرٍ في المعادلة.
+        # ---------------------------------------------------------------------
+        if not signal.exit_plan_is_sane:
+            return reject(
+                NO_EXIT_PLAN,
+                "خطة الخروج غير صالحة: الوقف أو الهدف في الجهة الخطأ من الدخول "
+                f"({signal.side.value}: دخول {signal.entry_price}، وقف {signal.stop_price}، "
+                f"هدف {signal.take_profit_price}).",
+            )
+        if signal.side is Side.SELL and not self._short_allowed():
+            return reject(
+                SHORT_NOT_ALLOWED,
+                "البيع على المكشوف ممنوع بالدستور "
+                f"({'CFD_ALLOW_SHORT' if self.limits.broker is Broker.CAPITAL_COM else 'ALLOW_SHORT'}"
+                " = False) — والخطة صالحة، والمنع سياسةٌ لا خطأ.",
+            )
         rr = signal.reward_risk_ratio
         if rr < self.limits.min_reward_risk_ratio:
             return reject(

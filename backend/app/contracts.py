@@ -315,11 +315,38 @@ class Signal(Base):
     inputs_digest: str
 
     @property
+    def exit_plan_is_sane(self) -> bool:
+        """
+        هل الوقف والهدف في جهتيهما الصحيحتين **بحسب اتجاه الصفقة**؟
+
+        في الشراء: الوقف تحت الدخول والهدف فوقه. وفي البيع العكس تماماً.
+        وانعكاسُ أحدهما يُنتج أمراً يُنفَّذ فوراً بخسارة.
+        """
+        if min(self.entry_price, self.stop_price, self.take_profit_price) <= 0:
+            return False
+        if self.side is Side.BUY:
+            return self.stop_price < self.entry_price < self.take_profit_price
+        return self.take_profit_price < self.entry_price < self.stop_price
+
+    @property
     def reward_risk_ratio(self) -> Decimal:
-        risk = self.entry_price - self.stop_price
+        """
+        العائد إلى المخاطرة — **بالمسافة لا بالإشارة**.
+
+        كان يُحسب `entry - stop`، وهو موجبٌ في الشراء وسالبٌ في البيع. فكانت
+        كل صفقة بيعٍ تُعيد صفراً، ثم تُرفض بـ«نسبة العائد أقل من الحد».
+        وثلاثٌ من أربع استراتيجيات تُصدر بيعاً صراحةً — بل تُعلن ذلك في
+        فرضيّتها: «صعوداً كان أو هبوطاً».
+
+        والمسافة لا تعرف اتجاهاً؛ والاتجاه يُفحَص في `exit_plan_is_sane`.
+        فصلُ السؤالين هو الإصلاح: «هل الجهات صحيحة؟» غيرُ «كم النسبة؟».
+        """
+        if not self.exit_plan_is_sane:
+            return Decimal("0")
+        risk = abs(self.entry_price - self.stop_price)
         if risk <= 0:
             return Decimal("0")
-        return (self.take_profit_price - self.entry_price) / risk
+        return abs(self.take_profit_price - self.entry_price) / risk
 
 
 class RiskDecision(Base):
