@@ -37,6 +37,7 @@ from ..strategies.trend_pullback_v2 import TrendPullbackV2
 from ..strategies.range_mean_reversion import RangeMeanReversion
 from ..strategies.breakout_retest import BreakoutRetest
 from ..runtime.demo_trial import demo_trial_for, read_demo_trial
+from ..risk.instrument_registry import InstrumentRegistry
 from ..brokers.capital.safety import LIVE_API_ENABLED, ExecutionLock
 from ..contracts import Broker, StopKind
 from ..notifications import InMemoryNotifier
@@ -97,6 +98,9 @@ class SystemState:
     #: وصفُ التجربة بالنصّ — يُعرض ويُسجَّل، فلا يبقى الفرق بين «مطفأة» و«مُلغاة
     #: لأن الوسيط حقيقي» في الذاكرة وحدها.
     demo_trial_note_ar: str = "تجربة التجريبي مطفأة."
+    #: اقتصاديات الأدوات المقيسة. فارغٌ يعني «لا قياس»، لا «لا أدوات».
+    instruments: object = None
+    instruments_note_ar: str = ""
 
     def health(self) -> HealthReport:
         details: list[str] = []
@@ -206,6 +210,37 @@ def build_system(settings: Settings | None = None) -> SystemState:
     registry.register(RangeMeanReversion())
     registry.register(BreakoutRetest())
 
+    # اقتصاديات الأدوات — المقيسة من الوسيط وحدها تُنفَّذ عليها.
+    #
+    # ## ولماذا لا يُطفَأ التنفيذ حين لا قياس
+    #
+    # القاعدة «المقيس وحده» صحيحة، وتطبيقُها الحرفي عند غياب الملف يُطفئ
+    # التداول كلّه بلا أن تطلب المالكة ذلك — وهي مفاجأةٌ بقدر مفاجأة
+    # التنفيذ على افتراض. فيبقى الافتراضي القديم عند الغياب، **ويُقال
+    # بصراحة إنه مفترض** في سجل التدقيق وفي شاشة الوسيط. الصمت وحده ممنوع.
+    instruments = InstrumentRegistry.load()
+    measured_execution = instruments.executable_epics(
+        within=getattr(broker, "discovery_allowlist", None)
+    )
+    if measured_execution:
+        try:
+            broker.execution_allowlist = measured_execution
+        except Exception:  # noqa: BLE001
+            logging.getLogger(__name__).warning("الوسيط لا يقبل ضبط قائمة التنفيذ.")
+        instruments_note = (
+            "قائمة التنفيذ من قياسٍ للوسيط: " + "، ".join(sorted(measured_execution))
+        )
+    else:
+        instruments_note = (
+            "لا قياس لاقتصاديات أي أداة — التنفيذ يجري على اقتصادياتٍ **مفترضة**. "
+            "شغّلي scripts/discover_instrument_economics.py."
+        )
+    audit.record(
+        actor=Actor.SYSTEM, action=AuditAction.CONFIG_CHANGE,
+        decision="INSTRUMENT_ECONOMICS",
+        reason_ar=instruments_note, source="build_system",
+    )
+
     # التجربة تُقرأ من البيئة ثم **تُصفّى بالوسيط**. حقيقيٌّ ⇒ تُلغى كاملةً.
     trial = demo_trial_for(broker, read_demo_trial())
 
@@ -272,6 +307,7 @@ def build_system(settings: Settings | None = None) -> SystemState:
         risk_engine=risk_engine, execution=execution, registry=registry, pipeline=pipeline,
         blackouts=blackouts, limits=limits, session_state=state,
         candle_resolution=trial.resolution, demo_trial_note_ar=trial.note_ar,
+        instruments=instruments, instruments_note_ar=instruments_note,
         cost_model=CapitalComCostModel(PROVISIONAL_EURUSD),
         execution_lock=trial_lock,
         notifier=InMemoryNotifier(),

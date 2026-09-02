@@ -85,6 +85,14 @@ step "١ · الخادم"
   || { red "⛔ الخدمة لا تعمل. انشري أولاً: bash scripts/deploy_to_server.sh $SERVER_IP"; exit 1; }
 green "✅ الخدمة تعمل"
 
+step "٢ · قياس اقتصاديات الأدوات من الوسيط"
+# **قبل التشغيل لا بعده.** قائمة التنفيذ تُبنى من المقيس، فقياسٌ بعد
+# الإقلاع لا يصل إلى الخدمة حتى تُعاد. والقياس قراءةٌ محضة: لا أمر يُرسل.
+"${SSH[@]}" 'cd /opt/mathrah/backend && sudo -u mathrah /opt/mathrah/.venv/bin/python \
+  ../scripts/discover_instrument_economics.py --source demo' || {
+  printf '\033[33m⚠️  تعذّر القياس. تمضي التجربة على EURUSD وحدها باقتصادياتٍ مفترضة.\033[0m\n'
+}
+
 step "٢ · كتابة إعدادات التجربة"
 REF="MAATHER-$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 "${SSH[@]}" "mkdir -p /etc/systemd/system/mathrah.service.d && cat > /etc/systemd/system/mathrah.service.d/demo-trial.conf <<EOF
