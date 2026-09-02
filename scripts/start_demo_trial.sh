@@ -55,11 +55,38 @@ STRATEGIES="${DEMO_TRIAL_STRATEGIES:-TREND_PULLBACK@2.0.0,BREAKOUT_RETEST@1.0.0}
 #: هذه، فلا تُقاس نتيجتها على شيء.
 RESOLUTION="${DEMO_TRIAL_RESOLUTION:-DAY}"
 
-if [ "$RESOLUTION" != "DAY" ]; then
-  printf '\033[33m⚠️  دقّة %s: وقف الاستراتيجيات (1.5×ATR) دون أدنى مسافة يقبلها\033[0m\n' "$RESOLUTION"
-  printf '\033[33m    الوسيط (100 نقطة). المتوقَّع رفضُ كل إشارة، لا صفقة.\033[0m\n'
-  printf '\033[2m    (الرفض لا يُفعّل قاطع الطوارئ — يُسجَّل ويمضي.)\033[0m\n\n'
-fi
+# **والقيد أعلاه يخصّ EURUSD وحدها.** أدنى وقفها 100 نقطة، ووقفُ الساعة
+# دونه — فتُرفض. أمّا الذهب فأدنى وقفه `0.001` دولار: عُشر سنت، لا يمنع
+# شيئاً. فالقاعدة صحيحةٌ عن أداةٍ ومفروضةٌ على أربع — وهو النمط نفسه الذي
+# دُقّقت السكربتات لأجله اليوم.
+#
+# وأثرُه على المالكة مباشر: الشمعة اليومية تجعل وقف الذهب 140 دولاراً
+# (1.5×ATR14 المقيس = 93.86)، وخسارتَه 1.43 — فوق ميزانية 300 دولار.
+# والوقف الساعي على الأداة نفسها أصغر بأضعاف. **الحدّ نفسه، والمخاطرة
+# نفسها، وصفقةٌ تمرّ.**
+#
+# فالتحذير الآن **يُقاس لكل أداة** من السجلّ، ولا يُكتب ثابتاً.
+resolution_report() {
+  "${SSH[@]}" "cd /opt/mathrah/backend && sudo -u mathrah /opt/mathrah/.venv/bin/python - <<'PYEOF'
+from decimal import Decimal as D
+from app.risk.instrument_registry import InstrumentRegistry
+
+registry = InstrumentRegistry.load()
+epics = sorted(registry.executable_epics())
+if not epics:
+    print('لا أداة مقيسة — لا يمكن الحكم على الدقّة.')
+else:
+    for epic in epics:
+        row = registry.get(epic)
+        floor = row.economics.min_stop_distance
+        pip = row.economics.pip_size
+        if floor is None or pip <= 0:
+            print(f'  ? {epic}: أدنى وقفٍ غير معلوم.')
+            continue
+        print(f'  · {epic}: أدنى وقف {floor} ({floor / pip:g} نقطة)')
+PYEOF" 2>/dev/null
+}
+
 
 red()   { printf '\033[31m%s\033[0m\n' "$*"; }
 green() { printf '\033[32m%s\033[0m\n' "$*"; }
@@ -89,6 +116,17 @@ step "١ · الخادم"
 "${SSH[@]}" 'systemctl is-active --quiet mathrah && echo ok' >/dev/null 2>&1 \
   || { red "⛔ الخدمة لا تعمل. انشري أولاً: bash scripts/deploy_to_server.sh $SERVER_IP"; exit 1; }
 green "✅ الخدمة تعمل"
+
+if [ "$RESOLUTION" != "DAY" ]; then
+  printf '\033[1m▸ دقّة %s — أي أداةٍ يمنعها حدّ الوسيط؟\033[0m\n' "$RESOLUTION"
+  resolution_report
+  printf '\033[33m⚠️  أداةٌ حدُّها كبير (مئة نقطة على EURUSD) تُرفض إشاراتها على هذه\033[0m\n'
+  printf '\033[33m    الدقّة بـSTOP_BELOW_BROKER_MINIMUM — رفضٌ نظيف بسببٍ يُقرأ.\033[0m\n'
+  printf '\033[33m    وأداةٌ حدُّها ضئيل (الذهب: عُشر سنت) تمرّ.\033[0m\n'
+  printf '\033[2m    (الرفض لا يُفعّل قاطع الطوارئ — يُسجَّل ويمضي.)\033[0m\n'
+  printf '\033[2m    وانتبهي: هذه الاستراتيجيات مكتوبةٌ لليومية. تشغيلها على إطارٍ\033[0m\n'
+  printf '\033[2m    أقصر **فرضيةٌ أخرى** تُختبَر، لا الفرضية نفسها تُقاس.\033[0m\n\n'
+fi
 
 step "٢ · قياس اقتصاديات الأدوات من الوسيط"
 # **قبل التشغيل لا بعده.** قائمة التنفيذ تُبنى من المقيس، فقياسٌ بعد
