@@ -155,3 +155,66 @@ class TestTheScreenSaysWhoseHoursTheseAre:
             if entry["status"] is None:
                 assert entry["tradable"] is None
                 assert "لم يُعلن" in entry["reason_ar"]
+
+
+class TestTheDrawdownCapFollowsTheConstitution:
+    def test_it_scales_with_the_baseline_instead_of_being_copied(self):
+        """
+        كان `MAX_DRAWDOWN_USD = D("6.50")` وتعليقُه «الحد التشغيلي نفسه».
+        وليس نفسه: الدستور يقيسه بـ`_scaled(base, 6.50)` فيتبع المرجع.
+        عند 150 يتفقان، وعند 300 يصير الدستوري 13.00 والبوّابة ما زالت
+        تقيس بـ6.50 — نسخةٌ تشيخ عند أوّل تغييرٍ في المرجع.
+        """
+        from app.contracts import Broker
+        from app.risk.constitution import RiskLimits, RiskMode
+        from app.strategies.gates import max_drawdown_usd
+
+        at_150 = RiskLimits.for_mode(RiskMode.CONSERVATIVE_LIVE, D("150"), Broker.CAPITAL_COM)
+        at_300 = RiskLimits.for_mode(RiskMode.CONSERVATIVE_LIVE, D("300"), Broker.CAPITAL_COM)
+        assert max_drawdown_usd(at_300) == max_drawdown_usd(at_150) * 2, (
+            "الحدّ لا يتبع المرجع — فهو نسخةٌ لا اشتقاق."
+        )
+
+    def test_the_gate_reports_the_cap_it_actually_used(self):
+        """ورقمُ الحدّ في نصّ البوّابة هو الذي قُورن به، لا ثابتٌ آخر."""
+        from app.contracts import Broker
+        from app.risk.constitution import RiskLimits, RiskMode
+        from app.strategies.gates import evaluate_admission, max_drawdown_usd
+
+        limits = RiskLimits.for_mode(RiskMode.CONSERVATIVE_LIVE, D("300"), Broker.CAPITAL_COM)
+        report = evaluate_admission(strategy_label="X", limits=limits)
+        cap = max_drawdown_usd(limits)
+        drawdown_gates = [g for g in report.gates if g.name == "MAX_DRAWDOWN"]
+        for gate in drawdown_gates:
+            assert f"{cap:.2f}" in gate.detail_ar
+
+
+class TestTheStartupNoteSaysWhatTheCodeDoes:
+    def test_it_does_not_promise_execution_on_assumptions(self):
+        """
+        كانت الملاحظة تقول «التنفيذ يجري على اقتصادياتٍ مفترضة» عند غياب
+        القياس — وهو **عكس** ما يجري: `cfd_review` ترفض كل أداة CFD بلا
+        قياس. فتُرسَل المالكة تبحث عن صفقاتٍ على تخمين، ولا صفقة أصلاً.
+        """
+        import inspect
+
+        from app.api import state as state_module
+
+        source = inspect.getsource(state_module.build_system)
+        assert "لا تُنفَّذ أي صفقة CFD" in source
+        assert "التنفيذ يجري على اقتصادياتٍ **مفترضة**" not in source
+
+
+class TestTheQuoteCurrencyIsNotInvented:
+    def test_a_row_without_a_currency_keeps_none(self):
+        """
+        `or "USD"` كان يمنح صفّاً بلا عملةٍ عملةَ الحساب **بمصدر
+        `BROKER_DISCOVERY`** — أي يؤكّد ما لم يقرأه. وطبقةُ الأهلية هي
+        التي تقول صراحةً إنها مفترضة من قائمتنا.
+        """
+        registry = InstrumentRegistry.from_dict(row(quote_currency=None))
+        assert registry.get("GOLD").economics.quote_currency is None
+
+    def test_a_declared_currency_is_kept(self):
+        registry = InstrumentRegistry.from_dict(row(quote_currency="JPY", epic="USDJPY"))
+        assert registry.get("USDJPY").economics.quote_currency == "JPY"

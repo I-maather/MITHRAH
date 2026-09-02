@@ -121,7 +121,15 @@ class InstrumentRegistry:
                     min_stop_distance=_dec(row.get("min_stop_distance")),
                     min_guaranteed_stop_distance=_dec(row.get("min_guaranteed_stop_distance")),
                     guaranteed_stop_available=bool(row.get("guaranteed_stop_available", False)),
-                    quote_currency=str(row.get("quote_currency") or "USD"),
+                    # **لا تُملأ عملةُ التسعير صامتة.** كان `or "USD"` يمنح
+                    # صفّاً بلا عملةٍ عملةَ الحساب بمصدر `BROKER_DISCOVERY`
+                    # — أي أنه يؤكّد ما لم يقرأه. و`None` تُمرَّر كما هي،
+                    # وطبقةُ الأهلية تقول صراحةً إنها مفترضة من قائمتنا.
+                    quote_currency=(
+                        str(row["quote_currency"])
+                        if row.get("quote_currency")
+                        else None
+                    ),
                     overnight_fee_rate_daily=_dec(row.get("overnight_fee_rate_daily")),
                     provenance=ValueProvenance(row.get("provenance", "UNKNOWN")),
                 )

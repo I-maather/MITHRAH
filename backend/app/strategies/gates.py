@@ -23,7 +23,20 @@ MIN_TRADES = 100
 MIN_OUT_OF_SAMPLE_TRADES = 30
 MIN_PROFIT_FACTOR = D("1.30")
 MIN_EXPECTANCY_USD = D("0.01")
-MAX_DRAWDOWN_USD = D("6.50")            # الحد التشغيلي نفسه
+#: حدّ التراجع **يُشتقّ من الدستور عند المرجع الجاري**، ولا يُنسَخ رقماً.
+#:
+#: كان `D("6.50")` وتعليقُه «الحد التشغيلي نفسه» — وهو ليس نفسه: الدستور
+#: يقيسه بـ`_scaled(base, 6.50)`، فيتبع رأس المال المرجعي. عند 150 يتفقان،
+#: وعند 300 يصير الحدّ الدستوري 13.00 وبوّابة القبول ما زالت تقيس بـ6.50.
+#:
+#: فبوّابةٌ تدّعي أنها تعكس حدّاً وهي تحمل نسخةً منه تشيخ عند أوّل تغيير —
+#: وهو العيب الحاكم: قيمةٌ يُقارَن بها لم تُقرأ من مصدرها.
+def max_drawdown_usd(limits=None) -> Decimal:
+    """الحدّ التشغيلي كما يحسبه الدستور — أو الافتراضي إن لم تُمرَّر حدود."""
+    from ..risk.constitution import DEFAULT_LIMITS
+
+    active = limits if limits is not None else DEFAULT_LIMITS
+    return active.effective_drawdown_stop()
 MIN_OUT_OF_SAMPLE_POSITIVE_FOLDS = 3
 MIN_DEGRADATION_RATIO = D("0.40")
 MAX_DEPENDENCE_ON_BEST_TRADE = D("0.30")
@@ -83,6 +96,9 @@ def evaluate_admission(
     regimes: Optional[dict[str, BacktestResult]] = None,
     overnight_unit_established: bool = True,
     overnight_dependent: bool = False,
+    #: حدود المخاطر الجارية — يُشتقّ منها حدُّ التراجع بدل نسخةٍ ثابتة.
+    #: تُترك `None` فيُقرأ الافتراضي، ويبقى السلوك القديم عند المرجع القديم.
+    limits: object | None = None,
 ) -> AdmissionReport:
     """
     يقيّم كل البوابات. غياب دليل = سقوط البوابة، لا تجاوزها.
@@ -146,12 +162,14 @@ def evaluate_admission(
         )
 
         # 4) التراجع
-        ok = full_sample.max_drawdown <= MAX_DRAWDOWN_USD
+        cap = max_drawdown_usd(limits)
+        ok = full_sample.max_drawdown <= cap
         add(
             GateOutcome(
                 "MAX_DRAWDOWN",
                 ok,
-                f"أقصى تراجع {full_sample.max_drawdown:.2f} دولار مقابل حد {MAX_DRAWDOWN_USD}.",
+                f"أقصى تراجع {full_sample.max_drawdown:.2f} دولار مقابل حد {cap:.2f} "
+                "(مقروءاً من الدستور عند المرجع الجاري).",
                 full_sample.run_id,
             )
         )

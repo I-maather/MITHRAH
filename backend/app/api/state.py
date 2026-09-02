@@ -235,8 +235,17 @@ def build_system(settings: Settings | None = None) -> SystemState:
             "قائمة التنفيذ من قياسٍ للوسيط: " + "، ".join(sorted(measured_execution))
         )
     else:
+        # **الملاحظة تقول ما يفعله الكود، لا ما كان ينويه.**
+        #
+        # كانت تقول «التنفيذ يجري على اقتصادياتٍ مفترضة» — وهو **عكس** ما
+        # يجري: `Pipeline.cfd_review` ترفض كل أداة CFD بلا قياس بـ
+        # `INSTRUMENT_ECONOMICS_UNMEASURED`. فتُرسَل المالكة تبحث عن صفقاتٍ
+        # تُنفَّذ على تخمين، والنظام في الحقيقة لا يُنفّذ شيئاً.
+        #
+        # وخطأٌ في الاتجاه الآمن يبقى خطأً: يُشخَّص العطل في غير موضعه.
         instruments_note = (
-            "لا قياس لاقتصاديات أي أداة — التنفيذ يجري على اقتصادياتٍ **مفترضة**. "
+            "لا قياس لاقتصاديات أي أداة — و**لا تُنفَّذ أي صفقة CFD** حتى تُقاس "
+            "(كل أداة تُرفض بـINSTRUMENT_ECONOMICS_UNMEASURED). "
             "شغّلي scripts/discover_instrument_economics.py."
         )
     audit.record(

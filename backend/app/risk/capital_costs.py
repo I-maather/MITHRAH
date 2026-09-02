@@ -53,7 +53,9 @@ class InstrumentEconomics:
     min_stop_distance: Optional[Decimal]
     min_guaranteed_stop_distance: Optional[Decimal]
     guaranteed_stop_available: bool
-    quote_currency: str
+    #: عملة التسعير **كما أعلنها الوسيط**. `None` = لم يُعلنها — ولا تُملأ
+    #: بعملة الحساب صامتة، فذلك تأكيدُ ما لم يُقرأ.
+    quote_currency: Optional[str]
     overnight_fee_rate_daily: Optional[Decimal]
     provenance: ValueProvenance = ValueProvenance.UNKNOWN
 
