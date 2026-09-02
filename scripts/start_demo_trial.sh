@@ -4,6 +4,11 @@
 #
 #     bash scripts/start_demo_trial.sh "أوافق على تشغيل التداول التجريبي"
 #
+# ومع ضبط المرجع والإطار:
+#
+#     MATHRAH_BASELINE=300 DEMO_TRIAL_RESOLUTION=HOUR_4 \
+#       bash scripts/start_demo_trial.sh "أوافق على تشغيل التداول التجريبي"
+#
 # ## ما يفعله
 #
 #   ١. يتحقّق أن الخادم يعمل بالكوميت المنشور.
@@ -54,6 +59,14 @@ STRATEGIES="${DEMO_TRIAL_STRATEGIES:-TREND_PULLBACK@2.0.0,BREAKOUT_RETEST@1.0.0}
 #: — صفقةٌ خاسرة بالبناء. وتكبير الهدف معه يجعلها **استراتيجيةً أخرى** لا
 #: هذه، فلا تُقاس نتيجتها على شيء.
 RESOLUTION="${DEMO_TRIAL_RESOLUTION:-DAY}"
+
+#: رأس المال المرجعي. **يُمرَّر فيُكتب في إعداد الخدمة**، ولا يبقى رقماً
+#: قديماً في ملفٍ نسيه أحد.
+#:
+#: كُشف هذا حين صار `prove_gold_economics.py` **يقرأ** المرجع بدل أن
+#: يفترضه: طبع «مرجع 140» بينما مال المالكة الحقيقي 300. والميزانية تُحسب
+#: منه، فكل صفٍّ في كل جدولٍ كان يُقاس على رقمٍ لا يخصّها.
+BASELINE="${MATHRAH_BASELINE:-}"
 
 # **والقيد أعلاه يخصّ EURUSD وحدها.** أدنى وقفها 100 نقطة، ووقفُ الساعة
 # دونه — فتُرفض. أمّا الذهب فأدنى وقفه `0.001` دولار: عُشر سنت، لا يمنع
@@ -148,6 +161,7 @@ Environment=DEMO_TRIAL_ENABLED=1
 Environment=DEMO_TRIAL_STRATEGIES=$STRATEGIES
 Environment=DEMO_TRIAL_RESOLUTION=$RESOLUTION
 Environment=DEMO_TRIAL_APPROVAL_REF=$REF
+${BASELINE:+Environment=BASELINE_EQUITY_USD=$BASELINE}
 EOF
 systemctl daemon-reload && systemctl restart mathrah && sleep 6" || exit 1
 green "✅ كُتبت وأُعيد التشغيل"
@@ -165,6 +179,20 @@ else
   echo "   bash scripts/start_demo_trial.sh --stop"
   exit 1
 fi
+
+step "٣ب · المرجع الذي تُحسب منه الحدود"
+# **يُقرأ بعد الإقلاع لا يُفترض قبله.** كتابةُ إعدادٍ ليست سرياناً.
+BASE_SEEN="$("${SSH[@]}" 'curl -s --max-time 10 http://127.0.0.1:8000/api/risk' 2>/dev/null \
+  | grep -oE '"equity_used"[^,]*' | head -1)"
+if [ -n "$BASE_SEEN" ]; then
+  dim "   الخادم يقول: $BASE_SEEN"
+else
+  printf '\033[33m⚠️  لم يُقرأ المرجع من الخادم — لا يُدّعى أنه ضُبط.\033[0m\n'
+fi
+if [ -n "$BASELINE" ]; then
+  dim "   وأنتِ مرّرتِ: $BASELINE. إن اختلفا فالمكتوب لم يسرِ — راجعي قبل أي شيء."
+fi
+echo
 
 step "٤ · الخطوة الأخيرة — بيدك"
 # `locally_paused` يبدأ **موقوفاً** في كل إقلاع. وهذا مقصود: نظامٌ يتداول
