@@ -44,8 +44,40 @@ ALLOWLIST: dict[str, AllowlistEntry] = {
     ]
 }
 
-# أصول مذكورة صراحةً كمرفوضة في V1، مع السبب — حتى لا تُضاف بالخطأ لاحقاً.
-EXPLICIT_DENYLIST: dict[str, str] = {
+#: أدوات CFD المسموح تقييمها عند كابيتال.
+#:
+#: **قائمة منفصلة عن قائمة الأسهم، لا امتدادٌ لها.** سياسة الأسهم صحيحة
+#: كما هي لأسهم IBKR ولم يُمسّ منها شيء؛ وهذه سياسةٌ مقابلة لوسيطٍ آخر
+#: وصنف أصلٍ آخر.
+CFD_ALLOWLIST: dict[str, AllowlistEntry] = {
+    e.symbol: e
+    for e in [
+        AllowlistEntry("EURUSD", "يورو/دولار", AssetClass.CFD_CURRENCY, "USD", "CAPITAL_COM",
+                       "أعلى أزواج العملات سيولةً؛ سبريد مقيس 0.7 نقطة، وأصغر كمية 100 وحدة."),
+        AllowlistEntry("GBPUSD", "جنيه/دولار", AssetClass.CFD_CURRENCY, "USD", "CAPITAL_COM",
+                       "سيولة عالية؛ سبريد مقيس 1.3 نقطة."),
+        AllowlistEntry("USDJPY", "دولار/ين", AssetClass.CFD_CURRENCY, "JPY", "CAPITAL_COM",
+                       "سيولة عالية؛ لكن التسعير بالين — يلزم قياس كلفة التحويل."),
+        AllowlistEntry("GOLD", "ذهب", AssetClass.CFD_COMMODITY, "USD", "CAPITAL_COM",
+                       "سلعة عالية السيولة؛ سبريد مقيس 50 نقطة وهامش 5٪."),
+    ]
+}
+
+#: أصناف الأصول المسموحة في مسار CFD.
+CFD_ASSET_CLASSES = (AssetClass.CFD_CURRENCY, AssetClass.CFD_COMMODITY)
+
+#: عملة الحساب. ما يُسعَّر بغيرها يحتاج **كلفة تحويل مقيسة** لا مفترضة.
+ACCOUNT_CURRENCY = "USD"
+
+# أصول مذكورة صراحةً كمرفوضة **في مسار الأسهم (IBKR)**، مع السبب.
+#
+# ⚠️ كانت تُطبَّق قبل معرفة الوسيط، فترفض `EURUSD` و`GBPUSD` و`XAUUSD`
+# على كابيتال بسببٍ نصُّه «الحد الأدنى لأوامر العملات في **IBKR** أكبر
+# بكثير من رأس المال». وهو صحيحٌ عند IBKR، وباطلٌ عند كابيتال: القياس
+# يقول أصغر كمية 100 وحدة بهامش 3.33٪ — نحو 3.7 دولار.
+#
+# فالقائمة الآن مقصورةٌ على مسارها، والسبب يُقرأ في موضعه.
+IBKR_EXPLICIT_DENYLIST: dict[str, str] = {
     "XAUUSD": "سلعة/فوركس — خارج نطاق V1 ولا يدعمها دستور المخاطر الحالي.",
     "EURUSD": "فوركس — الحد الأدنى لأوامر العملات في IBKR أكبر بكثير من رأس المال.",
     "GBPUSD": "فوركس — نفس السبب.",
@@ -69,6 +101,9 @@ PERMISSIONS_INSUFFICIENT = "PERMISSIONS_INSUFFICIENT"
 NO_RELIABLE_STOP = "NO_RELIABLE_STOP"
 DATA_NOT_TRADABLE = "DATA_NOT_TRADABLE"
 INSUFFICIENT_SETTLED_CASH = "INSUFFICIENT_SETTLED_CASH"
+NOT_IN_CFD_ALLOWLIST = "NOT_IN_CFD_ALLOWLIST"
+CONVERSION_COST_UNMEASURED = "CONVERSION_COST_UNMEASURED"
+STOP_DISTANCE_UNKNOWN = "STOP_DISTANCE_UNKNOWN"
 
 
 @dataclass(frozen=True)
@@ -99,8 +134,17 @@ def check_eligibility(
         checks.append((code, False, message))
         return EligibilityResult(False, code, message, tuple(checks), None)
 
-    if symbol in EXPLICIT_DENYLIST:
-        return fail(EXPLICITLY_DENIED, f"{symbol} مرفوض صراحةً: {EXPLICIT_DENYLIST[symbol]}")
+    # **الوسيط يُعرَف أولاً.** كان الرفض الصريح يُطبَّق قبل ذلك، فيرفض
+    # أدوات كابيتال بسببٍ يخصّ IBKR.
+    if details is not None and details.asset_class in CFD_ASSET_CLASSES:
+        return _check_cfd(
+            symbol=symbol, quote=quote, details=details, permissions=permissions,
+            balances=balances, market_is_open=market_is_open, now=now,
+            checks=checks, fail=fail,
+        )
+
+    if symbol in IBKR_EXPLICIT_DENYLIST:
+        return fail(EXPLICITLY_DENIED, f"{symbol} مرفوض صراحةً: {IBKR_EXPLICIT_DENYLIST[symbol]}")
 
     entry = ALLOWLIST.get(symbol)
     if entry is None:
@@ -173,4 +217,89 @@ def check_eligibility(
         checks=tuple(checks),
         data_quality=quality,
         fractional_allowed=fractional_allowed,
+    )
+
+
+def _check_cfd(
+    *, symbol, quote, details, permissions, balances, market_is_open, now, checks, fail
+) -> EligibilityResult:
+    """
+    مسار CFD عند كابيتال — **سياسةٌ مقابلة لسياسة الأسهم لا تخفيفٌ لها**.
+
+    ## ما يختلف عن مسار الأسهم، ولماذا
+
+    * **الرافعة والبيع على المكشوف متوقَّعان** هنا لا مخالفتان: الـCFD هامشٌ
+      بطبيعته، ونصف الاستراتيجيات بيع. واشتراط `Cash` بلا هامش يرفض حساب
+      كابيتال في كل بند — وهو ما كان يقع.
+    * **نافذتا الافتتاح والإغلاق تسقطان**: الفوركس يعمل 24/5 بلا جرس، ونافذة
+      «أول ثلاثين دقيقة» مفهومٌ من سوق الأسهم لا معنى له هنا. وحالة السوق
+      نفسها تُحسب بتقويم الفوركس (`forex_market_status`) في الخط.
+
+    ## وما يُشدَّد
+
+    * **أدنى مسافة وقف يجب أن تكون معلومة.** بلا حدٍّ معلوم يُبنى وقفٌ يُرفض
+      عند الوسيط — وقد كلّفنا ذلك ليلة 09-01 كاملة.
+    * **ما يُسعَّر بغير عملة الحساب يُرفض** حتى تُقاس كلفة التحويل. وهي اليوم
+      مفترضةٌ صفراً في نموذج التكلفة (`currency_conversion_pct = 0`)، وربحٌ
+      بالين يُحوَّل إلى دولار بكلفةٍ غير معلومة. الرفض هنا **مؤقّت وسببه
+      مكتوب**، ويرتفع بالقياس لا بالرأي.
+    """
+    entry = CFD_ALLOWLIST.get(symbol)
+    if entry is None:
+        return fail(NOT_IN_CFD_ALLOWLIST, f"{symbol} خارج قائمة CFD المسموحة.")
+    if not entry.enabled:
+        return fail(ALLOWLIST_ENTRY_DISABLED, f"{symbol} معطّل في قائمة CFD.")
+    checks.append(("CFD_ALLOWLIST", True, f"{symbol} ضمن قائمة CFD ({entry.name_ar})."))
+
+    quote_currency = (details.quote_currency or entry.currency or "").upper()
+    if quote_currency != ACCOUNT_CURRENCY:
+        return fail(
+            CONVERSION_COST_UNMEASURED,
+            f"{symbol} مسعَّر بـ{quote_currency} لا {ACCOUNT_CURRENCY}، وكلفة التحويل "
+            "غير مقيسة — تُفترض صفراً في نموذج التكلفة. يُرفض حتى تُقاس.",
+        )
+    checks.append(("QUOTE_CURRENCY", True, f"التسعير بـ{ACCOUNT_CURRENCY} — لا تحويل."))
+
+    problems = permissions.violates_cfd_policy()
+    if problems:
+        return fail(PERMISSIONS_INSUFFICIENT, "صلاحيات الحساب تخالف سياسة CFD: " + "؛ ".join(problems))
+    checks.append(("PERMISSIONS", True, "حساب CFD تجزئة، بلا خيارات ولا آجلة ولا كريبتو."))
+
+    if not market_is_open:
+        return fail(MARKET_CLOSED, "سوق الفوركس مغلق — لا تقييم خارج الجلسة.")
+    checks.append(("SESSION", True, "سوق الفوركس مفتوح."))
+
+    quality = assess_quote(quote, now=now)
+    if not quality.tradable:
+        checks.append((DATA_NOT_TRADABLE, False, quality.reason_ar))
+        return EligibilityResult(False, DATA_NOT_TRADABLE, quality.reason_ar, tuple(checks), quality)
+    checks.append(("MARKET_DATA", True, quality.reason_ar))
+
+    if not details.supports_stop_orders:
+        return fail(NO_RELIABLE_STOP, "الأداة لا تدعم أوامر وقف الخسارة — مرفوضة.")
+    if details.min_stop_distance is None:
+        return fail(
+            STOP_DISTANCE_UNKNOWN,
+            f"{symbol}: أدنى مسافة وقف غير معلومة عند الوسيط — الأمر سيُرفض عند الإرسال.",
+        )
+    checks.append((
+        "PROTECTIVE_EXIT", True,
+        f"الوقف مدعوم، وأدنى مسافة معلومة ({details.min_stop_distance}).",
+    ))
+
+    if balances.available_for_new_trade <= 0:
+        return fail(INSUFFICIENT_SETTLED_CASH, "لا نقد متاح لصفقة جديدة.")
+    checks.append((
+        "AVAILABLE_CASH", True,
+        f"المتاح لصفقة جديدة {balances.available_for_new_trade:.2f} دولار.",
+    ))
+
+    return EligibilityResult(
+        eligible=True,
+        reason_code=None,
+        reason_ar=f"{symbol} مؤهل للتقييم (CFD).",
+        checks=tuple(checks),
+        data_quality=quality,
+        # لا كسور في CFD كابيتال: `supports_fractional=False` في المحوّل.
+        fractional_allowed=False,
     )

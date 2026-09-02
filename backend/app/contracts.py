@@ -189,6 +189,42 @@ class TradingPermissions(Base):
     margin_enabled: bool = False
     as_of_utc: datetime
 
+    def violates_cfd_policy(self) -> list[str]:
+        """
+        سياسة حساب CFD بالرافعة — **مقابلة لسياسة V1 لا تخفيفٌ لها**.
+
+        ## لماذا سياستان
+
+        `violates_v1_policy` تشترط حساباً نقدياً بلا هامش ولا فوركس ولا بيعٍ
+        على المكشوف، وصلاحية أسهم أمريكية. وهي صحيحةٌ تماماً لأسهم IBKR —
+        وتَرفض حساب كابيتال في كل بند: فالـCFD هامشٌ بطبيعته، والفوركس هو
+        ما نتداوله، والبيع نصفُ الاستراتيجيات.
+
+        وقد كتب محوّل كابيتال ذلك بصراحة منذ يومه الأول: «سياسة CFD الخاصة
+        تُطبَّق في eligibility» — **ولم تُكتب قط**. فبقيت الأدوات الأربع
+        مرفوضةً بسياسةٍ لوسيطٍ آخر.
+
+        ## وما تشترطه هذه
+
+        الرافعة والفوركس والبيع **متوقَّعة** هنا لا مخالفات. والمشترَط:
+        تصنيفٌ تجزئة (فتلزم حمايات التجزئة: حدّ الرافعة وحماية الرصيد
+        السالب)، وصلاحية فوركس فعلاً، **وإطفاء ما هو خارج النطاق** —
+        الخيارات والعقود الآجلة والكريبتو. إغفالُ هذه الثلاث يجعل السياسة
+        تُجيز حساباً يستطيع ما لم يُختبَر عليه شيء.
+        """
+        problems: list[str] = []
+        if self.classification is not ClientClassification.RETAIL:
+            problems.append("التصنيف ليس Retail — تسقط حمايات التجزئة")
+        if not self.forex:
+            problems.append("صلاحية الفوركس/CFD غير مفعّلة")
+        if self.options:
+            problems.append("Options مفعّلة — خارج النطاق")
+        if self.futures:
+            problems.append("Futures مفعّلة — خارج النطاق")
+        if self.crypto:
+            problems.append("Crypto مفعّلة — خارج النطاق")
+        return problems
+
     def violates_v1_policy(self) -> list[str]:
         """قائمة المخالفات لسياسة V1. أي عنصر هنا يمنع الانتقال إلى Live."""
         problems: list[str] = []

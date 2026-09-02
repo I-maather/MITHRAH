@@ -19,7 +19,7 @@ from .audit.log import Actor, AuditAction, verify_chain
 from .api.state import SystemState, build_system
 from .clock import format_riyadh, now_utc, forex_market_status
 from .config import get_settings
-from .eligibility.allowlist import ALLOWLIST, EXPLICIT_DENYLIST
+from .eligibility.allowlist import ALLOWLIST, CFD_ALLOWLIST, IBKR_EXPLICIT_DENYLIST
 from .killswitch.engine import TRIGGER_LABELS_AR, KillSwitchTrigger
 from contextlib import asynccontextmanager
 import logging
@@ -534,18 +534,37 @@ def opportunities(sys: SystemState = Depends(system)):
     """
     لا تُعرض هنا 'دعوة شراء'. كل صف يشرح لماذا قُبل أو رُفض.
     """
+    # **القائمتان معاً، وكلٌّ موسومةٌ بمسارها.** كانت تُعرض قائمة الأسهم
+    # وحدها مع اسم استراتيجيةٍ مثبَّت نصّاً — فتقرأ المالكة أن نظامها يقيّم
+    # `SPY` بينما هو يمسح أزواج عملات.
     rows = []
+    for symbol, entry in CFD_ALLOWLIST.items():
+        rows.append({
+            "symbol": symbol, "name_ar": entry.name_ar, "enabled": entry.enabled,
+            "rationale_ar": entry.rationale_ar, "path": "CFD_CAPITAL",
+            "status_ar": (
+                "أداة يقيّمها النظام. والقرار وسببه في شاشة القرار، "
+                "لا هنا."
+            ),
+        })
     for symbol, entry in ALLOWLIST.items():
         rows.append({
-            "symbol": symbol,
-            "name_ar": entry.name_ar,
-            "enabled": entry.enabled,
-            "rationale_ar": entry.rationale_ar,
-            "strategy": "TREND_PULLBACK 1.0.0",
-            "status_ar": "الاستراتيجية في حالة بحث — لا تُنتج أوامر.",
+            "symbol": symbol, "name_ar": entry.name_ar, "enabled": entry.enabled,
+            "rationale_ar": entry.rationale_ar, "path": "STOCKS_IBKR",
+            "status_ar": "مسار أسهم IBKR — قائمٌ ولا يُستعمل اليوم.",
         })
-    denied = [{"symbol": s, "reason_ar": r} for s, r in EXPLICIT_DENYLIST.items()]
-    return {"allowlist": rows, "denylist": denied}
+    denied = [
+        {"symbol": s, "reason_ar": r, "path": "STOCKS_IBKR"}
+        for s, r in IBKR_EXPLICIT_DENYLIST.items()
+    ]
+    return {
+        "allowlist": rows,
+        "denylist": denied,
+        "note_ar": (
+            "قائمة الرفض تخصّ مسار أسهم IBKR وحده. وأدوات CFD تُقيَّم بسياستها "
+            "المستقلّة — وحالة الاستراتيجيات تُقرأ من /api/strategies لا من هنا."
+        ),
+    }
 
 
 @app.get("/api/strategies")
