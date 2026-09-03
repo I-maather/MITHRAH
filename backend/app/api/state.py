@@ -298,12 +298,37 @@ def build_system(settings: Settings | None = None) -> SystemState:
             ),
             at=now_utc(),
         )
-        # القفل يُركَّب على المحوّل نفسه: الخط يسأل المحوّل لا الحالة.
-        try:
-            broker.execution_lock = trial_lock
-        except Exception:  # noqa: BLE001
-            logging.getLogger(__name__).warning(
-                "الوسيط لا يقبل قفل تنفيذ — التجربة لن تنفّذ."
+        # ---------------------------------------------------------------
+        # القفل يُركَّب على **طبقتَيه**: المحوّل والناقل.
+        #
+        # كان `broker.execution_lock = trial_lock` — يستبدل سمة المحوّل
+        # ويترك الناقل مغلقاً. فمرّت المخاطر والمعاينة وسُجِّل الإرسال، ثم
+        # رفع الناقل `ExecutionLocked` فماتت المهمة بلا أثرٍ في التدقيق
+        # (مقيس 2026-09-03، ثلاث دورات متتالية).
+        #
+        # والفشل هنا **لا يُبتلَع**: تجربةٌ تُعلَن فعّالة ولا تنفّذ أسوأ من
+        # تجربةٍ لم تبدأ.
+        # ---------------------------------------------------------------
+        installer = getattr(broker, "authorise_execution", None)
+        if callable(installer):
+            installer(trial_lock)
+        else:
+            try:
+                broker.execution_lock = trial_lock
+            except Exception:  # noqa: BLE001
+                logging.getLogger(__name__).warning(
+                    "الوسيط لا يقبل قفل تنفيذ — التجربة لن تنفّذ."
+                )
+        if getattr(broker, "execution_lock_consistent", True) is False:
+            audit.record(
+                actor=Actor.SYSTEM, action=AuditAction.CONFIG_CHANGE,
+                decision="EXECUTION_LOCK_INCONSISTENT",
+                reason_ar=(
+                    "قفل التنفيذ مختلفٌ بين المحوّل والناقل: "
+                    f"{getattr(broker, 'execution_lock_layers', {})}. "
+                    "ما يُعرَض ليس ما يحكم — لا تُقرأ حالة التنفيذ من الشاشة."
+                ),
+                source="build_system",
             )
     # **اسمٌ لا يطابق شيئاً يُقال، لا يُبتلَع.**
     #

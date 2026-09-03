@@ -232,14 +232,24 @@ def _install_broker(sys_state, candidate) -> None:
 
     if trial.active:
         # المحوّل الجديد يُبنى بقفلٍ مغلق؛ يُفتح فقط إن بقيت التجربة صالحة.
+        #
+        # **ويُركَّب على طبقتَيه.** كان هنا إسنادٌ مباشر — نسخةٌ ثانية من
+        # العطل نفسه الذي أوقف التنفيذ في 2026-09-03: سمةُ المحوّل تُفتح
+        # ويبقى الناقل مغلقاً، فتُقبل الأوامر في الشاشة وتُرفض في الشبكة.
+        # (كشفه الفحص الساكن `test_no_module_assigns_the_lock_directly`.)
         try:
-            candidate.execution_lock = candidate.execution_lock.authorise(
+            opened = candidate.execution_lock.authorise(
                 owner_authorization_reference=trial.approval_reference,
                 reason_ar=(
                     "تجربة الحساب التجريبي — أُعيد تركيب القفل بعد تبديل الحساب."
                 ),
                 at=now_utc(),
             )
+            installer = getattr(candidate, "authorise_execution", None)
+            if callable(installer):
+                installer(opened)
+            else:
+                candidate.execution_lock = opened
         except Exception:  # noqa: BLE001
             logging.getLogger(__name__).warning("تعذّر تركيب قفل التنفيذ بعد التبديل.")
 

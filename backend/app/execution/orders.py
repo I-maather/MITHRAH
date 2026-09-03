@@ -214,6 +214,48 @@ class ExecutionService:
                 intent, recovered, requires_kill_switch=True,
             )
 
+        except Exception as exc:  # noqa: BLE001
+            # ---------------------------------------------------------------
+            # **لا إرسالَ يموت صامتاً.**
+            #
+            # كانت هذه الدالة تلتقط `BrokerRejected` و`BrokerTimeout` وحدهما.
+            # وكل ما عداهما — `ExecutionLocked` مثلاً — يمرّ من فوقها فيقتل
+            # المهمة المجدولة، **بعد** أن سُجِّل `ORDER_SUBMITTED` في خط
+            # التدقيق وقبل أن يُسجَّل شيءٌ عن مصيره.
+            #
+            # ووقع ذلك فعلاً في 2026-09-03: ثلاث دورات متتالية تُسجّل
+            # «أُرسل» ولا تُسجّل شيئاً بعده، والسجلّ الوحيد سطرٌ في
+            # journalctl: «فشل المهمة المجدولة decision-loop: ExecutionLocked».
+            # فبدا في خط التدقيق أن ثلاثة أوامر خرجت إلى الوسيط ولم تعد —
+            # وهي **لم تخرج أصلاً**.
+            #
+            # والفرق بين «أُرسل ولا نعرف» و«لم يُرسَل» هو الفرق بين حالة
+            # طوارئ وحالة إعداد. وخط تدقيقٍ لا يفرّق بينهما يضلّل في اللحظة
+            # التي يُقرأ فيها.
+            #
+            # ⇒ يُسجَّل الفشل باسم صنفه، ويُطلَب قاطع الطوارئ: مصيرُ أمرٍ
+            # مجهولٌ حتى يُقرأ من الوسيط.
+            # ---------------------------------------------------------------
+            self.audit.record(
+                actor=Actor.SYSTEM, action=AuditAction.ORDER_REJECTED,
+                decision=f"SUBMIT_FAILED_{type(exc).__name__}",
+                reason_ar=(
+                    f"تعذّر الإرسال بعد تسجيله: {type(exc).__name__}. "
+                    "لم يصل تأكيدٌ ولم يُقرأ مركز — يُعامَل مجهولَ المصير "
+                    "حتى تُقرأ حالة الوسيط."
+                ),
+                source=self.broker.name, related_id=intent.client_order_id,
+            )
+            recovered = self._try_recover(intent)
+            if recovered is not None and recovered.status in (
+                OrderStatus.FILLED, OrderStatus.PARTIALLY_FILLED
+            ):
+                return self._verify_fill(intent, recovered)
+            return SubmissionResult(
+                SubmissionOutcome.UNCONFIRMED,
+                f"تعذّر الإرسال ({type(exc).__name__}) ولم يُقرأ أثرٌ عند الوسيط.",
+                intent, recovered, requires_kill_switch=True,
+            )
         # 4) التأكيد من الوسيط — لا نثق بالاستجابة الأولى وحدها
         confirmed = self.broker.confirm_order(intent.client_order_id)
         if confirmed.status is OrderStatus.UNKNOWN:

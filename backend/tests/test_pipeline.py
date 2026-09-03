@@ -233,10 +233,40 @@ def test_the_position_limit_blocks_the_next_entry_whatever_the_limit_is():
     )
 
 
-def test_duplicate_run_same_day_is_blocked_and_halts():
+def test_a_repeated_setup_is_refused_before_execution_not_by_the_kill_switch():
+    """
+    **تغيّر سلوكٌ عن قصد، وسببُه مقيسٌ في الإنتاج.**
+
+    كان الفحص يشترط أن تُوقف الدورةُ الثانية النظامَ بقاطع الطوارئ
+    (`DUPLICATE_ORDER`). وهو صحيحٌ لو كانت الدورة الثانية شذوذاً — وليست:
+    الحلقة تدور كل ٦٠ ثانية والشمعة أربع ساعات، فالإشارة الصحيحة على شمعةٍ
+    واحدة تتكرّر مئتين وأربعين مرّة.
+
+    ووقع ذلك في 2026-09-03: أربع دورات على الشمعة نفسها، فانطلق قاطع
+    الطوارئ ونُسب السبب إلى «أمر مكرر» — وهو **أثرٌ لا سبب**، وأوقف النظام
+    ساعاتٍ على سلوكٍ طبيعي.
+
+    ⇒ تكرارُ الإعداد يُرفض **قبل** طبقة التنفيذ، بسببٍ يخصّه، وبلا قاطع
+    طوارئ. وحارسُ التكرار في `ExecutionService` يبقى خطَّ الدفاع الأخير:
+    إن بلغته نيّةٌ مكرّرة رغم هذا، فذلك شذوذٌ حقيقي ويستدعي الإيقاف —
+    يحرسه `test_the_idempotency_guard_still_halts_when_it_is_reached`.
+    """
     pipeline, broker, audit, ks, state = build()
     first = run(pipeline, state)
     assert first.decision is Decision.TRADE
+    second = run(pipeline, state)
+    assert second.decision is Decision.NO_TRADE
+    assert second.reason_code == "ENTRY_ALREADY_ATTEMPTED_FOR_SETUP", second.reason_ar
+    assert not ks.is_active, "أُوقف النظام على تكرارٍ طبيعي"
+
+
+def test_the_idempotency_guard_still_halts_when_it_is_reached():
+    """خطُّ الدفاع الأخير لم يُمَسّ: نيّةٌ مكرّرة تبلغ التنفيذ ⇒ إيقاف."""
+    pipeline, broker, audit, ks, state = build()
+    first = run(pipeline, state)
+    assert first.decision is Decision.TRADE
+    # يُمسح حارس الإعداد وحده — كأن الإعداد جديد، والنيّة نفسها.
+    pipeline._attempted_setups.clear()
     second = run(pipeline, state)
     assert second.decision is Decision.HALTED
     assert ks.state.current_event.trigger is KillSwitchTrigger.DUPLICATE_ORDER

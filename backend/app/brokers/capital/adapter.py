@@ -441,6 +441,61 @@ class CapitalComAdapter(BrokerAdapter):
             received_at_utc=at,
         )
 
+    # ------------------------------------------------------------------
+    def authorise_execution(self, lock: ExecutionLock) -> None:
+        """
+        **يركّب قفل التنفيذ على طبقتَيه معاً: المحوّل والناقل.**
+
+        ## العطل الذي فرض هذه الدالة — مقيسٌ في الإنتاج 2026-09-03
+
+        `build_capital_adapter` تُمرّر قفلاً **واحداً** إلى الاثنين، وتقول
+        في نصّها: «طبقةٌ واحدة لا طبقتان، وإلا صار فتح إحداهما دون الأخرى
+        ممكناً بلا أن يظهر في أي اختبار».
+
+        والمشاركة تصحّ عند البناء وحده. وتجربةُ التجريبي تُعرَف **بعد**
+        بناء الوسيط (لا نعرف أنه تجريبي قبل أن نسأله)، فكان قفلها يُركَّب
+        بإسنادٍ مباشر: `broker.execution_lock = trial_lock`. وهو يستبدل
+        سمة المحوّل **ويترك الناقل على قفله المغلق**.
+
+        فصارت ثلاث نسخٍ لحقيقةٍ واحدة: حالةُ النظام تقول «مفتوح»، والمحوّل
+        يقول «مفتوح»، والناقل — وهو الذي يمرّ به الطلب فعلاً — يقول «مغلق».
+
+        والأثر مقيس: في 22:05 و22:06 و22:07 من 2026-09-03 وافقت بوابةُ
+        المخاطر ثلاث مرّات، وأُنشئت النية، واجتازت المعاينة، وسُجِّل
+        `ORDER_SUBMITTED` — ثم رفع الناقلُ `ExecutionLocked`، فماتت المهمة
+        المجدولة **بلا سطرٍ واحد في خط التدقيق يقول ماذا جرى**. وفي الدورة
+        الرابعة تكرّر المفتاح فانطلق قاطع الطوارئ. أي أن السبب المسجَّل
+        («أمر مكرر») ليس السبب الأوّل.
+
+        ⇒ موضعُ تركيبٍ واحد، وخاصيّةٌ تكشف الاختلاف، وفحصٌ ساكن يمنع عودة
+        الإسناد المباشر.
+        """
+        self.execution_lock = lock
+        transport = getattr(getattr(self, "session", None), "transport", None)
+        if transport is not None and hasattr(transport, "execution_lock"):
+            transport.execution_lock = lock
+
+    @property
+    def execution_lock_layers(self) -> dict:
+        """حالة القفل في كل طبقة — للعرض والفحص، لا للقرار."""
+        transport = getattr(getattr(self, "session", None), "transport", None)
+        transport_lock = getattr(transport, "execution_lock", None)
+        return {
+            "adapter": bool(self.execution_lock.unlocked),
+            "transport": (
+                None if transport_lock is None else bool(transport_lock.unlocked)
+            ),
+        }
+
+    @property
+    def execution_lock_consistent(self) -> bool:
+        """
+        `False` تعني أن ما يُعرَض ليس ما يحكم. وهي حالةٌ يجب أن تُرى، لا
+        أن تُكتشَف من أمرٍ يموت في المنتصف.
+        """
+        layers = self.execution_lock_layers
+        return layers["transport"] is None or layers["adapter"] == layers["transport"]
+
     def get_instrument_details(self, symbol: str) -> InstrumentDetails:
         market = self.get_market(symbol)
         rules = market.dealing_rules
@@ -1182,6 +1237,9 @@ class CapitalComAdapter(BrokerAdapter):
             "connected": self._connected,
             "is_live": self.is_live,
             "execution_lock": self.execution_lock.as_dict(),
+            # **الطبقتان معاً.** عرضُ إحداهما وحدها هو ما أخفى العطل.
+            "execution_lock_layers": self.execution_lock_layers,
+            "execution_lock_consistent": self.execution_lock_consistent,
             "selected_account_masked": account.masked_id if account else None,
             "discovery_allowlist": sorted(self.discovery_allowlist),
             "execution_allowlist": sorted(self.execution_allowlist),

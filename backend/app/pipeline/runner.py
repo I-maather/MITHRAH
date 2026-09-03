@@ -136,6 +136,8 @@ TIMEFRAME_MISMATCH = "TIMEFRAME_MISMATCH"
 TIMEFRAME_EXCEPTION = "TIMEFRAME_EXCEPTION_DEMO_TRIAL"
 #: كل الاستراتيجيات المعتمدة سقطت على بوابة الإطار — سببٌ يخصّ الإعداد لا السوق.
 NO_STRATEGY_FOR_TIMEFRAME = "NO_STRATEGY_APPROVED_FOR_TIMEFRAME"
+#: أُقدِم على هذا الإعداد بعينه في هذه الدورة الزمنية من قبل.
+ENTRY_ALREADY_ATTEMPTED = "ENTRY_ALREADY_ATTEMPTED_FOR_SETUP"
 
 
 #: مفرداتان لشيءٍ واحد: الوسيط يسمّي الدقّة `HOUR_4` والاستراتيجيات
@@ -268,6 +270,27 @@ class Pipeline:
         self.instruments = instruments if instruments is not None else InstrumentRegistry.empty()
         self.resolution = resolution
         self.timeframe_exception_reference = timeframe_exception_reference
+        # ---------------------------------------------------------------
+        # **إعدادٌ واحد ⇒ محاولةُ دخولٍ واحدة.**
+        #
+        # الحلقة تدور كل ٦٠ ثانية، والشمعة أربع ساعات. فإشارةٌ صحيحة على
+        # شمعةٍ واحدة تتكرّر **٢٤٠ مرّة**، وكلُّ تكرارٍ نيّةُ أمرٍ جديدة.
+        #
+        # ووقع ذلك في 2026-09-03: أربع دورات متتالية على الشمعة نفسها،
+        # أنتجت أربع نيّات بأربعة مفاتيح مختلفة — لأن المفتاح يحمل سعر
+        # الدخول، وهو يتغيّر مع كل عرضٍ من الوسيط. فحارسُ التكرار لم يرَ
+        # تكراراً حتى ثبت السعر بين دورتين، فانطلق قاطع الطوارئ ونُسب
+        # السبب إلى «أمر مكرر» — وهو أثرٌ لا سبب.
+        #
+        # والبوابات الموجودة تقرأ من قاعدة البيانات (مركزٌ مفتوح، أوامرُ
+        # اليوم)، وهي لا تعرف شيئاً قبل أن يُملأ أمرٌ ويُسجَّل. فبين
+        # الإرسال والتسجيل نافذةٌ تتّسع لكل دوراتِ الشمعة.
+        #
+        # ⇒ حارسٌ في الذاكرة على **الإعداد** لا على النيّة: (اليوم، الأداة،
+        # الاستراتيجية، بداية الشمعة). شمعةٌ جديدة إعدادٌ جديد، والشمعة
+        # نفسها محاولةٌ واحدة. والبوابات الدستورية تبقى فوقه كما هي.
+        # ---------------------------------------------------------------
+        self._attempted_setups: set[tuple] = set()
 
     # -- helpers ------------------------------------------------------------
     def _no_trade(self, stage: str, code: str, message: str, at: datetime) -> PipelineResult:
@@ -658,7 +681,23 @@ class Pipeline:
                 signal=signal, risk_decision=decision, at_utc=now,
             )
 
-        # 7) Order intent + preview + 8) execution
+        # 7) حارس الإعداد ثم Order intent + preview + 8) execution
+        setup_key = (
+            now.date().isoformat(),
+            symbol,
+            f"{signal.strategy_name}@{signal.strategy_version}",
+            bars[-1].start_utc.isoformat() if bars else "",
+        )
+        if setup_key in self._attempted_setups:
+            return self._no_trade(
+                "execution", ENTRY_ALREADY_ATTEMPTED,
+                f"أُقدِم على هذا الإعداد من قبل: {signal.strategy_name}"
+                f"@{signal.strategy_version} على {symbol} لشمعة "
+                f"{setup_key[3]}. الحلقة تدور كل دقيقة والشمعة أطول — "
+                "وتكرارُ الإشارة ليس فرصةً ثانية.", now,
+            )
+        self._attempted_setups.add(setup_key)
+
         intent = build_order_intent(
             signal=signal, decision=decision, trading_day=now.date().isoformat(),
             instrument_snapshot=details.model_dump(mode="json"),
