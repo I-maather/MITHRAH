@@ -72,6 +72,10 @@ class MeasuredInstrument:
         return (
             self.economics.provenance is ValueProvenance.BROKER_DISCOVERY
             and self.economics.min_stop_distance is not None
+            # **ووحدة الحدّ معلومة.** رقمٌ بلا وحدة ليس حدّاً: `0.01` نسبةً
+            # هو ١٫١٦ نقطة على اليورو، وسعراً خاماً هو ١٠٠ نقطة — والفرق
+            # بينهما هو الفرق بين نظامٍ يتداول ونظامٍ يرفض كل إشاراته.
+            and not self.economics.stop_spec_unresolved
             and self.spread_samples > 0
             # **والسبريد نفسه مقيسٌ لا موروث.** كان الشرط عدد الرصدات
             # وحده؛ وصفٌّ برصداتٍ بلا `spread_price` يرث احتياطي
@@ -120,6 +124,16 @@ class InstrumentRegistry:
                     margin_factor_unit=str(row["margin_factor_unit"]),
                     min_stop_distance=_dec(row.get("min_stop_distance")),
                     min_guaranteed_stop_distance=_dec(row.get("min_guaranteed_stop_distance")),
+                    min_stop_distance_unit=(
+                        str(row["min_stop_distance_unit"])
+                        if row.get("min_stop_distance_unit")
+                        else None
+                    ),
+                    min_guaranteed_stop_distance_unit=(
+                        str(row["min_guaranteed_stop_distance_unit"])
+                        if row.get("min_guaranteed_stop_distance_unit")
+                        else None
+                    ),
                     guaranteed_stop_available=bool(row.get("guaranteed_stop_available", False)),
                     # **لا تُملأ عملةُ التسعير صامتة.** كان `or "USD"` يمنح
                     # صفّاً بلا عملةٍ عملةَ الحساب بمصدر `BROKER_DISCOVERY`
@@ -191,6 +205,12 @@ class InstrumentRegistry:
             return f"{epic}: اقتصادياتها مفترضة لا مقيسة ({row.economics.provenance.value})."
         if row.economics.min_stop_distance is None:
             return f"{epic}: أدنى مسافة وقف غير معلومة — الأمر سيُرفض عند الوسيط."
+        if row.economics.stop_spec_unresolved:
+            return (
+                f"{epic}: أدنى مسافة وقف مُعلَنةٌ {row.economics.min_stop_distance} "
+                "بوحدةٍ مجهولة — قياسٌ قديم قبل حفظ الوحدة. أعيدي التشغيل: "
+                "scripts/discover_instrument_economics.py (INSTRUMENT_SPEC_UNRESOLVED)."
+            )
         if row.spread_samples <= 0:
             return f"{epic}: لم يُرصد سبريد."
         if row.assumptions.spread_provenance is not ValueProvenance.BROKER_DISCOVERY:

@@ -464,8 +464,26 @@ class CapitalComAdapter(BrokerAdapter):
             lot_size=market.lot_size,
             margin_factor=market.margin_factor,
             margin_factor_unit=market.margin_factor_unit,
-            min_stop_distance=rules.min_stop_or_profit_distance,
-            min_guaranteed_stop_distance=rules.min_guaranteed_stop_distance,
+            min_stop_distance=(
+                rules.min_stop_or_profit_distance.value
+                if rules.min_stop_or_profit_distance is not None
+                else None
+            ),
+            min_stop_distance_unit=(
+                rules.min_stop_or_profit_distance.unit
+                if rules.min_stop_or_profit_distance is not None
+                else None
+            ),
+            min_guaranteed_stop_distance=(
+                rules.min_guaranteed_stop_distance.value
+                if rules.min_guaranteed_stop_distance is not None
+                else None
+            ),
+            min_guaranteed_stop_distance_unit=(
+                rules.min_guaranteed_stop_distance.unit
+                if rules.min_guaranteed_stop_distance is not None
+                else None
+            ),
             guaranteed_stop_available=market.guaranteed_stop_allowed,
             overnight_fee=market.overnight_fee,
             pip_size=PIP_SIZES.get(market.epic.upper()),
@@ -704,12 +722,14 @@ class CapitalComAdapter(BrokerAdapter):
             )
 
         stop_distance = abs(intent.expected_fill_price - intent.stop_price)
-        if details.min_stop_distance is not None and stop_distance < details.min_stop_distance:
+        min_stop_price = details.min_stop_price_at(intent.expected_fill_price)
+        if min_stop_price is not None and stop_distance < min_stop_price:
             return OrderPreview(
                 intent_key=intent.idempotency_key,
                 accepted_by_broker=False,
                 broker_message=(
-                    f"مسافة الوقف {stop_distance} أقل من الحد الأدنى {details.min_stop_distance}."
+                    f"مسافة الوقف {stop_distance} أقل من الحد الأدنى {min_stop_price} "
+                    f"({details.min_stop_distance} {details.min_stop_distance_unit})."
                 ),
                 estimated_commission=None,
                 estimated_price=None,
@@ -781,6 +801,12 @@ class CapitalComAdapter(BrokerAdapter):
                 f"الوسيط لم يُعطِ أدنى مسافة وقف للأداة {intent.symbol} — "
                 "لا إرسال بلا معرفة الحدّ."
             )
+        if details.min_stop_spec_unresolved:
+            raise BrokerRejected(
+                f"أدنى مسافة وقف لـ{intent.symbol} أُعلنت بقيمة "
+                f"{details.min_stop_distance} بوحدة مجهولة — لا إرسال على مواصفةٍ "
+                "غير محلولة. يُعاد القياس (INSTRUMENT_SPEC_UNRESOLVED)."
+            )
 
         # ---------------------------------------------------------------
         # **الوحدة سعرٌ خام** — مقيسة 2026-09-01، انظر `STOP_DISTANCE_UNIT`.
@@ -793,10 +819,29 @@ class CapitalComAdapter(BrokerAdapter):
         # وحدةٌ واحدة الآن على الطرفين: سعر مقابل سعر.
         # ---------------------------------------------------------------
         stop_distance = stop_price_distance
-        if stop_distance < details.min_stop_distance:
+        # ---------------------------------------------------------------
+        # **طرفا المقارنة بوحدةٍ واحدة — بعد حلّ الوحدة لا بافتراضها.**
+        #
+        # كان الطرف الأيمن يؤخذ خاماً من `dealingRules`، وهو عند Capital.com
+        # `{"unit": "PERCENTAGE", "value": 0.01}` — أي ٠٫٠١٪ من السعر. فصار
+        # ٠٫٠١ سعراً = ١٠٠ نقطة على اليورو، والحدُّ الحقيقي ١٫١٦ نقطة.
+        # (مقيسٌ من الوسيط 2026-09-03: EURUSD/GBPUSD/USDJPY = PERCENTAGE 0.01،
+        #  GOLD = PERCENTAGE 0.001.)
+        #
+        # وأمرُ الإرسال نفسه يأخذ `stopDistance` **بوحدة السعر** — وهذا صحيح
+        # ولم يتغيّر. العطل كان في القاعدة لا في الأمر.
+        # ---------------------------------------------------------------
+        broker_min_stop = details.min_stop_price_at(intent.expected_fill_price)
+        if broker_min_stop is None:
+            raise BrokerRejected(
+                f"تعذّر حلّ أدنى مسافة وقف لـ{intent.symbol} إلى وحدة السعر "
+                f"({details.min_stop_distance} {details.min_stop_distance_unit})."
+            )
+        if stop_distance < broker_min_stop:
             raise BrokerRejected(
                 f"مسافة الوقف {stop_distance} دون حدّ الوسيط "
-                f"{details.min_stop_distance} (كلاهما بوحدة السعر). "
+                f"{broker_min_stop} (كلاهما بوحدة السعر؛ الحدّ معلَنٌ "
+                f"{details.min_stop_distance} {details.min_stop_distance_unit}). "
                 "لا تُوسَّع تلقائياً — التوسيع يغيّر المخاطرة التي وافقتِ عليها."
             )
 

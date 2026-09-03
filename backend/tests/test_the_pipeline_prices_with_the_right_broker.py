@@ -38,6 +38,7 @@ from app.contracts import (
 from app.execution.orders import ExecutionService, IdempotencyGuard
 from app.killswitch.engine import KillSwitch
 from app.money import D
+from app.risk.size_ladder import BROKER_MIN_QUANTITY_RISK_EXCEEDED
 from app.pipeline.runner import (
     INSTRUMENT_ECONOMICS_UNMEASURED,
     STOP_BELOW_BROKER_MINIMUM,
@@ -69,14 +70,20 @@ def capital_permissions(at):
 UTC = timezone.utc
 NO_MACRO = MacroAssessment(blocks_trading=False, reason_ar="لا مانع كلي.")
 
-#: القياس كما خرج من حساب Demo (2026-09-01). لا رقم هنا مخترع.
+#: القياس كما خرج من حساب Demo. لا رقم هنا مخترع.
+#:
+#: **الوحدة مضافة (2026-09-03).** `minStopOrProfitDistance` عند Capital.com
+#: `{"unit":"PERCENTAGE","value":0.01}` — قُرئت مدّةً سعراً خاماً، فصار الحدُّ
+#: على اليورو ١٠٠ نقطة بدل ١٫١٦. الأرقام هنا كما يعيدها الوسيط حرفاً،
+#: ووحدتها معها.
 MEASURED = {
     "instruments": {
         "EURUSD": {
             "epic": "EURUSD", "pip_size": "0.0001", "lot_size": "1",
             "min_deal_size": "100", "size_increment": "1",
             "margin_factor": "3.33", "margin_factor_unit": "PERCENTAGE",
-            "min_stop_distance": "0.0100", "spread_price": "0.00007",
+            "min_stop_distance": "0.01", "min_stop_distance_unit": "PERCENTAGE",
+            "spread_price": "0.00007",
             "quote_currency": "USD", "provenance": "BROKER_DISCOVERY",
             "spread_samples": 5, "measured_at_utc": "2026-09-01T00:00:00+00:00",
         },
@@ -84,7 +91,8 @@ MEASURED = {
             "epic": "GOLD", "pip_size": "0.1", "lot_size": "1",
             "min_deal_size": "0.01", "size_increment": "0.01",
             "margin_factor": "5", "margin_factor_unit": "PERCENTAGE",
-            "min_stop_distance": "0.01", "spread_price": "5",
+            "min_stop_distance": "0.001", "min_stop_distance_unit": "PERCENTAGE",
+            "spread_price": "5",
             "quote_currency": "USD", "provenance": "BROKER_DISCOVERY",
             "spread_samples": 5, "measured_at_utc": "2026-09-01T00:00:00+00:00",
         },
@@ -96,8 +104,8 @@ class CapitalLikeBroker(MockBrokerAdapter):
     """وسيطٌ يعلن أدواته عقودَ فروقات — كما يفعل كابيتال."""
 
     CLASSES = {
-        "EURUSD": (AssetClass.CFD_CURRENCY, D("100"), D("0.0100")),
-        "GOLD": (AssetClass.CFD_COMMODITY, D("0.01"), D("0.01")),
+        "EURUSD": (AssetClass.CFD_CURRENCY, D("100"), D("0.01"), "PERCENTAGE"),
+        "GOLD": (AssetClass.CFD_COMMODITY, D("0.01"), D("0.001"), "PERCENTAGE"),
     }
 
     def get_instrument_details(self, symbol: str) -> InstrumentDetails:
@@ -105,11 +113,12 @@ class CapitalLikeBroker(MockBrokerAdapter):
         row = self.CLASSES.get(symbol)
         if row is None:
             return base
-        asset_class, min_quantity, min_stop = row
+        asset_class, min_quantity, min_stop, min_stop_unit = row
         return base.model_copy(update={
             "asset_class": asset_class, "exchange": "CAPITAL_COM", "currency": "USD",
             "broker": Broker.CAPITAL_COM, "epic": symbol,
             "min_quantity": min_quantity, "min_stop_distance": min_stop,
+            "min_stop_distance_unit": min_stop_unit,
             "quote_currency": "USD", "supports_fractional": True,
         })
 
@@ -202,11 +211,16 @@ def test_the_cfd_predicate_is_the_one_eligibility_uses():
     assert not is_cfd(None)
 
 
-def test_a_cfd_is_sized_at_the_broker_minimum_not_solved_backwards():
+def test_a_cfd_quantity_sits_on_the_brokers_ladder_not_solved_backwards():
     """
-    **الفحص الذي يعضّ.** مسار الأسهم يحلّ الكمية عكسياً من الميزانية،
-    فيُخرج كسراً من سهم. ومسار CFD لا يحلّ شيئاً: الوسيط يفرض 0.01 أونصة،
-    والسؤال هل تقع خسارتها في الميزانية.
+    **الفحص الذي يعضّ.** مسار الأسهم يحلّ الكمية عكسياً من الميزانية فيُخرج
+    كسراً من سهم. ومسار CFD لا يحلّ شيئاً متّصلاً: الوسيط يعلن كميةً دنيا
+    (0.01 أونصة) ودرجةَ زيادة (0.01)، فالكمية **درجةٌ على سلّمه** لا حلّ
+    معادلة.
+
+    وهذا الفحص يثبت الشكل لا القيمة: أن تكون الكمية مضاعفاً صحيحاً للدرجة
+    وليست أصغر من الحدّ الأدنى. أمّا **أيّ** درجةٍ تُختار فيثبته
+    `test_the_ladder_picks_the_step_closest_to_target`.
     """
     pipeline, state, _ = build(
         symbol="GOLD", entry="3300.0", stop="3280.0", target="3340.0",
@@ -214,8 +228,45 @@ def test_a_cfd_is_sized_at_the_broker_minimum_not_solved_backwards():
     )
     result = run(pipeline, state, "GOLD")
     assert result.risk_decision is not None, result.reason_ar
-    assert result.risk_decision.quantity == D("0.01"), (
-        "الكمية ليست الكمية الدنيا للوسيط — أي أن مسار الأسهم هو الذي سعّر."
+    q = result.risk_decision.quantity
+    assert q >= D("0.01"), "كميةٌ دون حدّ الوسيط الأدنى."
+    assert (q / D("0.01")) % 1 == 0, (
+        f"الكمية {q} ليست مضاعفاً لدرجة الوسيط — أي أن مسار الأسهم هو الذي سعّر."
+    )
+
+
+def test_the_ladder_picks_the_step_closest_to_target():
+    """
+    **الهدف يُختار به الحجم، ولا يُرفض به شيء.**
+
+    على الذهب بوقف ٢٠ دولاراً: 0.01 ⇒ ٠٫٢٦$ · 0.02 ⇒ ٠٫٥٢$ · 0.03 ⇒ ٠٫٧٨$
+    · 0.04 ⇒ ١٫٠٤$. والهدف المعتمد ٠٫٧٥ عند مرجع ٣٠٠، فالأقرب 0.03.
+
+    وكان النظام يأخذ الأصغر دائماً — أي ثلث الميزانية المعتمدة، ويترك
+    الثلثين بلا قرار.
+    """
+    pipeline, state, _ = build(
+        symbol="GOLD", entry="3300.0", stop="3280.0", target="3400.0",
+        baseline="300", bid="3299.5", ask="3300.0",
+    )
+    result = run(pipeline, state, "GOLD")
+    assert result.risk_decision is not None, result.reason_ar
+    model = InstrumentRegistry.from_dict(MEASURED).cost_model_for("GOLD")
+    best, best_gap = None, None
+    for step in range(1, 30):
+        size = D("0.01") * step
+        e = model.estimate(
+            size=size, entry_price=D("3300.0"),
+            stop_distance_pips=D("20.0") / D("0.1"),
+            take_profit_distance_pips=D("100.0") / D("0.1"),
+        )
+        if e.all_in_risk > D("1.50"):
+            break
+        gap = abs(e.all_in_risk - D("0.75"))
+        if best_gap is None or gap < best_gap:
+            best, best_gap = size, gap
+    assert result.risk_decision.quantity == best, (
+        f"اختير {result.risk_decision.quantity} والأقرب إلى الهدف {best}."
     )
 
 
@@ -231,7 +282,7 @@ def test_the_risk_shown_is_the_capital_model_not_the_ibkr_schedule():
     result = run(pipeline, state, "GOLD")
     model = InstrumentRegistry.from_dict(MEASURED).cost_model_for("GOLD")
     expected = model.estimate(
-        size=D("0.01"), entry_price=D("3300.0"),
+        size=result.risk_decision.quantity, entry_price=D("3300.0"),
         stop_distance_pips=D("20.0") / D("0.1"),
         take_profit_distance_pips=D("40.0") / D("0.1"),
     )
@@ -257,20 +308,47 @@ def test_a_stock_still_takes_the_stock_path():
 # ٢ · الاكتشاف الذي غيّر الخطّة: 300 دولار لا تكفي EUR/USD
 # ---------------------------------------------------------------------------
 
-def test_three_hundred_dollars_can_never_open_eurusd():
+def test_a_dollar_of_risk_under_the_hard_cap_is_not_refused_for_missing_the_target():
     """
-    **الرقم الذي غيّر قرار المالكة.** أرخص صفقة يقبلها كابيتال على
-    EUR/USD (100 وحدة × 100 نقطة) تكلّف 1.02 دولار، وميزانية الصفقة عند
-    مرجع 300 في وضع التحقّق 0.75 دولار. فالرفض دائم — لا يزول بانتظار
-    فرصةٍ أفضل.
+    **الفحص الذي يقلب استنتاجاً سابقاً — وسببُ القلب مقيس.**
+
+    كُتب هنا سابقاً أن ٣٠٠ دولار «لا تفتح EUR/USD أبداً»، وبُني ذلك على
+    حدّ وقفٍ قدره ١٠٠ نقطة. والحدّ الحقيقي عند الوسيط
+    `{"unit":"PERCENTAGE","value":0.01}` — أي ٠٫٠١٪ من السعر = **١٫١٦
+    نقطة**. فالمقدّمة كانت خطأ وحدةٍ لا حقيقةَ سوق.
+
+    ويبقى الرقم الثاني صحيحاً: أرخص صفقة على ١٠٠ وحدة بوقف ١٠٠ نقطة تكلّف
+    نحو ١٫٠٢ دولار، وهي **فوق الهدف ٠٫٧٥ ودون الحدّ الصلب ١٫٥٠**. وقرار
+    المالكة صريح: الهدف تفضيلٌ لا سقف رفض. فتُقبل الصفقة، ويُقال في سببها
+    أنها تجاوزت الهدف.
     """
     pipeline, state, _ = build(
         symbol="EURUSD", entry="1.16000", stop="1.15000", target="1.18000",
         baseline="300", bid="1.15993", ask="1.16000",
     )
     result = run(pipeline, state, "EURUSD")
+    assert result.risk_decision is not None, result.reason_ar
+    assert result.risk_decision.approved, result.reason_ar
+    risk = result.risk_decision.expected_risk_usd
+    assert D("0.75") < risk <= D("1.50"), (
+        f"الفحص فقد معناه: المخاطرة {risk} ليست في النطاق الذي يفصل الهدف عن الحدّ."
+    )
+    assert "الهدف" in result.risk_decision.reason_ar
+
+
+def test_a_risk_above_the_hard_cap_is_still_refused():
+    """
+    والحدّ الصلب يبقى صلباً: وقفٌ يجعل أرخص كميةٍ تتجاوز ١٫٥٠ دولار يُرفض،
+    ويُسمّى الرفض باسمه — لا «لا فرصة».
+    """
+    pipeline, state, _ = build(
+        symbol="EURUSD", entry="1.16000", stop="1.14000", target="1.20000",
+        baseline="300", bid="1.15993", ask="1.16000",
+    )
+    result = run(pipeline, state, "EURUSD")
     assert result.decision is Decision.NO_TRADE
-    assert result.reason_code == ACCOUNT_SIZE_INSUFFICIENT_FOR_BROKER_MINIMUM, result.reason_ar
+    assert result.reason_code == BROKER_MIN_QUANTITY_RISK_EXCEEDED, result.reason_ar
+    assert "السقف" in result.reason_ar
 
 
 def test_gold_fits_the_same_three_hundred_dollars():
@@ -335,13 +413,15 @@ def test_a_stop_tighter_than_the_broker_allows_is_refused_here_not_there():
     تلقائياً — التوسيع يغيّر المخاطرة التي وافقت عليها المالكة.
     """
     pipeline, state, _ = build(
-        symbol="EURUSD", entry="1.16000", stop="1.15900", target="1.16300",
+        # **وقفٌ دون الحدّ الحقيقي.** الحدّ ١٫١٦ نقطة (٠٫٠١٪ من ١٫١٦)،
+        # فوقفٌ بنصف نقطة يقع تحته. وكان الفحص يستعمل عشر نقاط — وهي فوق
+        # الحدّ الحقيقي وتحت الحدّ الوهمي، فكان يمرّ بالسبب الخطأ.
+        symbol="EURUSD", entry="1.16000", stop="1.15995", target="1.16300",
         baseline="10000", bid="1.15993", ask="1.16000",
     )
     result = run(pipeline, state, "EURUSD")
     assert result.decision is Decision.NO_TRADE
     assert result.reason_code == STOP_BELOW_BROKER_MINIMUM, result.reason_ar
-    assert "0.0100" in result.reason_ar or "0.01" in result.reason_ar
 
 
 # ---------------------------------------------------------------------------
@@ -369,7 +449,7 @@ def test_a_rejected_stop_is_readable_not_twenty_eight_decimals():
         # واختبارٌ لا يُعيد إنتاج الشرط لا يفحصه — وهو فخّ «المقارنة
         # الفارغة» نفسه للمرّة الثالثة اليوم.
         symbol="EURUSD", entry="1.16000",
-        stop="1.157667883423829318175739498", target="1.16300",
+        stop="1.159948832211657618242605020", target="1.16300",
         baseline="10000", bid="1.15993", ask="1.16000",
     )
     result = run(pipeline, state, "EURUSD")
@@ -389,12 +469,12 @@ def test_the_rejection_also_speaks_in_pips():
     """
     pipeline, state, _ = build(
         symbol="EURUSD", entry="1.16000",
-        stop="1.157667883423829318175739498", target="1.16300",
+        stop="1.159948832211657618242605020", target="1.16300",
         baseline="10000", bid="1.15993", ask="1.16000",
     )
     result = run(pipeline, state, "EURUSD")
     assert "نقطة" in result.reason_ar
-    assert "100" in result.reason_ar
+    assert "مقابل" in result.reason_ar
 
 
 def test_a_value_smaller_than_a_pip_is_still_shown():

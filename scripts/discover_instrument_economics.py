@@ -119,8 +119,12 @@ def main() -> int:
             "size_increment": _s(details.quantity_increment or 1),
             "margin_factor": _s(details.margin_factor),
             "margin_factor_unit": details.margin_factor_unit or "PERCENTAGE",
+            # **الوحدة تُحفَظ مع القيمة.** حُفِظت من قبل بلا وحدة، فقُرئت
+            # سعراً وهي نسبة — ورُفضت ٤٨٦ إشارة من ٤٨٦ بسببها.
             "min_stop_distance": _s(details.min_stop_distance),
+            "min_stop_distance_unit": details.min_stop_distance_unit,
             "min_guaranteed_stop_distance": _s(details.min_guaranteed_stop_distance),
+            "min_guaranteed_stop_distance_unit": details.min_guaranteed_stop_distance_unit,
             "guaranteed_stop_available": bool(details.guaranteed_stop_available),
             "quote_currency": details.quote_currency or details.currency or "USD",
             "overnight_fee_rate_daily": _s(details.overnight_fee),
@@ -131,10 +135,16 @@ def main() -> int:
             "market_status": getattr(details, "market_status", None),
         }
 
+        # المسافة تُعرَض **بعد حلّ وحدتها** عند السعر الحالي، لا خاماً.
+        reference = None
+        try:
+            q = adapter.get_market_data(epic)
+            reference = getattr(q, "mid", None) or getattr(q, "last", None) or getattr(q, "bid", None)
+        except Exception:  # noqa: BLE001
+            reference = None
+        min_stop_price = details.min_stop_price_at(reference)
         stop_pips = (
-            details.min_stop_distance / details.pip_size
-            if details.min_stop_distance is not None
-            else None
+            min_stop_price / details.pip_size if min_stop_price is not None else None
         )
         spread_pips = widest / details.pip_size if widest is not None else None
         print(

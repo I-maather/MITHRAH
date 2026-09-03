@@ -23,6 +23,9 @@ MEASURED = {
     "margin_factor": "1",
     "margin_factor_unit": "PERCENTAGE",
     "min_stop_distance": "0.01",
+    # **الوحدة كما يعيدها الوسيط.** رقمٌ بلا وحدةٍ ليس قياساً — وهو
+    # الملف الذي جعل ٠٫٠١٪ تُقرأ ١٠٠ نقطة.
+    "min_stop_distance_unit": "PERCENTAGE",
     "min_guaranteed_stop_distance": None,
     "guaranteed_stop_available": False,
     "quote_currency": "USD",

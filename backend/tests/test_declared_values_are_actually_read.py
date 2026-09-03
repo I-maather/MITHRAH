@@ -24,7 +24,8 @@ def row(**over) -> dict:
         "epic": "GOLD", "pip_size": "0.01", "lot_size": "1",
         "min_deal_size": "0.01", "size_increment": "0.01",
         "margin_factor": "5", "margin_factor_unit": "PERCENTAGE",
-        "min_stop_distance": "0.001", "spread_price": "0.50",
+        "min_stop_distance": "0.001", "min_stop_distance_unit": "PERCENTAGE",
+        "spread_price": "0.50",
         "quote_currency": "USD", "provenance": "BROKER_DISCOVERY",
         "spread_samples": 5, "measured_at_utc": "2026-09-02T00:00:00+00:00",
     }

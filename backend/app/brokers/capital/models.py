@@ -148,37 +148,105 @@ class CapitalPreferences:
 # السوق
 # ---------------------------------------------------------------------------
 
+#: وحدات المسافات كما يعلنها Capital.com داخل `dealingRules`.
+#:
+#: ## لماذا صار للوحدة نوعٌ بدل أن تُطرح
+#:
+#: كان القارئ يأخذ `value` ويطرح `unit`. وقيمة `minStopOrProfitDistance`
+#: تجيء `{"unit": "PERCENTAGE", "value": 0.01}` — أي **٠٫٠١٪ من السعر**،
+#: فتُخزَّن ٠٫٠١ وتُقارَن بمسافةِ وقفٍ **بوحدة السعر**. وعلى اليورو ذلك
+#: ١٠٠ نقطة بدل ١٫١٦ نقطة: تضخيمٌ بنحو ٨٦٠ ضعفاً.
+#:
+#: وأثرُه مقيسٌ لا مُقدَّر: بين ٣٠ أغسطس و٣ سبتمبر ٢٠٢٦ وُلِدت ٤٨٦ إشارة
+#: ورُفضت ٤٨٦ عند `STOP_BELOW_BROKER_MINIMUM` — مئةٌ بالمئة، ولم تبلغ ولا
+#: إشارةٌ واحدة بوابةَ المخاطر.
+#:
+#: ⇒ الوحدة تُحفظ مع القيمة، ولا تُحلّ إلى سعرٍ إلا بسعرٍ مرجعيّ حاضر.
+UNIT_PERCENTAGE = "PERCENTAGE"
+UNIT_POINTS = "POINTS"
+
+
+@dataclass(frozen=True)
+class RuleDistance:
+    """مسافةٌ من قواعد الوسيط، **بوحدتها**."""
+
+    value: Decimal
+    unit: Optional[str]
+
+    def to_price(self, reference_price: Optional[Decimal]) -> Optional[Decimal]:
+        """
+        يحوّل المسافة إلى وحدة السعر.
+
+        `None` تعني **غير قابلة للحلّ**، لا «صفر» ولا «بلا حدّ»: وحدةٌ مجهولة
+        أو نسبةٌ بلا سعرٍ مرجعي لا يُختلق لها رقم.
+        """
+        unit = (self.unit or "").upper()
+        if unit == UNIT_PERCENTAGE:
+            if reference_price is None:
+                return None
+            return self.value / Decimal("100") * Decimal(reference_price)
+        if unit == UNIT_POINTS:
+            return self.value
+        return None
+
+    @property
+    def resolvable(self) -> bool:
+        return (self.unit or "").upper() in {UNIT_PERCENTAGE, UNIT_POINTS}
+
+
 @dataclass(frozen=True)
 class DealingRules:
     min_deal_size: Decimal
     max_deal_size: Optional[Decimal]
     min_size_increment: Optional[Decimal]
-    min_stop_or_profit_distance: Optional[Decimal]
-    max_stop_or_profit_distance: Optional[Decimal]
-    min_guaranteed_stop_distance: Optional[Decimal]
+    min_stop_or_profit_distance: Optional[RuleDistance]
+    max_stop_or_profit_distance: Optional[RuleDistance]
+    min_guaranteed_stop_distance: Optional[RuleDistance]
     market_order_preference: Optional[str]
     trailing_stops_preference: Optional[str]
 
     @staticmethod
     def parse(body: dict) -> "DealingRules":
-        def unit_value(raw: Any) -> Optional[Decimal]:
-            """Capital.com يعيد أحياناً {"unit": "...", "value": n} وأحياناً رقماً."""
+        def size_value(raw: Any) -> Optional[Decimal]:
+            """
+            الأحجام تجيء بوحدة `POINTS` وتعني وحدات الوسيط نفسها.
+            هنا الوحدة لا تغيّر المعنى، فتُقرأ القيمة.
+            """
             if raw is None:
                 return None
             if isinstance(raw, dict):
                 return _optional_decimal(raw.get("value"))
             return _optional_decimal(raw)
 
-        min_size = unit_value(_require(body, "minDealSize", "dealingRules"))
+        def distance(raw: Any) -> Optional[RuleDistance]:
+            """
+            المسافات تحمل وحدةً تغيّر المعنى — تُحفَظ معها.
+
+            ورقمٌ عارٍ بلا وحدة يُحفَظ بوحدة `None`: أي **غير قابل للحلّ**،
+            فيُقال ذلك بدل أن يُفترض أنه سعر.
+            """
+            if raw is None:
+                return None
+            if isinstance(raw, dict):
+                value = _optional_decimal(raw.get("value"))
+                if value is None:
+                    return None
+                return RuleDistance(value=value, unit=raw.get("unit"))
+            value = _optional_decimal(raw)
+            if value is None:
+                return None
+            return RuleDistance(value=value, unit=None)
+
+        min_size = size_value(_require(body, "minDealSize", "dealingRules"))
         if min_size is None:
             raise CapitalMalformedResponse("minDealSize غير قابل للقراءة.")
         return DealingRules(
             min_deal_size=min_size,
-            max_deal_size=unit_value(body.get("maxDealSize")),
-            min_size_increment=unit_value(body.get("minSizeIncrement")),
-            min_stop_or_profit_distance=unit_value(body.get("minStopOrProfitDistance")),
-            max_stop_or_profit_distance=unit_value(body.get("maxStopOrProfitDistance")),
-            min_guaranteed_stop_distance=unit_value(body.get("minGuaranteedStopDistance")),
+            max_deal_size=size_value(body.get("maxDealSize")),
+            min_size_increment=size_value(body.get("minSizeIncrement")),
+            min_stop_or_profit_distance=distance(body.get("minStopOrProfitDistance")),
+            max_stop_or_profit_distance=distance(body.get("maxStopOrProfitDistance")),
+            min_guaranteed_stop_distance=distance(body.get("minGuaranteedStopDistance")),
             market_order_preference=body.get("marketOrderPreference"),
             trailing_stops_preference=body.get("trailingStopsPreference"),
         )
@@ -292,13 +360,25 @@ class CapitalMarket:
                 if self.dealing_rules.min_size_increment is not None
                 else None
             ),
+            # **القيمة ووحدتها معاً.** تقريرٌ يذكر الرقم بلا وحدته يعيد
+            # إنتاج العطل نفسه في القارئ التالي.
             "min_stop_or_profit_distance": (
-                str(self.dealing_rules.min_stop_or_profit_distance)
+                str(self.dealing_rules.min_stop_or_profit_distance.value)
+                if self.dealing_rules.min_stop_or_profit_distance is not None
+                else None
+            ),
+            "min_stop_or_profit_distance_unit": (
+                self.dealing_rules.min_stop_or_profit_distance.unit
                 if self.dealing_rules.min_stop_or_profit_distance is not None
                 else None
             ),
             "min_guaranteed_stop_distance": (
-                str(self.dealing_rules.min_guaranteed_stop_distance)
+                str(self.dealing_rules.min_guaranteed_stop_distance.value)
+                if self.dealing_rules.min_guaranteed_stop_distance is not None
+                else None
+            ),
+            "min_guaranteed_stop_distance_unit": (
+                self.dealing_rules.min_guaranteed_stop_distance.unit
                 if self.dealing_rules.min_guaranteed_stop_distance is not None
                 else None
             ),

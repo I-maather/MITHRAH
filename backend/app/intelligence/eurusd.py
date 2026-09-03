@@ -155,9 +155,13 @@ class PositionConstructor:
         )
 
         # الحد الأدنى لمسافة الوقف لدى الوسيط — قيد حقيقي لا تفضيل.
+        # الحدّ يُحلّ إلى سعرٍ ثم إلى نقاط — لا يُقارَن رقمٌ بنسبةٍ بنقاط.
         min_stop_ok = True
-        if econ.min_stop_distance is not None:
-            min_stop_ok = stop_pips >= econ.min_stop_distance
+        _min_price = econ.min_stop_price_at(setup.entry_price)
+        if _min_price is not None:
+            min_stop_ok = stop_pips >= (_min_price / econ.pip_size)
+        elif econ.stop_spec_unresolved:
+            min_stop_ok = False
 
         within_profile = e.all_in_risk <= self.limits.max_risk_per_trade
 

@@ -23,6 +23,11 @@ from .constitution import (
     exposure_bucket,
 )
 from .costs import CommissionSchedule, CostAssumptions
+from .size_ladder import (
+    BROKER_MIN_QUANTITY_RISK_EXCEEDED,
+    POSITION_SIZE_ROUNDED_TO_ZERO,
+    build_ladder,
+)
 from .sizing import size_position
 
 # reason codes
@@ -107,20 +112,43 @@ class RiskEngine:
             return CFD_ALLOW_SHORT
         return ALLOW_SHORT
 
+    def remaining_weekly_budget(self, state: SessionRiskState) -> Decimal:
+        return max(Decimal("0"), self.limits.weekly_loss - state.week_loss)
+
+    def hard_risk_ceiling(self, state: SessionRiskState) -> Decimal:
+        """
+        **السقف الذي لا يُتجاوَز** — لا التفضيل.
+
+        الأصغر بين: الحدّ الصلب للصفقة (وهو نفسه الأصغر بين الحدّ الدولاري
+        ونسبة حقوق الملكية)، وما تبقّى من اليوم، ومن الأسبوع، ومن الإجمالي.
+
+        وهذه هي البوابة التي تحكم قبول الصفقة. أمّا `target_risk_for_next_trade`
+        فتفضيلٌ يُختار به **الحجم**، لا يُرفض به.
+        """
+        return min(
+            self.limits.effective_max_risk(state.current_equity),
+            self.remaining_daily_budget(state),
+            self.remaining_weekly_budget(state),
+            self.remaining_total_budget(state),
+        )
+
+    def target_risk_for_next_trade(self, state: SessionRiskState) -> Decimal:
+        """المخاطرة المفضّلة، مقصوصةً بالسقف الصلب. **تفضيلٌ لا سقف.**"""
+        return min(self.limits.target_risk_per_trade, self.hard_risk_ceiling(state))
+
     def risk_budget_for_next_trade(self, state: SessionRiskState) -> Decimal:
         """
         ميزانية الصفقة القادمة = أصغر قيمة بين:
           الحد المستهدف، وما تبقى من اليوم، وما تبقى من الأسبوع، وما تبقى من الإجمالي.
-        بحيث لا تستطيع صفقة واحدة أن تخترق حداً أعلى.
+
+        تبقى كما هي **لمسار الأسهم** حيث الكمية متغيّرٌ متّصل: هناك يمكن
+        بلوغ الهدف بالضبط، فالهدف ميزانيةٌ حقيقية.
+
+        وفي مسار الـCFD الكمية درجاتٌ يفرضها الوسيط، فالهدف لا يُبلَغ عادةً
+        بالضبط — واستعمالُه سقفَ رفضٍ هناك كان يرفض فرصاً تحت الحدّ الصلب.
+        انظر `hard_risk_ceiling`.
         """
-        remaining_week = max(Decimal("0"), self.limits.weekly_loss - state.week_loss)
-        return min(
-            self.limits.target_risk_per_trade,
-            self.limits.effective_max_risk(state.current_equity),
-            self.remaining_daily_budget(state),
-            remaining_week,
-            self.remaining_total_budget(state),
-        )
+        return self.target_risk_for_next_trade(state)
 
     def _run_gates(
         self,
@@ -424,18 +452,35 @@ class RiskEngine:
         signal: Signal,
         state: SessionRiskState,
         balances: Balances,
-        economics,
         kill_switch_active: bool,
         now: datetime,
+        economics=None,
+        cost_model=None,
+        stop_distance_pips: Optional[Decimal] = None,
+        take_profit_distance_pips: Optional[Decimal] = None,
+        stop_kind: StopKind = StopKind.NORMAL,
     ) -> RiskDecision:
         """
         مسار CFD (Capital.com).
 
-        الفرق الجوهري عن مسار الأسهم: الكمية **ليست** متغيّراً نحلّه.
-        الوسيط يفرض كمية دنيا (100 وحدة لـEUR/USD)، فالسؤال يصبح:
-        هل الخسارة الكاملة عند هذه الكمية تقع ضمن الميزانية؟ إن لا ⇒ NO_TRADE.
+        ## الكمية متغيّرٌ **بدرجات**، لا ثابتٌ ولا متّصل
 
-        `economics` هو `CfdTradeEconomics` محسوب من CapitalComCostModel.
+        الوسيط يفرض كميةً دنيا ودرجةَ زيادة (١٠٠ ثم ٢٠٠… على اليورو،
+        و٠٫٠١ ثم ٠٫٠٢… على الذهب). فالسؤال ليس «هل الكمية الدنيا تمرّ؟»
+        بل «أيُّ الأحجام الممكنة أقربُ إلى الهدف مما لا يتجاوز السقف؟».
+
+        ## والهدف تفضيلٌ لا سقف
+
+        بوابة القبول هي `hard_risk_ceiling` — الأصغر بين الحدّ الصلب للصفقة
+        وما تبقّى من اليوم والأسبوع والإجمالي. و`target_risk` يُختار به
+        الحجم من بين المسموح، ولا يُرفض به شيء.
+
+        وكان هنا `cap = min(budget, effective_cap)` و`budget` مقصوصٌ بالهدف
+        — فصار الهدف سقفَ رفضٍ فعليّاً: خسارةٌ دنيا قابلة للتنفيذ قدرها
+        ١٫٠٠ دولار تُرفض وهي تحت الحدّ الصلب ١٫٥٠ الذي اعتُمد.
+
+        `cost_model` حاضراً ⇒ يُبنى السلّم هنا. و`economics` وحدها تبقى
+        مساراً مقبولاً لحجمٍ واحدٍ محسوبٍ سلفاً (اختبارات ومعاينات).
         """
         fp = constitution_fingerprint(self.limits.mode, self.limits.broker)
         rejection, checks, budget = self._run_gates(
@@ -444,7 +489,11 @@ class RiskEngine:
         if rejection is not None:
             return rejection
 
-        def reject(code: str, message: str) -> RiskDecision:
+        hard_ceiling = self.hard_risk_ceiling(state)
+        target_risk = self.target_risk_for_next_trade(state)
+        ladder = None
+
+        def reject(code: str, message: str, econ=None) -> RiskDecision:
             checks.append((code, False, message))
             return RiskDecision(
                 approved=False,
@@ -452,13 +501,60 @@ class RiskEngine:
                 reason_code=code,
                 reason_ar=message,
                 checks=tuple(checks),
-                quantity=economics.size,
-                notional=economics.notional_exposure,
-                expected_risk_usd=economics.all_in_risk,
-                expected_costs_usd=economics.total_costs,
+                quantity=getattr(econ, "size", D(0)) if econ is not None else D(0),
+                notional=getattr(econ, "notional_exposure", D(0)) if econ is not None else D(0),
+                expected_risk_usd=getattr(econ, "all_in_risk", D(0)) if econ is not None else D(0),
+                expected_costs_usd=getattr(econ, "total_costs", D(0)) if econ is not None else D(0),
                 risk_budget_usd=budget,
                 constitution_fingerprint=fp,
                 decided_at_utc=now,
+            )
+
+        if hard_ceiling <= 0:
+            return reject(
+                RISK_BUDGET_EXCEEDS_REMAINING,
+                "لا تبقّى سقفُ مخاطرةٍ لصفقة جديدة (اليوم أو الأسبوع أو الإجمالي).",
+            )
+
+        # ------------------------------------------------------------------
+        # السلّم — يُبنى حين يُمرَّر نموذج التكلفة.
+        # ------------------------------------------------------------------
+        if cost_model is not None:
+            if stop_distance_pips is None or take_profit_distance_pips is None:
+                return reject(
+                    POSITION_SIZE_ROUNDED_TO_ZERO,
+                    "لا يمكن بناء سلّم الأحجام بلا مسافتَي الوقف والهدف.",
+                )
+            ladder = build_ladder(
+                cost_model=cost_model,
+                entry_price=signal.entry_price,
+                stop_distance_pips=stop_distance_pips,
+                take_profit_distance_pips=take_profit_distance_pips,
+                stop_kind=stop_kind,
+                target_risk=target_risk,
+                hard_ceiling=hard_ceiling,
+                available_margin=balances.available_for_new_trade,
+            )
+            if not ladder.approved:
+                first = ladder.candidates[0] if ladder.candidates else None
+                return reject(
+                    ladder.reason_code or BROKER_MIN_QUANTITY_RISK_EXCEEDED,
+                    f"{ladder.reason_ar} — {ladder.trace_ar()}",
+                    getattr(first, "economics", None),
+                )
+            economics = ladder.chosen.economics
+            checks.append((
+                "SIZE_LADDER",
+                True,
+                f"اختير الحجم {ladder.chosen.size} بخسارة كاملة "
+                f"{ladder.chosen.all_in_risk:.2f} دولار — الأقرب إلى الهدف "
+                f"{target_risk:.2f} تحت السقف {hard_ceiling:.2f}. {ladder.trace_ar()}",
+            ))
+
+        if economics is None:
+            return reject(
+                POSITION_SIZE_ROUNDED_TO_ZERO,
+                "لا اقتصاديات ولا نموذج تكلفة — لا قرار.",
             )
 
         # وقف مضمون مفضّل في الأوضاع الحقيقية، لكنه لا يُفترض توفره.
@@ -469,23 +565,38 @@ class RiskEngine:
                 "وقف عادي: الوقف المضمون غير مستعمل — الخسارة قد تتجاوز التقدير عند الفجوة.",
             ))
 
-        if economics.size < D(0):
-            return reject(CFD_QUANTITY_BELOW_BROKER_MINIMUM, "كمية غير صالحة.")
-
-        # الكمية الدنيا للوسيط لا يمكن تقليلها — إن تجاوزت المخاطرة، لا صفقة.
-        effective_cap = self.limits.effective_max_risk(state.current_equity)
-        cap = min(budget, effective_cap)
-        if economics.all_in_risk > cap:
+        if economics.size <= D(0):
             return reject(
-                ACCOUNT_SIZE_INSUFFICIENT_FOR_BROKER_MINIMUM,
-                f"الخسارة الكاملة {economics.all_in_risk:.2f} دولار عند الكمية الدنيا للوسيط "
-                f"({economics.size}) تتجاوز الحد {cap:.2f} دولار. "
-                "لا يمكن تصغير الكمية أكثر — القرار NO_TRADE: ACCOUNT_SIZE_INSUFFICIENT.",
+                POSITION_SIZE_ROUNDED_TO_ZERO,
+                f"الكمية {economics.size} غير صالحة — لا صفقة بكمية صفر.",
+                economics,
             )
+
+        # ------------------------------------------------------------------
+        # **البوابة الحاكمة: السقف الصلب.** الهدف ليس بوابة.
+        # ------------------------------------------------------------------
+        if economics.all_in_risk > hard_ceiling:
+            return reject(
+                BROKER_MIN_QUANTITY_RISK_EXCEEDED,
+                f"الخسارة الكاملة {economics.all_in_risk:.2f} دولار عند الكمية "
+                f"{economics.size} تتجاوز السقف الصلب {hard_ceiling:.2f} دولار "
+                f"(الحدّ الصلب للصفقة {self.limits.effective_max_risk(state.current_equity):.2f}، "
+                f"وما تبقّى اليوم {self.remaining_daily_budget(state):.2f}، "
+                f"والأسبوع {self.remaining_weekly_budget(state):.2f}).",
+                economics,
+            )
+        _over_target = economics.all_in_risk > target_risk
         checks.append((
             "ABSOLUTE_RISK_CAP",
             True,
-            f"الخسارة الكاملة {economics.all_in_risk:.2f} ضمن الحد الفعلي {cap:.2f} دولار.",
+            f"الخسارة الكاملة {economics.all_in_risk:.2f} ضمن السقف الصلب "
+            f"{hard_ceiling:.2f} دولار."
+            + (
+                f" وهي فوق الهدف {target_risk:.2f} بـ"
+                f"{economics.all_in_risk - target_risk:.2f} — والهدف تفضيلٌ لا سقف، "
+                "فلا تُرفض به فرصةٌ تحت الحدّ الصلب."
+                if _over_target else ""
+            ),
         ))
 
         if economics.margin_required > balances.available_for_new_trade:
@@ -493,6 +604,7 @@ class RiskEngine:
                 MARGIN_EXCEEDS_AVAILABLE,
                 f"الهامش المطلوب {economics.margin_required:.2f} يتجاوز المتاح "
                 f"{balances.available_for_new_trade:.2f} دولار.",
+                economics,
             )
         checks.append((
             "MARGIN",
@@ -508,12 +620,14 @@ class RiskEngine:
                     f"نسبة العائد/المخاطرة الصافية بعد التكاليف "
                     f"{economics.net_reward_risk_ratio:.2f} أقل من الحد "
                     f"{self.limits.min_reward_risk_ratio}.",
+                    economics,
                 )
             if economics.cost_ratio > self.limits.max_cost_ratio_of_risk:
                 return reject(
                     "COST_DOMINATED",
                     f"الاحتكاك يلتهم {economics.cost_ratio * 100:.1f}% من المخاطرة "
                     f"(الحد {self.limits.max_cost_ratio_of_risk * 100:.0f}%).",
+                    economics,
                 )
         checks.append((
             "NET_REWARD_RISK",
@@ -536,7 +650,8 @@ class RiskEngine:
             reason_ar=(
                 f"كمية {economics.size} بتعرّض {economics.notional_exposure:.2f} دولار، "
                 f"هامش {economics.margin_required:.2f}، وخسارة كاملة متوقعة "
-                f"{economics.all_in_risk:.2f} دولار ضمن حد {cap:.2f}."
+                f"{economics.all_in_risk:.2f} دولار ضمن سقف {hard_ceiling:.2f} "
+                f"(الهدف {target_risk:.2f})."
             ),
             checks=tuple(checks),
             quantity=economics.size,

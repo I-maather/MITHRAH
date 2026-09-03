@@ -123,7 +123,13 @@ def is_cfd(details) -> bool:
 #: رمزُ رفضٍ جديد: أداة CFD بلا اقتصادياتٍ مقيسة.
 INSTRUMENT_ECONOMICS_UNMEASURED = "INSTRUMENT_ECONOMICS_UNMEASURED"
 #: وقفُ الإشارة أضيق مما يقبله الوسيط.
-STOP_BELOW_BROKER_MINIMUM = "STOP_BELOW_BROKER_MINIMUM"
+#:
+#: الاسم المُعتمَد صار `BROKER_MIN_STOP_DISTANCE_VIOLATION` كي يُقرأ في
+#: قمع الفرص بمعزلٍ عن «مواصفةٍ غير محلولة» — الأوّل يُصلَح بقرارٍ على
+#: الإطار أو الوقف، والثاني بإعادة قياس. والاسم القديم يبقى مرادفاً.
+STOP_BELOW_BROKER_MINIMUM = "BROKER_MIN_STOP_DISTANCE_VIOLATION"
+#: مواصفةٌ أُعلنت بلا وحدةٍ تحلّها.
+INSTRUMENT_SPEC_UNRESOLVED = "INSTRUMENT_SPEC_UNRESOLVED"
 
 
 #: أسماء الأطر كما يسمّيها الوسيط ⇐ كما تُعلنها الاستراتيجيات.
@@ -274,7 +280,23 @@ class Pipeline:
 
         # أدنى مسافة وقف يفرضها الوسيط. تجاوزُها يعني أمراً يُرفَض عنده —
         # ورفضُه هناك أغلى من رفضنا هنا، لأنه يقع بعد أن صار للأمر أثر.
-        minimum = model.economics.min_stop_distance
+        # **الحدّ يُحلّ إلى وحدة السعر قبل المقارنة.**
+        #
+        # كان يُقارَن خاماً، وهو عند Capital.com نسبةٌ مئوية
+        # (`{"unit":"PERCENTAGE","value":0.01}`) ⇒ ٠٫٠١ سعراً = ١٠٠ نقطة على
+        # اليورو والحدُّ الحقيقي ١٫١٦ نقطة. وبين ٣٠ أغسطس و٣ سبتمبر ٢٠٢٦
+        # رُفضت ٤٨٦ إشارة من ٤٨٦ هنا — ولم تبلغ ولا واحدةٌ بوابةَ المخاطر.
+        if model.economics.stop_spec_unresolved:
+            return CfdReview(
+                reason_code=INSTRUMENT_SPEC_UNRESOLVED,
+                reason_ar=(
+                    f"{signal.symbol}: أدنى مسافة وقف مُعلَنة "
+                    f"{model.economics.min_stop_distance} بوحدةٍ مجهولة — "
+                    "قياسٌ قديم قبل حفظ الوحدة. أعيدي "
+                    "scripts/discover_instrument_economics.py."
+                ),
+            )
+        minimum = model.economics.min_stop_price_at(signal.entry_price)
         if minimum is not None and stop_price_distance < minimum:
             return CfdReview(
                 reason_code=STOP_BELOW_BROKER_MINIMUM,
@@ -512,9 +534,23 @@ class Pipeline:
                     Decision.NO_TRADE, review.reason_code, review.reason_ar, "risk",
                     signal=signal, at_utc=now,
                 )
+            # **النموذج يُمرَّر، لا الحجم.** المحرك يبني سلّم الأحجام
+            # القابلة للتنفيذ ويختار الأقرب إلى الهدف تحت السقف الصلب —
+            # فلا يُهدَر ثلثا الميزانية عند الكمية الدنيا، ولا تُرفض فرصةٌ
+            # لأنها تجاوزت **الهدف** وهي تحت **الحدّ**.
+            _model = self.instruments.cost_model_for(signal.symbol)
+            _pip = _model.economics.pip_size if _model is not None else None
             decision = self.risk.evaluate_cfd(
                 signal=signal, state=state, balances=balances,
                 economics=review.economics,
+                cost_model=_model,
+                stop_distance_pips=(
+                    abs(signal.entry_price - signal.stop_price) / _pip if _pip else None
+                ),
+                take_profit_distance_pips=(
+                    abs(signal.take_profit_price - signal.entry_price) / _pip if _pip else None
+                ),
+                stop_kind=review.economics.stop_kind,
                 kill_switch_active=self.kill_switch.is_active, now=now,
             )
         else:

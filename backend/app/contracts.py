@@ -280,13 +280,70 @@ class InstrumentDetails(Base):
     lot_size: Optional[Decimal] = None
     margin_factor: Optional[Decimal] = None
     margin_factor_unit: Optional[str] = None
+    #: **القيمة ووحدتها.** Capital.com يعلن هذه المسافات بوحدة
+    #: `PERCENTAGE` غالباً، فالرقم وحده لا يعني شيئاً: ٠٫٠١ نسبةً هو ١٫١٦
+    #: نقطة على اليورو، وسعراً خاماً هو ١٠٠ نقطة. الوحدة `None` تعني
+    #: **غير محلولة** — لا «سعر» ولا «صفر».
     min_stop_distance: Optional[Decimal] = None
+    min_stop_distance_unit: Optional[str] = None
     min_guaranteed_stop_distance: Optional[Decimal] = None
+    min_guaranteed_stop_distance_unit: Optional[str] = None
     guaranteed_stop_available: bool = False
     overnight_fee: Optional[Decimal] = None
     pip_size: Optional[Decimal] = None
     quote_currency: Optional[str] = None
     market_status: Optional[str] = None
+
+    @staticmethod
+    def resolve_distance(
+        value: Optional[Decimal], unit: Optional[str], reference_price: Optional[Decimal]
+    ) -> Optional[Decimal]:
+        """
+        يحوّل مسافةً من قواعد الوسيط إلى **وحدة السعر**.
+
+        `None` = غير قابلة للحلّ (وحدة مجهولة، أو نسبة بلا سعر مرجعي).
+        والفرق بينها وبين «لا حدّ» جوهري: الأولى تُوقف القرار وتُسمّي سببه،
+        والثانية تمرّ.
+        """
+        if value is None:
+            return None
+        u = (unit or "").upper()
+        if u == "PERCENTAGE":
+            if reference_price is None:
+                return None
+            return Decimal(value) / Decimal("100") * Decimal(reference_price)
+        if u in {"POINTS", "PRICE"}:
+            return Decimal(value)
+        if not u:
+            # وحدةٌ غائبة في `InstrumentDetails` تعني «كُتبت عندنا»، وما
+            # نكتبه بوحدة السعر. والمحوّل يملؤها دائماً من الوسيط —
+            # يحرس ذلك اختبارٌ ساكن، لا نيّة.
+            return Decimal(value)
+        return None
+
+    def min_stop_price_at(self, reference_price: Optional[Decimal]) -> Optional[Decimal]:
+        return self.resolve_distance(
+            self.min_stop_distance, self.min_stop_distance_unit, reference_price
+        )
+
+    def min_guaranteed_stop_price_at(
+        self, reference_price: Optional[Decimal]
+    ) -> Optional[Decimal]:
+        return self.resolve_distance(
+            self.min_guaranteed_stop_distance,
+            self.min_guaranteed_stop_distance_unit,
+            reference_price,
+        )
+
+    @property
+    def min_stop_spec_unresolved(self) -> bool:
+        """أُعلن حدٌّ ولم تُعرَف وحدته ⇒ المواصفة غير محلولة."""
+        unit = (self.min_stop_distance_unit or "").strip().upper()
+        return (
+            self.min_stop_distance is not None
+            and bool(unit)
+            and unit not in {"PERCENTAGE", "POINTS", "PRICE"}
+        )
 
     @property
     def is_cfd(self) -> bool:

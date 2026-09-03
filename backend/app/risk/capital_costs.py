@@ -50,6 +50,8 @@ class InstrumentEconomics:
     size_increment: Decimal
     margin_factor: Decimal
     margin_factor_unit: str
+    #: أدنى مسافة وقف **بقيمتها ووحدتها**. الوحدة عند Capital.com
+    #: `PERCENTAGE` لا سعرٌ خام، والفرق بينهما على اليورو ٨٦٠ ضعفاً.
     min_stop_distance: Optional[Decimal]
     min_guaranteed_stop_distance: Optional[Decimal]
     guaranteed_stop_available: bool
@@ -58,6 +60,53 @@ class InstrumentEconomics:
     quote_currency: Optional[str]
     overnight_fee_rate_daily: Optional[Decimal]
     provenance: ValueProvenance = ValueProvenance.UNKNOWN
+    #: وحدة المسافتين أعلاه. `None` = **غير محلولة**، لا «سعر».
+    min_stop_distance_unit: Optional[str] = None
+    min_guaranteed_stop_distance_unit: Optional[str] = None
+
+    # ------------------------------------------------------------------
+    def _resolve(
+        self, value: Optional[Decimal], unit: Optional[str], reference_price: Optional[Decimal]
+    ) -> Optional[Decimal]:
+        if value is None:
+            return None
+        u = (unit or "").upper()
+        if u == "PERCENTAGE":
+            if reference_price is None:
+                return None
+            return D(value) / D("100") * D(reference_price)
+        if u in {"POINTS", "PRICE"}:
+            return D(value)
+        if not u and self.provenance is not ValueProvenance.BROKER_DISCOVERY:
+            # قيمةٌ كتبناها نحن — بوحدة السعر بالتعريف.
+            return D(value)
+        return None
+
+    def min_stop_price_at(self, reference_price: Optional[Decimal]) -> Optional[Decimal]:
+        """أدنى مسافة وقف **بوحدة السعر** عند سعرٍ مرجعي. `None` = غير محلولة."""
+        return self._resolve(self.min_stop_distance, self.min_stop_distance_unit, reference_price)
+
+    def min_guaranteed_stop_price_at(
+        self, reference_price: Optional[Decimal]
+    ) -> Optional[Decimal]:
+        return self._resolve(
+            self.min_guaranteed_stop_distance,
+            self.min_guaranteed_stop_distance_unit,
+            reference_price,
+        )
+
+    @property
+    def stop_spec_unresolved(self) -> bool:
+        """حدٌّ مُعلَنٌ بوحدةٍ لا نعرفها ⇒ لا يُبنى عليه قرار."""
+        unit = (self.min_stop_distance_unit or "").strip().upper()
+        if self.min_stop_distance is None:
+            return False
+        if unit in {"PERCENTAGE", "POINTS", "PRICE"}:
+            return False
+        # **الصرامة حيث وقع العطل.** قياسٌ من الوسيط بلا وحدةٍ محفوظة هو
+        # بالضبط الملف الذي جعل ٠٫٠١٪ تُقرأ سعراً خاماً. وما كتبناه نحن
+        # بوحدة السعر بالتعريف، فلا يُوقَف عليه شيء.
+        return self.provenance is ValueProvenance.BROKER_DISCOVERY
 
     @property
     def margin_rate(self) -> Decimal:
@@ -406,7 +455,8 @@ class CapitalComCostModel:
         أصغر خسارة ممكنة أصلاً: الكمية الدنيا للوسيط مع أصغر مسافة وقف مسموحة.
         إن تجاوزت هذه القيمة ميزانية المخاطرة ⇒ NO_TRADE: ACCOUNT_SIZE_INSUFFICIENT.
         """
-        min_stop_price = self.economics.min_stop_distance
+        # الحدّ يُحلّ عند **سعر الدخول نفسه** — النسبة بلا سعرٍ لا معنى لها.
+        min_stop_price = self.economics.min_stop_price_at(entry_price)
         min_pips = (
             self.price_to_pips(min_stop_price) if min_stop_price is not None else D("1")
         )

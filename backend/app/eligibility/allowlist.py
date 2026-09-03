@@ -104,6 +104,8 @@ INSUFFICIENT_SETTLED_CASH = "INSUFFICIENT_SETTLED_CASH"
 NOT_IN_CFD_ALLOWLIST = "NOT_IN_CFD_ALLOWLIST"
 CONVERSION_COST_UNMEASURED = "CONVERSION_COST_UNMEASURED"
 STOP_DISTANCE_UNKNOWN = "STOP_DISTANCE_UNKNOWN"
+#: مواصفةٌ أُعلنت بلا وحدةٍ تحلّها — تُصلَح بإعادة القياس لا بقرار.
+INSTRUMENT_SPEC_UNRESOLVED = "INSTRUMENT_SPEC_UNRESOLVED"
 
 
 @dataclass(frozen=True)
@@ -332,9 +334,23 @@ def _check_cfd(
             STOP_DISTANCE_UNKNOWN,
             f"{symbol}: أدنى مسافة وقف غير معلومة عند الوسيط — الأمر سيُرفض عند الإرسال.",
         )
+    # **مواصفةٌ بلا وحدة ليست مواصفة.** رمزٌ منفصل كي لا يختلط «مجهول»
+    # بـ«معلومٌ وضيّق» — الأول يُصلَح بإعادة قياس، والثاني بقرار.
+    if getattr(details, "min_stop_spec_unresolved", False):
+        return fail(
+            INSTRUMENT_SPEC_UNRESOLVED,
+            f"{symbol}: أدنى مسافة وقف مُعلَنة {details.min_stop_distance} بوحدةٍ "
+            "مجهولة — لا يُبنى قرارٌ على مواصفةٍ غير محلولة. أعيدي قياس الأداة.",
+        )
+    _reference = getattr(quote, "mid", None) or getattr(quote, "ask", None)
+    _resolver = getattr(details, "min_stop_price_at", None)
+    _resolved = _resolver(_reference) if callable(_resolver) else None
     checks.append((
         "PROTECTIVE_EXIT", True,
-        f"الوقف مدعوم، وأدنى مسافة معلومة ({details.min_stop_distance}).",
+        f"الوقف مدعوم، وأدنى مسافة معلومة "
+        f"({details.min_stop_distance} {getattr(details, 'min_stop_distance_unit', None) or 'سعر'}"
+        + (f" ⇒ {_resolved} بوحدة السعر" if _resolved is not None else "")
+        + ").",
     ))
 
     if balances.available_for_new_trade <= 0:

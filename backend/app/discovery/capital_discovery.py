@@ -349,8 +349,26 @@ def run_discovery(
                 size_increment=rules.min_size_increment or D("1"),
                 margin_factor=market.margin_factor if market.margin_factor is not None else D("1"),
                 margin_factor_unit=market.margin_factor_unit or "PERCENTAGE",
-                min_stop_distance=rules.min_stop_or_profit_distance,
-                min_guaranteed_stop_distance=rules.min_guaranteed_stop_distance,
+                min_stop_distance=(
+                    rules.min_stop_or_profit_distance.value
+                    if rules.min_stop_or_profit_distance is not None
+                    else None
+                ),
+                min_stop_distance_unit=(
+                    rules.min_stop_or_profit_distance.unit
+                    if rules.min_stop_or_profit_distance is not None
+                    else None
+                ),
+                min_guaranteed_stop_distance=(
+                    rules.min_guaranteed_stop_distance.value
+                    if rules.min_guaranteed_stop_distance is not None
+                    else None
+                ),
+                min_guaranteed_stop_distance_unit=(
+                    rules.min_guaranteed_stop_distance.unit
+                    if rules.min_guaranteed_stop_distance is not None
+                    else None
+                ),
                 guaranteed_stop_available=market.guaranteed_stop_allowed,
                 quote_currency=market.quote_currency or "USD",
                 overnight_fee_rate_daily=market.overnight_fee,

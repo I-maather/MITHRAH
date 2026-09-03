@@ -411,7 +411,12 @@ DISCOVERED_EURUSD = InstrumentEconomics(
     size_increment=D("1"),
     margin_factor=D("1"),
     margin_factor_unit="PERCENTAGE",
-    min_stop_distance=D("5"),
+    # **بوحدة السعر، ووحدتها معها.** كُتبت `5` وقُصد بها خمس نقاط، وكان
+    # الكود يقارنها بالنقاط مباشرة — أي أنه كان يقارن سعراً بنقاط ويصحّ
+    # بالصدفة. والعقد الآن صريح: قيمةٌ + وحدة، والتحويل إلى نقاط يقع في
+    # موضعٍ واحد.
+    min_stop_distance=D("0.0005"),          # خمس نقاط على 0.0001
+    min_stop_distance_unit="POINTS",
     min_guaranteed_stop_distance=None,
     guaranteed_stop_available=False,
     quote_currency="USD",
