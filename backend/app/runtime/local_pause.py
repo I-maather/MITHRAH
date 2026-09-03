@@ -35,7 +35,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-DEFAULT_PATH = Path(__file__).resolve().parents[2] / "data" / "local-pause.json"
+#: **مجلّد الحالة القابل للكتابة**، وهو `<repo>/data` لا `backend/data`.
+#:
+#: وحدة الخدمة على الخادم تُقيّد الكتابة: `ProtectSystem=strict` مع
+#: `ReadWritePaths=/opt/mathrah/data`. فملفٌ تحت `backend/data` **يُرفض
+#: عند الكتابة** وقتَ التشغيل — والقياسات المقروءة تسكن هناك لأنها تُكتب
+#: بيد المشغّل لا بيد الخدمة.
+#:
+#: وهذا الملف تكتبه الخدمة نفسها عند كل إيقاف واستئناف، فمكانه مع
+#: `mobile-state.json` في المجلّد المسموح.
+DEFAULT_PATH = Path(__file__).resolve().parents[3] / "data" / "local-pause.json"
 
 #: متغيّرُ بيئةٍ يعزل المسار.
 #:

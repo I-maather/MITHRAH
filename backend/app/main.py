@@ -634,6 +634,60 @@ def trades(sys: SystemState = Depends(system)):
     return {"positions": positions, "orders": orders, "executions": executions}
 
 
+@app.get("/api/participation")
+def participation(
+    days: int = 30,
+    day: str | None = None,
+    sys: SystemState = Depends(system),
+):
+    """
+    **هدف المشاركة اليومية** — بالأرقام لا بالجملة.
+
+    يُشتقّ كلّه من سجلّ التدقيق وجدول الصفقات: لا عدّاد موازٍ، فلا طرفان
+    لحقيقةٍ واحدة. و`day` تعيد تقرير `DAILY-NO-TRADE-REPORT` ليومٍ بعينه.
+    """
+    from .participation.metrics import build_report, daily_no_trade_report
+
+    events = sys.audit.events()
+    trades_by_day = _strategy_trades_by_day(sys)
+    report = build_report(events, trades_by_day=trades_by_day)
+    payload = report.as_dict()
+    payload["days"] = payload["days"][-max(1, days):]
+    payload["objective_ar"] = (
+        "صفقةٌ استراتيجية مكتملة واحدة على الأقل في كل يوم تداولٍ مؤهَّل، "
+        "مع بقاء الحدود الصلبة كما هي."
+    )
+    if day:
+        match = next((d for d in report.days if d.funnel.trading_day == day), None)
+        if match is None:
+            raise HTTPException(404, f"لا سجلّ ليوم {day}.")
+        payload["daily_report_md"] = daily_no_trade_report(match)
+        payload["day"] = match.as_dict()
+    return payload
+
+
+def _strategy_trades_by_day(sys: SystemState) -> dict:
+    """صفوف الصفقات مجمّعةً بيوم الفتح. مصدرها الجدول لا الذاكرة."""
+    session = getattr(sys, "db_session", None)
+    if session is None:
+        return {}
+    try:
+        from sqlalchemy import select
+
+        from .db.models import TradeRow
+
+        rows = list(session.execute(select(TradeRow)).scalars())
+    except Exception:  # noqa: BLE001
+        return {}
+    out: dict[str, list] = {}
+    for row in rows:
+        opened = getattr(row, "opened_at_utc", None)
+        if opened is None:
+            continue
+        out.setdefault(opened.date().isoformat(), []).append(row)
+    return out
+
+
 @app.get("/api/settings")
 def settings_view(sys: SystemState = Depends(system)):
     s = get_settings()
@@ -646,7 +700,17 @@ def settings_view(sys: SystemState = Depends(system)):
         "risk_mode": sys.limits.mode.value,
         "risk_mode_changeable_from_ui": False,
         "risk_constitution_editable": False,
-        "allowlist": list(ALLOWLIST.keys()),
+        # **من مصدرها.** كانت `ALLOWLIST` — قائمة أسهم IBKR
+        # (`SPY · QQQ · IVV`) — تُعرَض بينما المحرّك يمسح أربع أدوات CFD
+        # مقيسة. شاشةٌ تقول أداةً والمحرّك يقرأ أخرى: العيب الحاكم نفسه.
+        "allowlist": sorted(sys.instruments.executable_epics())
+        if sys.limits.broker is Broker.CAPITAL_COM
+        else list(ALLOWLIST.keys()),
+        "allowlist_source_ar": (
+            "الأدوات المقيسة من الوسيط والقابلة للتنفيذ"
+            if sys.limits.broker is Broker.CAPITAL_COM
+            else "قائمة أسهم IBKR الثابتة"
+        ),
         "blackout_days_confirmed": [d.isoformat() for d in sorted(sys.blackouts.confirmed_for)],
     }
 

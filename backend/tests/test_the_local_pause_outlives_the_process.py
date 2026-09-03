@@ -119,3 +119,33 @@ def test_the_boot_reads_the_file_not_a_constant():
     text = Path(state_module.__file__).read_text(encoding="utf-8")
     assert "locally_paused=_local_pause.paused" in text
     assert "locally_paused=True," not in text
+
+
+def test_the_file_lives_where_the_service_may_write():
+    """
+    **حارسٌ على المكان لا على المنطق.**
+
+    وحدة الخدمة تُقيّد الكتابة: `ProtectSystem=strict` مع
+    `ReadWritePaths=/opt/mathrah/data`. فملفٌ تحت `backend/data` يُكتب في
+    الاختبارات ويُرفض على الخادم — وهي أسوأ صور العطل: خضراءُ محلياً،
+    صامتةٌ في الإنتاج، وأثرُها أن قرار المالكة لا يُحفَظ.
+
+    والمرجع هنا وحدة الخدمة نفسها، لا قياسٌ منقول.
+    """
+    repo = Path(local_pause.__file__).resolve().parents[3]
+    assert local_pause.DEFAULT_PATH == repo / "data" / "local-pause.json"
+
+    unit = repo / "deploy" / "server_bootstrap.sh"
+    if unit.exists():
+        text = unit.read_text(encoding="utf-8")
+        assert "ReadWritePaths=$APP_DIR/data" in text, (
+            "تغيّر المسار المسموح في وحدة الخدمة — يُراجَع مكان الملف معه."
+        )
+        assert "ProtectSystem=strict" in text
+
+
+def test_the_mobile_state_and_the_pause_share_the_writable_directory():
+    """الملفّان اللذان تكتبهما الخدمة يسكنان معاً — فلا يُنسى أحدهما."""
+    from app import main as main_module
+
+    assert main_module._MOBILE_STATE_PATH.parent == local_pause.DEFAULT_PATH.parent
