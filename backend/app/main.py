@@ -361,6 +361,15 @@ def health(sys: SystemState = Depends(system)):
         "clock_ok": report.clock_ok,
         "audit_chain_ok": report.audit_chain_ok,
         "kill_switch_active": report.kill_switch_active,
+        # **عددُ الدورات يُعرض، لا رايةُ «سليم» وحدها.**
+        #
+        # سألت المالكة بعد يومٍ من التشغيل: «للآن ما تم التداول». ولم يكن
+        # في أي نداء ما يقول **هل دارت حلقة القرار أصلاً** — لا عدد مرات،
+        # ولا آخر دورة، ولا أوّل خطأ. فـ`scheduler_ok: true` تقول إن لا
+        # خطأ مسجّل، وهي صادقةٌ تماماً عن مجدولٍ لم يدر ولا مرّة.
+        #
+        # وهذا صنف اليوم في أهدأ صوره: رايةٌ تُقرأ إجابةً عن سؤالٍ لم تُسأل.
+        "scheduler": sys.scheduler.status(),
         "details_ar": list(report.details_ar),
         "checked_at_riyadh": format_riyadh(report.checked_at_utc),
     }

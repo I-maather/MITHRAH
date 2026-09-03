@@ -1,0 +1,177 @@
+#!/usr/bin/env bash
+#
+# لماذا لم يتداول النظام بعد؟ — يُقرأ من الخادم الحيّ، لا يُستنتج.
+#
+#     bash scripts/why_no_trade.sh 167.233.234.236
+#
+# ## لماذا وُجد هذا السكربت
+#
+# قالت المالكة بعد يومٍ من التشغيل: «للآن ما تم التداول». ولم يكن في
+# النظام كلّه ما يجيب: `/api/today` يعرض **آخر** قرار وحده، و`/api/health`
+# يعرض راية «المجدول سليم» — وهي صادقةٌ تماماً عن مجدولٍ لم يدر ولا مرّة.
+#
+# والسؤال ينحلّ إلى أربعة، بهذا الترتيب، ولا يُقفز عن أوّلها:
+#
+#   ١ · هل دارت حلقة القرار أصلاً؟ (وكم مرة، ومتى آخرها، وهل أخطأت؟)
+#   ٢ · هل كانت بوابةٌ عامة مغلقة؟ (سوق، قاطع طوارئ، إيقاف محلي، وسيط)
+#   ٣ · ماذا رأى على كل أداة، ولماذا رفضها؟
+#   ٤ · وعلى مدى السجل كلّه: ما توزيع أسباب الرفض؟
+#
+# ## المبدأ
+#
+# **الغياب يُقال غياباً.** حقلٌ لم يُقرأ لا يُترجَم إلى «لا مشكلة»؛ يُطبع
+# «لم يُقرأ» ويُكمَل. وهذا السكربت لا يرسل أمراً ولا يغيّر إعداداً.
+set -uo pipefail
+
+SERVER_IP="${1:-}"
+KEY="${MATHRAH_SSH_KEY:-$HOME/Desktop/Trading/.ssh-maather/maather_hetzner}"
+API="http://127.0.0.1:8000"
+
+red()   { printf '\033[31m%s\033[0m\n' "$*"; }
+green() { printf '\033[32m%s\033[0m\n' "$*"; }
+warn()  { printf '\033[33m%s\033[0m\n' "$*"; }
+dim()   { printf '\033[2m%s\033[0m\n' "$*"; }
+step()  { printf '\n\033[1m▸ %s\033[0m\n' "$*"; }
+
+if [ -z "$SERVER_IP" ]; then
+  red "⛔ الاستعمال:  bash scripts/why_no_trade.sh <عنوان الخادم>"
+  exit 1
+fi
+
+SSH=(ssh -i "$KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "root@$SERVER_IP")
+if ! "${SSH[@]}" -o BatchMode=yes true 2>/dev/null; then
+  red "⛔ تعذّر الاتصال بالخادم. لا أدّعي شيئاً عن حالته — لم أقرأ."
+  exit 1
+fi
+
+get() { "${SSH[@]}" "curl -s --max-time 12 $API$1" 2>/dev/null; }
+
+HEALTH="$(get /api/health)"
+TODAY="$(get /api/today)"
+INTEL="$(get /api/intelligence)"
+AUDIT="$(get '/api/audit?limit=2000')"
+
+if [ -z "$HEALTH" ]; then
+  red "⛔ الخدمة لا تردّ على $API — لا قراءة ولا حكم."
+  exit 1
+fi
+
+# ---------------------------------------------------------------------------
+step "١ · هل دارت حلقة القرار أصلاً؟"
+# ---------------------------------------------------------------------------
+echo "$HEALTH" | python3 -c '
+import json, sys
+try:
+    h = json.load(sys.stdin)
+except Exception:
+    print("  \u26d4 ردٌّ غير صالح — لم يُقرأ."); sys.exit(0)
+jobs = h.get("scheduler")
+if jobs is None:
+    print("  \u25cb الخادم لا يعرض حالة المجدول — إصدارٌ أقدم من هذا الفحص.")
+    print("    (انشري آخر كوميت ثم أعيدي هذا السكربت.)")
+    sys.exit(0)
+if not jobs:
+    print("  \u26d4 لا مهمة مسجّلة إطلاقاً — النظام لا يقرّر، وهذا هو السبب.")
+    sys.exit(0)
+for j in jobs:
+    runs = j.get("runs", 0)
+    fails = j.get("failures", 0)
+    name = j.get("name", "?")
+    mark = "\u26d4" if runs == 0 else ("\u25cb" if fails else "\u00b7")
+    print("  {0} {1:<22} دورات {2:<6} أخطاء {3:<5} كل {4}ث".format(
+        mark, name, runs, fails, j.get("interval_seconds")))
+    print("      آخر دورة: {0}  ·  التالية: {1}".format(
+        j.get("last_run_riyadh") or "لم تدر بعد", j.get("next_run_riyadh")))
+    if j.get("last_error"):
+        print("      آخر خطأ: {0}".format(j["last_error"]))
+'
+
+# ---------------------------------------------------------------------------
+step "٢ · هل كانت بوابةٌ عامة مغلقة؟"
+# ---------------------------------------------------------------------------
+echo "$TODAY" | python3 -c '
+import json, sys
+try:
+    t = json.load(sys.stdin)
+except Exception:
+    print("  \u26d4 /api/today لم يُقرأ."); sys.exit(0)
+m = t.get("market") or {}
+ks = t.get("kill_switch") or {}
+b = t.get("broker") or {}
+print("  · السوق:            {0} — {1}".format(
+    "مفتوح" if m.get("is_open") else "مغلق", m.get("reason_ar", "")))
+print("  · الوسيط:           {0} — {1} · تجريبي={2}".format(
+    b.get("name"), "موصول" if b.get("connected") else "غير موصول",
+    not b.get("is_live")))
+print("  · قاطع الطوارئ:     {0}".format(
+    "مفعّل — " + str(ks.get("reason_ar")) if ks.get("active") else "غير مفعّل"))
+blocked = t.get("blocked_by")
+if blocked:
+    print("  \u26d4 البوابات المانعة: {0}".format(blocked))
+else:
+    print("  · لا بوابة عامة مانعة.")
+print("  · الحكم الأخير:     {0}".format(t.get("verdict_ar")))
+if t.get("no_trade_reason_ar"):
+    print("    السبب:          {0}".format(t["no_trade_reason_ar"]))
+eq = t.get("equity") or {}
+lim = t.get("limits") or {}
+print("  · رأس المال {0} · ميزانية الصفقة {1} · مراكز مفتوحة {2}".format(
+    eq.get("baseline"), lim.get("target_risk_per_trade"), t.get("open_positions")))
+'
+
+# ---------------------------------------------------------------------------
+step "٣ · ماذا رأى على كل أداة؟"
+# ---------------------------------------------------------------------------
+echo "$INTEL" | python3 -c '
+import json, sys
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    print("  \u26d4 /api/intelligence لم يُقرأ."); sys.exit(0)
+if not d.get("available"):
+    print("  \u25cb {0}".format(d.get("reason_ar"))); sys.exit(0)
+for st in (d.get("stages") or []):
+    passed = st.get("passed")
+    mark = "\u00b7" if passed else ("\u25cb" if passed is None else "\u2717")
+    label = st.get("name_ar") or st.get("stage")
+    print("  {0} {1}: {2}".format(mark, label, (st.get("reason_ar") or "")[:110]))
+'
+
+# ---------------------------------------------------------------------------
+step "٤ · توزيع أسباب الرفض في السجل"
+# ---------------------------------------------------------------------------
+echo "$AUDIT" | python3 -c '
+import json, re, sys
+from collections import Counter
+try:
+    a = json.load(sys.stdin)
+except Exception:
+    print("  \u26d4 /api/audit لم يُقرأ."); sys.exit(0)
+events = a.get("events") or []
+if not events:
+    print("  \u26d4 السجل فارغ — لا قرار كُتب. وهذا نفسه جواب.")
+    sys.exit(0)
+chain = "سليمة" if a.get("chain_ok") else "مكسورة — " + str(a.get("chain_problem_ar"))
+print("  {0} حدثاً مقروءاً · سلسلة التدقيق: {1}".format(len(events), chain))
+codes = Counter()
+decisions = Counter()
+for e in events:
+    decisions[e.get("decision") or "—"] += 1
+    for code in re.findall(r"\b[A-Z][A-Z0-9_]{5,}\b", e.get("reason_ar") or ""):
+        codes[code] += 1
+print("")
+print("  القرارات:")
+for name, n in decisions.most_common(8):
+    print("    {0:>5}  {1}".format(n, name))
+print("")
+if codes:
+    print("  أكثر رموز الرفض ذكراً:")
+    for code, n in codes.most_common(10):
+        print("    {0:>5}  {1}".format(n, code))
+else:
+    print("  \u25cb لا رمز رفضٍ مذكور في نصوص السجل — الأسباب نثريةٌ فقط.")
+'
+
+echo
+dim "لا شيء أُرسل ولا غُيّر. قراءةٌ فقط."
+echo
