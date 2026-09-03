@@ -25,6 +25,7 @@ from .constitution import (
 from .costs import CommissionSchedule, CostAssumptions
 from .size_ladder import (
     BROKER_MIN_QUANTITY_RISK_EXCEEDED,
+    MARGIN_EXCEEDS_AVAILABLE,
     POSITION_SIZE_ROUNDED_TO_ZERO,
     build_ladder,
 )
@@ -51,9 +52,19 @@ INSTRUMENT_NOT_ALLOWED_IN_MODE = "INSTRUMENT_NOT_ALLOWED_IN_MODE"
 OPERATIONAL_DRAWDOWN_STOP = "OPERATIONAL_DRAWDOWN_STOP_REACHED"
 ACCOUNT_SIZE_INSUFFICIENT_FOR_BROKER_MINIMUM = "ACCOUNT_SIZE_INSUFFICIENT"
 CFD_QUANTITY_BELOW_BROKER_MINIMUM = "QUANTITY_BELOW_BROKER_MINIMUM"
-MARGIN_EXCEEDS_AVAILABLE = "MARGIN_EXCEEDS_AVAILABLE_FUNDS"
+#: يُستورَد من `size_ladder` (انظر كتلة الاستيراد) كي لا يوجد للسبب رمزان.
 NET_REWARD_RISK_TOO_LOW = "NET_REWARD_RISK_TOO_LOW"
 EXPOSURE_BUCKET_OCCUPIED = "EXPOSURE_BUCKET_ALREADY_OCCUPIED"
+
+
+def _margin_binder(limits, balances) -> str:
+    """أيُّ السقفين ربط: رصيد الوسيط أم رأس المال المخصَّص."""
+    available = D(balances.available_for_new_trade)
+    return (
+        "رصيد الحساب عند الوسيط"
+        if available < limits.allocated_margin_per_position
+        else "رأس المال المخصَّص"
+    )
 
 
 @dataclass(frozen=True)
@@ -491,6 +502,12 @@ class RiskEngine:
 
         hard_ceiling = self.hard_risk_ceiling(state)
         target_risk = self.target_risk_for_next_trade(state)
+        # **الهامش يُقاس على المخصَّص، لا على رصيد الحساب.** انظر
+        # `allocated_margin_per_position`.
+        margin_ceiling = min(
+            D(balances.available_for_new_trade),
+            self.limits.allocated_margin_per_position,
+        )
         ladder = None
 
         def reject(code: str, message: str, econ=None) -> RiskDecision:
@@ -533,13 +550,26 @@ class RiskEngine:
                 stop_kind=stop_kind,
                 target_risk=target_risk,
                 hard_ceiling=hard_ceiling,
-                available_margin=balances.available_for_new_trade,
+                available_margin=margin_ceiling,
             )
             if not ladder.approved:
                 first = ladder.candidates[0] if ladder.candidates else None
+                message = f"{ladder.reason_ar} — {ladder.trace_ar()}"
+                if ladder.reason_code == MARGIN_EXCEEDS_AVAILABLE:
+                    # **يُسمّى القيد الذي ربط.** «الهامش لا يكفي» وحدها
+                    # ترسل المالكة تبحث في رصيد الوسيط بينما القيد قد يكون
+                    # رأس المال المخصَّص — وهما إصلاحان مختلفان تماماً.
+                    message = (
+                        f"{ladder.reason_ar} — القيد: {_margin_binder(self.limits, balances)} "
+                        f"(المخصَّص {self.limits.baseline_equity:.2f} ÷ "
+                        f"{self.limits.max_open_positions} مركزاً = "
+                        f"{self.limits.allocated_margin_per_position:.2f}، والمتاح عند "
+                        f"الوسيط {balances.available_for_new_trade:.2f}). "
+                        f"{ladder.trace_ar()}"
+                    )
                 return reject(
                     ladder.reason_code or BROKER_MIN_QUANTITY_RISK_EXCEEDED,
-                    f"{ladder.reason_ar} — {ladder.trace_ar()}",
+                    message,
                     getattr(first, "economics", None),
                 )
             economics = ladder.chosen.economics
@@ -599,18 +629,24 @@ class RiskEngine:
             ),
         ))
 
-        if economics.margin_required > balances.available_for_new_trade:
+        if economics.margin_required > margin_ceiling:
+            binding = _margin_binder(self.limits, balances)
             return reject(
                 MARGIN_EXCEEDS_AVAILABLE,
-                f"الهامش المطلوب {economics.margin_required:.2f} يتجاوز المتاح "
-                f"{balances.available_for_new_trade:.2f} دولار.",
+                f"الهامش المطلوب {economics.margin_required:.2f} يتجاوز السقف "
+                f"{margin_ceiling:.2f} دولار — القيد: {binding} "
+                f"(المخصَّص {self.limits.baseline_equity:.2f} ÷ "
+                f"{self.limits.max_open_positions} مركزاً، والمتاح عند الوسيط "
+                f"{balances.available_for_new_trade:.2f}).",
                 economics,
             )
         checks.append((
             "MARGIN",
             True,
-            f"الهامش {economics.margin_required:.2f} ضمن المتاح "
-            f"{balances.available_for_new_trade:.2f} دولار (وهو حجز لا خسارة).",
+            f"الهامش {economics.margin_required:.2f} ضمن سقف {margin_ceiling:.2f} دولار "
+            f"(المخصَّص {self.limits.baseline_equity:.2f} ÷ "
+            f"{self.limits.max_open_positions}؛ رصيد الوسيط "
+            f"{balances.available_for_new_trade:.2f}) — وهو حجز لا خسارة.",
         ))
 
         if self.limits.enforce_economic_viability:

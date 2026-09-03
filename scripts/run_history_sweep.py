@@ -340,6 +340,26 @@ IN_SAMPLE_SHARE = 0.7
 FX_TRADING_DAYS_PER_WEEK = 5
 
 
+def _quote_currency(epic: str, cost_model) -> str:
+    """
+    عملة التسعير **بالقاعدة نفسها التي تستعملها طبقة الأهلية**.
+
+    المقروء من الوسيط أوّلاً، فإن غاب فمن قائمتنا — وهو افتراضٌ يُقال. ولو
+    قُرئت هنا بقاعدةٍ أخرى لصار الحكم في التقرير مخالفاً للحكم في التنفيذ:
+    تقريرٌ يُجيز ما يرفضه المحرّك.
+    """
+    declared = (getattr(cost_model.economics, "quote_currency", None) or "").upper()
+    if declared:
+        return declared
+    try:
+        from app.eligibility.allowlist import CFD_ALLOWLIST
+
+        entry = CFD_ALLOWLIST.get(epic.upper())
+        return (getattr(entry, "currency", "") or "").upper()
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 def frequency(result, bars) -> dict:
     """
     **كم صفقةً في اليوم؟** — وهو السؤال الذي يقرّر إن كان هدف «صفقة
@@ -571,9 +591,26 @@ def run_one_strategy(
     # كُتب بعد أن انفجر سكربتٌ على الخادم بالسبب نفسه.)
     from app.strategies.backtest import Backtester
 
+    from dataclasses import replace as _replace
+
     for epic in epics:
         # النموذج **لهذه الأداة**، لا نموذج الأداة الأولى.
         cost_model = models.get(epic.upper()) or models.get(epic) or cost_model
+
+        # ------------------------------------------------------------------
+        # **والكمية لهذه الأداة أيضاً.**
+        #
+        # كانت `size=100` ثابتةً للمسح كلّه. وهي كمية اليورو الدنيا، وعلى
+        # الذهب ١٠٠ أونصة بسعر ٤٤٧٢ = **٤٤٧ ألف دولار تعرّضاً** في صفقةٍ
+        # على حسابٍ مخصَّصٍ له ٣٠٠. فخرجت أرقامٌ مثل ‎−٧٦١١٢‎ و‎+٤٢٧٢١‎
+        # دولاراً في تقرير حافّة، وهي ليست خاطئة بمقدار — هي عن نظامٍ آخر.
+        #
+        # والكمية الدنيا للوسيط هي الوحدة الصحيحة للقياس: نسبة الفوز وحدّ
+        # التعادل ونسبة التكلفة كلّها ثابتة مع الحجم (السبريد والانزلاق
+        # يتناسبان معه)، والصافي يصير «لكل كمية دنيا» — وهو رقمٌ يُقرأ.
+        # ------------------------------------------------------------------
+        epic_size = cost_model.economics.min_deal_size
+        config = _replace(config, size=epic_size)
         engine = Backtester(cost_model=cost_model, config=config)
         # **يُسأل أوّلاً: هل تنظر الاستراتيجية إلى هذه الأداة أصلاً؟**
         # صفرُ صفقة من استراتيجية رفضت الأداة ليس «لا حافّة» ولا «عيّنة
@@ -605,6 +642,31 @@ def run_one_strategy(
             if resolution not in LADDER:
                 print(f"  {WARN}○{END} {resolution} — دقّة غير معروفة، تُخطّى")
                 continue
+            # ------------------------------------------------------------------
+            # **عملة التسعير قبل أي حكم.**
+            #
+            # `price_loss_at_stop` يُحسَب بوحدة سعر الأداة. وعلى USD/JPY
+            # ذلك **ينّات**، وكلفة التحويل غير مقيسة (تُفترض صفراً). فرقمٌ
+            # مثل «صافي ‎−٥٨٩‎» ليس بالدولار ولا يُقارَن بحدّ يومي بالدولار.
+            #
+            # وهذه هي القاعدة نفسها التي تعزل USD/JPY في مسار التنفيذ
+            # (`CONVERSION_COST_UNMEASURED`) — تُطبَّق هنا أيضاً، فلا يُحكَم
+            # في التقرير على ما يُرفَض في التنفيذ.
+            quote_ccy = _quote_currency(epic, cost_model)
+            if quote_ccy and quote_ccy != "USD":
+                print(f"  {WARN}○{END} {epic:<8} {resolution:<10} "
+                      f"مسعَّرة بـ{quote_ccy} وكلفة التحويل غير مقيسة — لا حكم.")
+                report["runs"].append({
+                    "strategy": strategy_name, "epic": epic, "resolution": resolution,
+                    "verdict": "CONVERSION_COST_UNMEASURED",
+                    "quote_currency": quote_ccy,
+                    "detail": (
+                        "الأرباح والخسائر بوحدة عملة التسعير لا بالدولار، "
+                        "وكلفة التحويل غير مقيسة — نفس القاعدة التي تعزلها في التنفيذ."
+                    ),
+                })
+                continue
+
             candles = sweep(adapter, epic, resolution)
             if len(candles) < 120:
                 print(f"  {WARN}○{END} {epic:<8} {resolution:<10} "
@@ -665,6 +727,8 @@ def run_one_strategy(
                 "warnings": list(result.warnings),
                 "verdict": code,
                 "verdict_ar": sentence,
+                "size": str(config.size),
+                "quote_currency": cost_model.economics.quote_currency,
                 "run_id": result.run_id,
                 "config_digest": result.config_digest,
                 # **التواتر** — منفصلٌ عن الحافّة ويُقرأ معها.

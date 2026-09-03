@@ -35,6 +35,43 @@ class StrategyMetadata:
     backtest_evidence_ar: str
     walkforward_evidence_ar: str
 
+    #: **الأطر التي يجوز تشغيلها عليها فعلاً**، ولكلٍّ دليلُه.
+    #:
+    #: ## لماذا صار للإطار حقلٌ ثانٍ
+    #:
+    #: `timeframe` كان يُعلَن ولا يُقرأ. جرّبتُ البحث في الخادم كلّه: يظهر
+    #: عند تعريفه وفي نصوصٍ حرفية، ولا مقارنة تحكم. فشُغِّلت استراتيجياتٌ
+    #: تُعلن «1D» على شمعة أربع ساعات — وسجلّ اليوم الواحد يحمل ٧١٥٤ حدث
+    #: `TIMEFRAME_MISMATCH` مكتوباً ولا يمنع شيئاً.
+    #:
+    #: وقيمةٌ تُعلَن ولا تُقرأ هي العيب الحاكم في هذا المشروع. والأثر هنا
+    #: أن النتائج تُنسَب إلى فرضيةٍ لم تُختبَر: الفرضية المعلَنة على اليوم،
+    #: والمقيس على أربع ساعات — وهما فرضيتان لا واحدة.
+    #:
+    #: ## القاعدة
+    #:
+    #: فارغة ⇒ الإطار المُعلَن وحده. وإضافةُ إطارٍ تحتاج **دليلاً مُسمّى**
+    #: في `timeframe_evidence_ar` (معرّف تشغيلٍ من مسح التاريخ)، لا رأياً.
+    approved_timeframes: tuple[str, ...] = ()
+    timeframe_evidence_ar: str = ""
+
+    def runs_on(self, timeframe: Optional[str]) -> bool:
+        """
+        هل يجوز تشغيل هذه الاستراتيجية على هذا الإطار؟
+
+        `None` تعني «الإطار غير معروف» — وتمرّ: منعُ التشغيل لأن الإعداد لم
+        يُصرّح بإطارٍ يوقف نظاماً سليماً بسبب غياب معلومةٍ لا بسبب تعارض.
+        والتعارض وحده يمنع.
+        """
+        if not timeframe:
+            return True
+        allowed = set(self.approved_timeframes) or {self.timeframe}
+        return timeframe in allowed
+
+    @property
+    def allowed_timeframes(self) -> tuple[str, ...]:
+        return tuple(self.approved_timeframes) or (self.timeframe,)
+
 
 class Strategy(ABC):
     metadata: StrategyMetadata

@@ -130,6 +130,41 @@ INSTRUMENT_ECONOMICS_UNMEASURED = "INSTRUMENT_ECONOMICS_UNMEASURED"
 STOP_BELOW_BROKER_MINIMUM = "BROKER_MIN_STOP_DISTANCE_VIOLATION"
 #: مواصفةٌ أُعلنت بلا وحدةٍ تحلّها.
 INSTRUMENT_SPEC_UNRESOLVED = "INSTRUMENT_SPEC_UNRESOLVED"
+#: استراتيجيةٌ تُشغَّل على إطارٍ لم يُعتمَد لها — فلا تُقيَّم.
+TIMEFRAME_MISMATCH = "TIMEFRAME_MISMATCH"
+#: نفسه، لكن بموافقةٍ مُسمّاة على التجريبي — تُقيَّم ويُوسَم أنها دليلٌ أماميّ.
+TIMEFRAME_EXCEPTION = "TIMEFRAME_EXCEPTION_DEMO_TRIAL"
+#: كل الاستراتيجيات المعتمدة سقطت على بوابة الإطار — سببٌ يخصّ الإعداد لا السوق.
+NO_STRATEGY_FOR_TIMEFRAME = "NO_STRATEGY_APPROVED_FOR_TIMEFRAME"
+
+
+#: مفرداتان لشيءٍ واحد: الوسيط يسمّي الدقّة `HOUR_4` والاستراتيجيات
+#: تُعلن `4H`. ومقارنةُ الاسمين نصّاً تُسقط تطابقاً حقيقياً — وهو صنف
+#: العطل نفسه بوجهٍ لغوي: طرفان لمعنىً واحد، كلٌّ بلغته.
+#:
+#: فتُوحَّد الكلمة **في موضعٍ واحد** قبل أي مقارنة.
+def _canonical_timeframe(value) -> str:
+    if not value:
+        return ""
+    text = str(value).strip().upper()
+    return TIMEFRAME_NAMES.get(text, text)
+
+
+def _allowed_timeframes(meta) -> tuple[str, ...]:
+    """الأطر المسموح بها لهذه الاستراتيجية — بصيغةٍ تحتمل بياناتٍ قديمة."""
+    getter = getattr(meta, "allowed_timeframes", None)
+    if getter:
+        return tuple(_canonical_timeframe(tf) for tf in getter if tf)
+    declared = getattr(meta, "timeframe", None)
+    return (_canonical_timeframe(declared),) if declared else ()
+
+
+def _runs_on(meta, running_on) -> bool:
+    running = _canonical_timeframe(running_on)
+    if not running:
+        return True
+    allowed = {_canonical_timeframe(tf) for tf in _allowed_timeframes(meta)}
+    return running in allowed
 
 
 #: أسماء الأطر كما يسمّيها الوسيط ⇐ كما تُعلنها الاستراتيجيات.
@@ -209,6 +244,15 @@ class Pipeline:
         instruments: Optional[InstrumentRegistry] = None,
         #: الإطار المُشغَّل — يُقارَن بما تُعلنه كل استراتيجية.
         resolution: str = "DAY",
+        #: **استثناءٌ مُسمّى** يسمح بتشغيل استراتيجيةٍ على إطارٍ لم يُعتمَد
+        #: لها — على التجريبي وحده وبمرجع موافقةٍ من المالكة.
+        #:
+        #: بلا هذا يقع أحد أمرين، وكلاهما خطأ: إمّا تُشغَّل الاستراتيجيات
+        #: على أي إطار بصمت (وهو ما كان: ٧١٥٤ حدث تعارضٍ مكتوبٍ لا يمنع)،
+        #: وإمّا يتوقّف جمع الأدلة الأمامية كلّه لأن لا إطار معتمَد بعد.
+        #:
+        #: والاستثناء **يُقال في كل دورة**، ويحمل مرجعه، ويُوسم به القرار.
+        timeframe_exception_reference: str = "",
     ) -> None:
         self.broker = broker
         self.risk = risk_engine
@@ -223,6 +267,7 @@ class Pipeline:
         self.trial_strategies = frozenset(trial_strategies)
         self.instruments = instruments if instruments is not None else InstrumentRegistry.empty()
         self.resolution = resolution
+        self.timeframe_exception_reference = timeframe_exception_reference
 
     # -- helpers ------------------------------------------------------------
     def _no_trade(self, stage: str, code: str, message: str, at: datetime) -> PipelineResult:
@@ -473,19 +518,51 @@ class Pipeline:
         )
         signal: Optional[Signal] = None
         assessments: list[tuple[str, object]] = []
+        skipped_for_timeframe: list[str] = []
         for strategy in approved:
-            declared = getattr(strategy.metadata, "timeframe", None)
-            if running_on is not None and declared and declared != running_on:
-                self.audit.record(
-                    actor=Actor.PIPELINE, action=AuditAction.CONFIG_CHANGE,
-                    decision="TIMEFRAME_MISMATCH",
-                    reason_ar=(
-                        f"{strategy.metadata.name}@{strategy.metadata.version} تُعلن "
-                        f"إطار {declared} وتُشغَّل على {running_on}. "
-                        "فرضيةٌ أخرى تُختبَر، لا الفرضية المعلَنة تُقاس."
-                    ),
-                    source="Pipeline", at=now,
-                )
+            meta = strategy.metadata
+            # ---------------------------------------------------------------
+            # **الإطار بوابةٌ الآن، لا ملاحظة.**
+            #
+            # كان يُسجَّل `TIMEFRAME_MISMATCH` ويُشغَّل الأمر على أي حال —
+            # ٧١٥٤ حدثاً في يومٍ واحد، كلّها مكتوبة ولا يمنع منها شيء.
+            # ونتيجةُ استراتيجيةٍ تُعلن «1D» وتُقاس على «4H» ليست نتيجة
+            # فرضيتها: هي فرضيةٌ أخرى تحمل اسمها.
+            #
+            # ولا يُمنع التشغيل على إطارٍ آخر مطلقاً — يُعتمَد بدليلٍ مُسمّى
+            # في `approved_timeframes`، ثم يُشغَّل.
+            # ---------------------------------------------------------------
+            if not _runs_on(meta, running_on):
+                allowed = "، ".join(_allowed_timeframes(meta))
+                exception_ref = self.timeframe_exception_reference
+                if exception_ref and not self.broker.is_live:
+                    # استثناءٌ **مُسمّى وموسوم**: يُشغَّل على التجريبي بمرجع
+                    # موافقةٍ، ونتيجتُه دليلٌ أمامي لهذا الإطار — لا دليلٌ
+                    # على الفرضية المعلَنة.
+                    self.audit.record(
+                        actor=Actor.PIPELINE, action=AuditAction.CONFIG_CHANGE,
+                        decision=TIMEFRAME_EXCEPTION,
+                        reason_ar=(
+                            f"{meta.name}@{meta.version} معتمدةٌ على {allowed} "
+                            f"وتُشغَّل على {running_on} باستثناء التجريبي "
+                            f"({exception_ref}). النتيجة دليلٌ أماميّ على "
+                            f"{running_on}، لا على الفرضية المعلَنة."
+                        ),
+                        source="Pipeline", at=now,
+                    )
+                else:
+                    self.audit.record(
+                        actor=Actor.PIPELINE, action=AuditAction.CONFIG_CHANGE,
+                        decision=TIMEFRAME_MISMATCH,
+                        reason_ar=(
+                            f"{meta.name}@{meta.version} معتمدةٌ على {allowed} "
+                            f"وتُشغَّل على {running_on} — لا تُقيَّم. "
+                            "اعتمادُ إطارٍ يحتاج دليلاً مُسمّى، لا رأياً."
+                        ),
+                        source="Pipeline", at=now,
+                    )
+                    skipped_for_timeframe.append(f"{meta.name}@{meta.version}")
+                    continue
             assessment = strategy.assess(
                 symbol=symbol, bars=list(bars), quote=quote, now=now
             )
@@ -495,6 +572,16 @@ class Pipeline:
             signal = assessment.signal
             if signal is not None:
                 break
+
+        if signal is None and skipped_for_timeframe and not assessments:
+            # لم تُقيَّم استراتيجيةٌ واحدة: السبب الإعداد لا السوق، ويُقال.
+            return self._no_trade(
+                "strategy", NO_STRATEGY_FOR_TIMEFRAME,
+                f"كل الاستراتيجيات المعتمدة خارج إطار التشغيل {running_on}: "
+                f"{'، '.join(skipped_for_timeframe)}. "
+                "إمّا يُغيَّر إطار التشغيل، أو يُعتمَد الإطار بدليل — "
+                "ولا تُقاس فرضيةٌ على إطارٍ غير إطارها.", now,
+            )
 
         if signal is None:
             # **السبب لا الجملة.** كان يُعاد «لا توجد فرصة مطابقة» وحدها،

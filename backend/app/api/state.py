@@ -269,6 +269,11 @@ def build_system(settings: Settings | None = None) -> SystemState:
         trial_strategies=trial.strategies,
         instruments=instruments,
         resolution=trial.resolution,
+        # الاستثناء يحمل مرجع موافقة المالكة نفسه الذي فتح قفل التنفيذ
+        # التجريبي — فلا استثناء بلا موافقةٍ مسمّاة.
+        timeframe_exception_reference=(
+            trial.approval_reference if trial.active else ""
+        ),
     )
 
     # قفل التنفيذ: مغلقٌ إلا في تجربةٍ تجريبيةٍ صريحة بمرجع موافقة مكتوب.

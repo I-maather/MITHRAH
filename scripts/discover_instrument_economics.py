@@ -126,7 +126,16 @@ def main() -> int:
             "min_guaranteed_stop_distance": _s(details.min_guaranteed_stop_distance),
             "min_guaranteed_stop_distance_unit": details.min_guaranteed_stop_distance_unit,
             "guaranteed_stop_available": bool(details.guaranteed_stop_available),
-            "quote_currency": details.quote_currency or details.currency or "USD",
+            # **لا تُملأ عملةُ التسعير صامتة.**
+            #
+            # كان `... or details.currency or "USD"`، و`details.currency`
+            # نفسها مشتقّةٌ من `market.quote_currency or "USD"` — أي أن
+            # الغياب يصير «دولاراً» بمرورين. فكُتب لـUSD/JPY أنها مسعَّرة
+            # بالدولار، وهي بالين؛ ومسار التنفيذ يعرف الحقيقة من قائمته
+            # فيعزلها، والملف يقول غير ذلك. طرفان لحقيقةٍ واحدة.
+            #
+            # والغياب يُكتب `null`، وطبقةُ الأهلية تقول صراحةً إنها مفترضة.
+            "quote_currency": details.quote_currency or None,
             "overnight_fee_rate_daily": _s(details.overnight_fee),
             "spread_price": _s(widest),
             "spread_samples": samples,

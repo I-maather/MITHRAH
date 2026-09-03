@@ -50,7 +50,9 @@ INSTRUMENT_SPEC_UNRESOLVED = "INSTRUMENT_SPEC_UNRESOLVED"
 CONVERSION_COST_UNMEASURED = "CONVERSION_COST_UNMEASURED"
 TIMEFRAME_MISMATCH = "TIMEFRAME_MISMATCH"
 PORTFOLIO_LIMIT_EXCEEDED = "PORTFOLIO_LIMIT_EXCEEDED"
-MARGIN_EXCEEDS_AVAILABLE = "MARGIN_EXCEEDS_AVAILABLE"
+#: **الرمز نفسه الذي يستعمله المحرّك.** رمزان لسببٍ واحد يجعلان تقرير
+#: الرفض يقسم السبب الواحد قسمين، ويبدو كلٌّ منهما نصف ما هو.
+MARGIN_EXCEEDS_AVAILABLE = "MARGIN_EXCEEDS_AVAILABLE_FUNDS"
 
 #: أقصى عدد درجاتٍ تُجرَّب. حدٌّ تشغيلي لا سياسة: السلّم يتوقّف عملياً عند
 #: أوّل حجمٍ يتجاوز السقف لأن الخسارة تزيد مع الكمية زيادةً غير متناقصة.
