@@ -157,7 +157,11 @@ codes = Counter()
 decisions = Counter()
 for e in events:
     decisions[e.get("decision") or "—"] += 1
-    for code in re.findall(r"\b[A-Z][A-Z0-9_]{5,}\b", e.get("reason_ar") or ""):
+    # **الحدّ الأدنى ثلاثة أحرف لا ستّة.** أوّل نسخة اشترطت ستّة، فاختفى
+    # GOLD من كل تقرير — وهو الأداة الوحيدة التي تعمل اقتصادياتها على
+    # 300 دولار. وكِدتُ أقرأ غيابه من الجدول غياباً من المسح: تشخيصٌ
+    # كامل مبنيٌّ على قصور المِسطرة، وهو صنف اليوم داخل أداة تشخيصه.
+    for code in re.findall(r"\b[A-Z][A-Z0-9_]{2,}\b", e.get("reason_ar") or ""):
         codes[code] += 1
 print("")
 print("  القرارات:")
