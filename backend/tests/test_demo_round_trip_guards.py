@@ -76,15 +76,35 @@ def test_the_script_refuses_if_the_stop_unit_is_not_the_measured_one():
 
 def test_the_stop_distance_is_written_in_price_units_above_the_broker_minimum():
     """
-    `0.0150` بوحدة السعر = 150 نقطة على اليورو/دولار، فوق حدّ الوسيط المقيس
-    `0.01`. ورقمٌ مثل `30` هنا يعني وقفاً عند سعرٍ سالب — وهو ما رُفض فعلاً
-    في المسبار الأوّل.
+    **حدُّ الوسيط نسبةٌ لا سعرٌ خام — وهذا الفحص كان يثبّت الخطأ.**
+
+    كان يشترط `STOP_DISTANCE >= 0.01` لأن `minStopOrProfitDistance` قُرئت
+    `0.01` بوحدة السعر = ١٠٠ نقطة. وهي `{"unit":"PERCENTAGE","value":0.01}`
+    — أي ٠٫٠١٪ من السعر = **١٫١٦ نقطة** على 1.16292 (قياس 2026-09-03).
+
+    فالشرط القديم كان يفرض على صفقة التشغيل وقفاً بمئة وخمسين نقطة، وهو
+    عند الكمية الدنيا **١٫٥٠ دولاراً** — الحدُّ الصلب للصفقة كلُّه، على
+    صفقةٍ غرضها إثبات الأنبوب لا الربح.
+
+    والشرط الصحيح طرفان: **فوق حدّ الوسيط المحلول**، و**تحت ما يجعل
+    كلفة الاختبار جزءاً من نتيجته**.
     """
     import app.diagnostics.demo_round_trip as drt
 
-    assert drt.STOP_DISTANCE >= Decimal("0.01"), "الوقف دون حدّ الوسيط"
+    reference = Decimal("1.16292")          # سعرٌ مقيس من الوسيط
+    broker_minimum = Decimal("0.01") / Decimal("100") * reference
+
+    assert drt.STOP_DISTANCE > broker_minimum, (
+        f"الوقف {drt.STOP_DISTANCE} دون حدّ الوسيط المحلول {broker_minimum}."
+    )
     assert drt.STOP_DISTANCE < Decimal("1"), "رقمٌ بهذا الحجم ليس بوحدة السعر"
     assert drt.TARGET_DISTANCE > drt.STOP_DISTANCE
+
+    # كلفة الاختبار: خسارةُ السعر عند الكمية الدنيا (100 وحدة) وحدها.
+    price_loss = drt.STOP_DISTANCE * Decimal("100")
+    assert price_loss <= Decimal("0.50"), (
+        f"صفقة تشغيلٍ تعرّض {price_loss} دولاراً — أكبر مما يلزم لإثبات أنبوب."
+    )
 
 
 def test_the_guards_run_before_any_network_or_secret_is_touched():

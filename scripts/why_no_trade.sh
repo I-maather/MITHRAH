@@ -176,6 +176,62 @@ else:
     print("  \u25cb لا رمز رفضٍ مذكور في نصوص السجل — الأسباب نثريةٌ فقط.")
 '
 
+# ---------------------------------------------------------------------------
+step "٥ · هدف المشاركة اليومية"
+# ---------------------------------------------------------------------------
+#
+# القسم الرابع يعدّ رموز الرفض في **نصوص** السجل — تقديرٌ مفيد وغير دقيق:
+# رمزٌ يُذكر في جملة شرحٍ يُعدّ مرّتين، ورمزٌ لا يُكتب حرفياً لا يُعدّ.
+#
+# وهذا القسم يقرأ القمع **مبنياً من الأحداث نفسها** لا من نصوصها، ويقيس
+# ما تسأل عنه المالكة: كم يوماً كان مؤهَّلاً، وكم منها وقعت فيه صفقة
+# استراتيجية، وأين انهار المسار في كلٍّ منها، ومَن الجهة المسؤولة.
+"${SSH[@]}" "curl -s --max-time 10 $API/api/participation?days=14" 2>/dev/null | python3 -c '
+import json, sys
+try:
+    p = json.load(sys.stdin)
+except Exception:
+    print("  \u26d4 لم تُقرأ نقطة المشاركة — قد تكون النسخة المنشورة أقدم من إضافتها.")
+    sys.exit(0)
+rate = p.get("daily_participation_rate")
+print("  الهدف: " + str(p.get("objective_ar", "")))
+print("")
+print("  أيام مؤهَّلة: {0}  ·  أيام بصفقة استراتيجية: {1}".format(
+    p.get("eligible_trading_days"), p.get("days_with_strategy_trades")))
+print("  معدّل المشاركة: {0}".format("—" if rate is None else "{0:.0%}".format(rate)))
+print("  متوسط الإشارات المؤهَّلة/يوم: {0}".format(p.get("avg_qualified_signals_per_day")))
+print("  صفقات منفَّذة/يوم: {0}".format(p.get("filled_strategy_trades_per_day")))
+exp = p.get("net_expectancy_after_costs")
+print("  صافي التوقّع بعد التكاليف: {0}".format(
+    "لا عيّنة" if exp is None else exp + " $ لكل صفقة مغلقة"))
+print("")
+reasons = p.get("no_trade_reasons") or {}
+if reasons:
+    print("  أسباب الأيام المؤهَّلة بلا صفقة:")
+    for k, v in sorted(reasons.items(), key=lambda kv: -kv[1]):
+        print("    {0:>4}  {1}".format(v, k))
+    print("")
+totals = p.get("stage_totals") or {}
+if totals:
+    print("  مجاميع المراحل:")
+    for k in ("scans","eligible","assessed","signals","instrument_economics_ok",
+              "risk_approved","intents","submitted","acknowledged","filled","reconciled"):
+        print("    {0:>7}  {1}".format(totals.get(k, 0), k))
+    print("")
+funnel = p.get("rejection_funnel") or {}
+if funnel:
+    print("  قمع الرفض (من الأحداث لا من النصوص):")
+    for stage, codes in funnel.items():
+        for code, n in sorted(codes.items(), key=lambda kv: -kv[1])[:4]:
+            print("    {0:>7}  {1} / {2}".format(n, stage, code))
+excluded = p.get("excluded_days") or []
+if excluded:
+    print("")
+    print("  أيامٌ خارج المقام (لا تُحسَب إخفاق مشاركة):")
+    for d in excluded[-7:]:
+        print("    {0}  {1}".format(d.get("trading_day"), d.get("because")))
+'
+
 echo
 dim "لا شيء أُرسل ولا غُيّر. قراءةٌ فقط."
 echo
