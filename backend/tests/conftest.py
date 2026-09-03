@@ -157,3 +157,20 @@ def kill_switch() -> KillSwitch:
 @pytest.fixture
 def risk_engine(limits) -> RiskEngine:
     return RiskEngine(limits)
+
+
+# ---------------------------------------------------------------------------
+# عزلُ ملف الإيقاف المحلي عن ملف التشغيل
+# ---------------------------------------------------------------------------
+#
+# `/api/trading/resume` صار يكتب قراره على القرص كي يعيش بعد إعادة التشغيل.
+# وبلا عزلٍ يكتب فحصٌ في ملفِ التشغيل نفسه، فيقرأه الفحص التالي ويبدأ «غير
+# موقوف» — تسرّبُ حالةٍ بين الفحوص عبر القرص، يعبر العمليات ولا يظهر إلا
+# بترتيبٍ معيّن. (سقط عليه فحصان يوم كُتبت الميزة.)
+
+@pytest.fixture(autouse=True)
+def _isolate_local_pause(tmp_path, monkeypatch):
+    from app.runtime.local_pause import PATH_ENV_VAR
+
+    monkeypatch.setenv(PATH_ENV_VAR, str(tmp_path / "local-pause.json"))
+    yield

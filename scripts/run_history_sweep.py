@@ -228,8 +228,25 @@ def fetch_window(adapter, epic: str, resolution: str, start, end):
     return CapitalCandle.parse_list(body)
 
 
+#: الشموع تُجلَب مرّةً لكل (أداة، دقّة) وتُعاد لكل استراتيجية.
+#:
+#: بلا هذا يُعاد النزول في الزمن ثلاث مرّات على البيانات نفسها: ٤٨ إعداداً
+#: × ١٢ نداءً = نحو ست دقائق من الانتظار على حدود معدّل الوسيط، ونتائج
+#: **قد تختلف** لأن النافذة تتحرّك بين نداءٍ وآخر. والقياس على بياناتٍ
+#: مختلفة ليس مقارنة.
+_CANDLE_CACHE: dict[tuple[str, str], list] = {}
+
+
 def sweep(adapter, epic: str, resolution: str) -> list:
     """ينزل في الزمن نداءً بعد نداء حتى يتوقّف الوسيط عن الإعطاء."""
+    key = (epic.upper(), resolution)
+    if key in _CANDLE_CACHE:
+        return _CANDLE_CACHE[key]
+    _CANDLE_CACHE[key] = _sweep_uncached(adapter, epic, resolution)
+    return _CANDLE_CACHE[key]
+
+
+def _sweep_uncached(adapter, epic: str, resolution: str) -> list:
     span, pages = LADDER[resolution]
     end = datetime.now(timezone.utc).replace(tzinfo=None)
     out: list = []
@@ -313,6 +330,80 @@ def verdict(
     if z <= -min_z:
         return "BELOW_BREAKEVEN", f"تحت التعادل بفارق يُعتدّ به — {tail}"
     return "INDISTINGUISHABLE", f"**رابح بالصافي، لكن لا يُفرَّق عن التعادل** — {tail}"
+
+
+#: نسبة الجزء داخل العيّنة. الباقي **يُقاس وحده** ولا يدخل أي معايرة.
+IN_SAMPLE_SHARE = 0.7
+
+#: أيام التداول في الأسبوع للفوركس. تُستعمل لتحويل «صفقة كل كم يوم تقويمي»
+#: إلى «صفقة كل كم **يوم تداول**» — وهي وحدة هدف المشاركة اليومية.
+FX_TRADING_DAYS_PER_WEEK = 5
+
+
+def frequency(result, bars) -> dict:
+    """
+    **كم صفقةً في اليوم؟** — وهو السؤال الذي يقرّر إن كان هدف «صفقة
+    مكتملة واحدة كل يوم تداول مؤهَّل» ممكناً رياضياً أصلاً.
+
+    ولا يُخلط بالحافّة: تواترٌ عالٍ بلا حافّة يزيد الخسارة لا المشاركة.
+    يُقاس الاثنان منفصلين ويُقرآن معاً.
+    """
+    if not bars:
+        return {"span_days": 0.0, "trading_days": 0.0, "trades_per_trading_day": None}
+    span = (bars[-1].start_utc - bars[0].start_utc).total_seconds() / 86400.0
+    trading = span * FX_TRADING_DAYS_PER_WEEK / 7.0
+    return {
+        "span_days": round(span, 1),
+        "trading_days": round(trading, 1),
+        "trades_per_trading_day": (
+            round(result.trade_count / trading, 4) if trading > 0 else None
+        ),
+        "trading_days_per_trade": (
+            round(trading / result.trade_count, 2) if result.trade_count else None
+        ),
+    }
+
+
+def split_run(engine_cls, cost_model, config, strategy, bars, epic, min_z):
+    """
+    يقسم النافذة إلى جزءٍ أوّل وجزءٍ أخير ويقيس كلاً على حدة.
+
+    **وما لا يدّعيه:** لم تُعاير هنا أي معلمة على الجزء الأوّل، فالثاني
+    ليس «خارج عيّنة» بالمعنى الصارم — هو **اختبار ثبات عبر فترتين**.
+    وقولُه بهذا الاسم أدقّ من ادّعاء ما لم يقع. أمّا التصريح بـ
+    «out-of-sample» فيلزمه معايرةٌ فعلية على الأوّل، ولا معايرة هنا.
+    """
+    from app.strategies.backtest import InsufficientData
+
+    cut = int(len(bars) * IN_SAMPLE_SHARE)
+    out = {}
+    for label, window in (("first_period", bars[:cut]), ("last_period", bars[cut:])):
+        if len(window) < 120:
+            out[label] = {"verdict": "INSUFFICIENT_BARS", "bars": len(window)}
+            continue
+        try:
+            r = engine_cls(cost_model=cost_model, config=config).run(
+                strategy, window, symbol=epic
+            )
+        except (InsufficientData, Exception) as exc:  # noqa: BLE001
+            out[label] = {"verdict": "ERROR", "detail": f"{type(exc).__name__}: {exc}"}
+            continue
+        be = breakeven_from_trades(r, cost_model, config.stop_kind)
+        code, sentence = verdict(r, config.min_trades_for_conclusion, be, min_z)
+        out[label] = {
+            "bars": len(window),
+            "from": window[0].start_utc.isoformat(),
+            "to": window[-1].start_utc.isoformat(),
+            "trades": r.trade_count,
+            "wins": r.wins,
+            "win_rate": None if r.win_rate is None else str(r.win_rate),
+            "net_pnl": str(r.net_pnl),
+            "breakeven_win_rate": None if be is None else round(be, 4),
+            "verdict": code,
+            "verdict_ar": sentence,
+            **frequency(r, window),
+        }
+    return out
 
 
 def main() -> int:
@@ -576,13 +667,25 @@ def run_one_strategy(
                 "verdict_ar": sentence,
                 "run_id": result.run_id,
                 "config_digest": result.config_digest,
+                # **التواتر** — منفصلٌ عن الحافّة ويُقرأ معها.
+                **frequency(result, bars),
+                # **الثبات عبر فترتين** — لا معايرة، فلا يُسمّى خارج عيّنة.
+                "periods": split_run(
+                    Backtester, cost_model, config, strategy, bars, epic, min_z
+                ),
             })
             mark = {"ABOVE_BREAKEVEN": f"{OK}✅{END}",
                     "BELOW_BREAKEVEN": f"{BAD}❌{END}",
                     "LOSING": f"{BAD}❌{END}",
                     "INDISTINGUISHABLE": f"{WARN}≈{END}"}.get(code, f"{WARN}○{END}")
+            freq = frequency(result, bars)
+            per_day = freq.get("trades_per_trading_day")
+            periods = report["runs"][-1].get("periods", {})
+            last = (periods.get("last_period") or {}).get("verdict", "—")
             print(f"  {mark} {epic:<8} {resolution:<10} {len(bars):>5} شمعة · "
-                  f"{result.trade_count:>3} صفقة · {sentence}")
+                  f"{result.trade_count:>3} صفقة · "
+                  f"{per_day if per_day is not None else '—'} صفقة/يوم تداول · "
+                  f"الفترة الأخيرة {last} · {sentence}")
 
 def finish(report: dict, report_path: str) -> int:
     """يكتب التقرير ويطبع الخلاصة. فُصلت عن `main` حين صار المسح

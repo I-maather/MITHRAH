@@ -22,6 +22,7 @@ from ..killswitch.engine import KillSwitch
 from ..killswitch.store import load_kill_switch_state, record_trigger
 from ..money import D
 from ..pipeline.runner import BlackoutCalendar, MacroAssessment, Pipeline, PipelineResult
+from ..runtime.local_pause import load as load_local_pause
 from ..risk.constitution import RiskLimits, RiskMode
 from ..risk.costs import IBKR_PRO_TIERED_US_STOCK, CostAssumptions
 from ..risk.engine import RiskEngine, SessionRiskState
@@ -337,6 +338,19 @@ def build_system(settings: Settings | None = None) -> SystemState:
     secret_provider = build_secret_provider(
         env_file=settings.secrets_file, allow_process_env=False
     )
+    _local_pause = load_local_pause()
+    audit.record(
+        actor=Actor.SYSTEM, action=AuditAction.CONFIG_CHANGE,
+        decision="LOCAL_PAUSE_RESTORED" if _local_pause.paused else "LOCAL_RESUME_RESTORED",
+        reason_ar=(
+            f"الإيقاف المحلي عند الإقلاع: "
+            f"{'موقوف' if _local_pause.paused else 'مرفوع'} — "
+            f"{_local_pause.reason_ar or 'بلا سبب مسجَّل'}"
+            + (f" (من {_local_pause.source}" if _local_pause.source else "")
+            + (f" في {_local_pause.at_utc})" if _local_pause.at_utc else ")" if _local_pause.source else "")
+        ),
+        source="build_system",
+    )
     return SystemState(
         settings=settings, broker=broker, audit=audit, kill_switch=kill_switch,
         risk_engine=risk_engine, execution=execution, registry=registry, pipeline=pipeline,
@@ -354,7 +368,12 @@ def build_system(settings: Settings | None = None) -> SystemState:
         # يُبنى من المفاتيح المتاحة. مفتاحٌ غائب ⇒ مزوّدٌ غير مُعدّ يظهر
         # باسمه في «ما هو ناقص» — لا مزوّدٌ يُخفق بصمت عند أول نداء.
         providers=build_provider_registry(secret_provider, broker),
-        locally_paused=True,
+        # **الإيقاف المحلي يُقرأ من القرص، لا يُفترض عند كل إقلاع.**
+        #
+        # كان `True` دائماً، وقاطع الطوارئ يُحفَظ. فكل نشرٍ يعيد الإيقاف
+        # بصمت، وتقرأ المالكة على الشاشة «موقوف بقرارك» وهي لم تقرّر شيئاً.
+        # والغياب يعني إيقافاً — الافتراض الآمن أن المجهول «لا».
+        locally_paused=_local_pause.paused,
         broker_note_ar=boot_note,
     )
 

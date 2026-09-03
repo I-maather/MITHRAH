@@ -146,12 +146,14 @@ def system() -> SystemState:
 # الحالة تُحفَظ على القرص لا في الذاكرة: خادم يُعاد تشغيله عند كل تحديث،
 # وحالةٌ في الذاكرة تعني إعادة مسح رمز QR بعد كل إعادة تشغيل.
 
+from .runtime.local_pause import load as load_local_pause, set_local_pause
+
 _MOBILE_STATE_PATH = Path(__file__).resolve().parents[2] / "data" / "mobile-state.json"
 
 def _mobile_pause(reason_ar: str) -> None:
     """يوقف التداول محلياً **فعلاً**. كان الزرّ يسجّل ولا يوقف."""
     sys_state = system()
-    sys_state.locally_paused = True
+    set_local_pause(sys_state, True, reason_ar=reason_ar, source="mobile")
     sys_state.audit.record(
         actor=Actor.OWNER, action=AuditAction.CONFIG_CHANGE, decision="LOCAL_PAUSE",
         reason_ar=reason_ar, source="mobile",
@@ -181,7 +183,7 @@ def _mobile_resume(reason_ar: str) -> None:
             + " — الاستئناف لا يرفعه، ورفعه إجراء يزيد المخاطرة ويحتاج الخادم.",
             status=409,
         )
-    sys_state.locally_paused = False
+    set_local_pause(sys_state, False, reason_ar=reason_ar, source="mobile")
     sys_state.audit.record(
         actor=Actor.OWNER, action=AuditAction.CONFIG_CHANGE, decision="LOCAL_RESUME",
         reason_ar=reason_ar, source="mobile",
@@ -777,7 +779,7 @@ class PauseRequest(BaseModel):
 @app.post("/api/trading/pause")
 def pause_trading(req: PauseRequest, sys: SystemState = Depends(system)):
     """إيقاف محلي فوري. لا يحتاج عبارة تأكيد لأن الإيقاف دائماً آمن."""
-    sys.locally_paused = True
+    set_local_pause(sys, True, reason_ar=req.reason_ar, source="ui")
     sys.audit.record(
         actor=Actor.OWNER, action=AuditAction.CONFIG_CHANGE, decision="LOCAL_PAUSE",
         reason_ar=req.reason_ar, source="ui",
@@ -803,7 +805,7 @@ def resume_trading(req: ResumeRequest, sys: SystemState = Depends(system)):
         raise HTTPException(400, f"عبارة التأكيد غير مطابقة. المطلوب: «{RESUME_PHRASE}»")
     if sys.kill_switch.is_active:
         raise HTTPException(400, "Kill Switch مفعّل — لا يمكن رفع الإيقاف المحلي قبل إعادة تفعيله.")
-    sys.locally_paused = False
+    set_local_pause(sys, False, reason_ar=req.reason_ar, source="ui")
     sys.audit.record(
         actor=Actor.OWNER, action=AuditAction.CONFIG_CHANGE, decision="LOCAL_RESUME",
         reason_ar=req.reason_ar, source="ui",
