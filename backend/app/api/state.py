@@ -37,6 +37,8 @@ from ..strategies.trend_pullback_v1 import TrendPullbackV1
 from ..strategies.trend_pullback_v2 import TrendPullbackV2
 from ..strategies.range_mean_reversion import RangeMeanReversion
 from ..strategies.breakout_retest import BreakoutRetest
+from ..strategies.momentum_continuation import MomentumContinuation
+from ..strategies.session_open_breakout import SessionOpenBreakout
 from ..runtime.demo_trial import demo_trial_for, read_demo_trial
 from ..risk.instrument_registry import InstrumentRegistry
 from ..brokers.capital.safety import LIVE_API_ENABLED, ExecutionLock
@@ -214,6 +216,11 @@ def build_system(settings: Settings | None = None) -> SystemState:
     registry.register(TrendPullbackV2())
     registry.register(RangeMeanReversion())
     registry.register(BreakoutRetest())
+    # **مكتبةٌ داخل-يومية** — أُضيفت بعد أن تبيّن أن حصر النظام في الشمعة
+    # اليومية كان أثر خطأ وحدةٍ لا قيداً من الوسيط. كلاهما `RESEARCH`،
+    # فلا يُشغَّلان إلا داخل تجربة التجريبي المسمّاة.
+    registry.register(MomentumContinuation())
+    registry.register(SessionOpenBreakout())
 
     # اقتصاديات الأدوات — المقيسة من الوسيط وحدها تُنفَّذ عليها.
     #

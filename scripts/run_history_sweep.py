@@ -464,6 +464,8 @@ def main() -> int:
     # جزءٍ من الثانية، لا بعد فتح جلسةٍ عند الوسيط ثم الانفجار على
     # سرٍّ مفقود — فيبدو الخطأ في الاعتماد وهو في سطر الأوامر.
     from app.strategies.breakout_retest import BreakoutRetest
+    from app.strategies.momentum_continuation import MomentumContinuation
+    from app.strategies.session_open_breakout import SessionOpenBreakout
     from app.strategies.range_mean_reversion import RangeMeanReversion
     from app.strategies.trend_pullback_v1 import TrendPullbackV1
     from app.strategies.trend_pullback_v2 import TrendPullbackV2
@@ -473,9 +475,16 @@ def main() -> int:
         "RANGE_MEAN_REVERSION": RangeMeanReversion,
         "BREAKOUT_RETEST": BreakoutRetest,
         "TREND_PULLBACK_V1": TrendPullbackV1,      # للمقارنة التاريخية وحدها
+        "MOMENTUM_CONTINUATION": MomentumContinuation,
+        "SESSION_OPEN_BREAKOUT": SessionOpenBreakout,
     }
-    default_three = ["TREND_PULLBACK_V2", "RANGE_MEAN_REVERSION", "BREAKOUT_RETEST"]
-    wanted = default_three if a.strategies == ["all"] else a.strategies
+    #: `all` تعني **كل ما يُشغَّل**، لا ثلاثاً مكتوبة. وثابتٌ يصف حالةً
+    #: ماضية يكذب عند أوّل إضافة — وقد كذب مرّتين في هذا الملف.
+    default_all = [
+        "TREND_PULLBACK_V2", "RANGE_MEAN_REVERSION", "BREAKOUT_RETEST",
+        "MOMENTUM_CONTINUATION", "SESSION_OPEN_BREAKOUT",
+    ]
+    wanted = default_all if a.strategies == ["all"] else a.strategies
     unknown = [name for name in wanted if name not in catalogue]
     if unknown:
         print(f"{BAD}⛔ استراتيجيات غير معروفة: {'، '.join(unknown)}{END}\n"
