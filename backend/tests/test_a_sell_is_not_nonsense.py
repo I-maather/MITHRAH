@@ -39,6 +39,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from decimal import Decimal
 
+from unittest.mock import patch
+
 import pytest
 
 from app.contracts import Broker, Side, Signal
@@ -118,18 +120,43 @@ def state() -> SessionRiskState:
 class TestThePolicyIsSaidByName:
     def test_a_valid_sell_is_refused_as_policy_not_as_nonsense(self):
         """
-        **جوهر الإصلاح.** البيع يبقى ممنوعاً — والسبب يتغيّر من «خطتك
-        هراء» إلى «البيع ممنوع بالدستور». الفرق بينهما هو الفرق بين
-        مالكةٍ تبحث عن عطبٍ في استراتيجيتها وأخرى تعرف أن أمامها قراراً.
+        **جوهر الإصلاح، وقد بقي بعد فتح الراية.**
+
+        فُتح البيع في الدستور 0.3.0، فلم يعد هذا الفحص يستطيع أن يقرأ
+        الرفض من الحالة الافتراضية. والمحروس هنا ليس **أن** البيع ممنوع،
+        بل **كيف** يُقال المنع حين يكون قائماً: باسم السياسة لا بوصف
+        الخطة بأنها هراء. فتُخفَض الراية داخل الفحص وحده ويُقرأ السبب.
+
+        ولو حُذف هذا الفحص يوم فُتح البيع لعاد العطل صامتاً في أوّل يوم
+        تُخفَض فيه الراية ثانيةً — وهو يومٌ وارد.
         """
-        rejection, _, _ = engine(Broker.CAPITAL_COM)._run_gates(
-            signal=signal(Side.SELL, *VALID_SELL), state=state(),
-            kill_switch_active=False, now=NOW,
-        )
+        with patch("app.risk.engine.CFD_ALLOW_SHORT", False):
+            rejection, _, _ = engine(Broker.CAPITAL_COM)._run_gates(
+                signal=signal(Side.SELL, *VALID_SELL), state=state(),
+                kill_switch_active=False, now=NOW,
+            )
         assert rejection is not None
         assert rejection.reason_code == SHORT_NOT_ALLOWED
         assert rejection.reason_code != NO_EXIT_PLAN
         assert "CFD_ALLOW_SHORT" in rejection.reason_ar
+
+    def test_a_valid_sell_now_passes_the_gate(self):
+        """
+        **وما تغيّر فعلاً:** بيعٌ صحيحٌ على الذهب يعبر البوابة بالدستور
+        القائم. وهذا هو أثر التفويض، ويُختبَر كي لا يبقى فتحاً على الورق.
+        """
+        rejection, checks, _ = engine(Broker.CAPITAL_COM)._run_gates(
+            signal=signal(Side.SELL, *VALID_SELL), state=state(),
+            kill_switch_active=False, now=NOW,
+        )
+        assert rejection is None, rejection.reason_ar if rejection else ""
+        assert any(name == "REWARD_RISK" and ok for name, ok, _ in checks)
+
+    def test_ibkr_shorting_stayed_shut(self):
+        """فتحُ عقود الفروقات لم يفتح أسهم IBKR — سياستان منفصلتان."""
+        from app.risk.constitution import ALLOW_SHORT
+
+        assert ALLOW_SHORT is False
 
     def test_a_genuinely_reversed_plan_still_says_no_exit_plan(self):
         """والرمز القديم يبقى لما كُتب له: جهةٌ معكوسة فعلاً."""

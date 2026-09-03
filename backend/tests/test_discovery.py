@@ -153,7 +153,7 @@ def test_report_contains_every_required_field():
     assert payload["account"]["hedging_mode"] is False
     assert payload["generated_at_riyadh"]
     assert payload["generated_at_utc"]
-    assert payload["constitution_version"] == "0.2.0"
+    assert payload["constitution_version"] == "0.3.0"
 
     eurusd = next(m for m in payload["markets"] if m["epic"] == "EURUSD")
     for key in (

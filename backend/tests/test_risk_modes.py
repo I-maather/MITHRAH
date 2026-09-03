@@ -61,8 +61,12 @@ def state(**kw):
 
 # --- الأرقام النهائية --------------------------------------------------------
 
-def test_constitution_is_version_0_2_0():
-    assert CONSTITUTION_VERSION == "0.2.0"
+def test_constitution_is_version_0_3_0():
+    """
+    رقمٌ مثبَّتٌ عمداً: تغييرُ سياسةٍ بلا رفع إصدارٍ هو انحرافٌ صامت.
+    0.2.0 ← 0.3.0 يوم 2026-09-03 بفتح `CFD_ALLOW_SHORT` بتفويض المالكة.
+    """
+    assert CONSTITUTION_VERSION == "0.3.0"
 
 
 def test_capital_is_exactly_150():

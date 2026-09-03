@@ -208,13 +208,32 @@ def test_no_borrow_cost_exists_in_the_cfd_model():
 # ---------------------------------------------------------------------------
 # ٥ · وما زال البيع ممنوعاً حتى تُغيَّر الراية صراحةً
 # ---------------------------------------------------------------------------
-def test_the_flag_still_governs_and_this_file_changed_no_policy():
+def test_the_flag_was_opened_deliberately_and_the_version_says_so():
     """
-    **هذا الملف يقيس ولا يفتح.** الراية كما هي في الدستور، والبيع يُرفض
-    باسمه — والقياس أعلاه جرى برايةٍ مرفوعة **داخل الفحص وحده**.
-    """
-    from app.risk.constitution import CFD_ALLOW_SHORT
+    **فُتح البيع في الدستور 0.3.0 بتفويض المالكة الصريح، بعد هذا القياس.**
 
-    assert CFD_ALLOW_SHORT is False, (
-        "إن فُتح البيع فليكن بكوميت يقول ذلك في عنوانه — لا كأثرٍ جانبي لملف فحص"
+    والمحروس هنا أن الفتح **معلَن**: راية مرفوعة وإصدارٌ مرفوع معها. لأن
+    تغيير سياسةٍ تحت رقم الإصدار نفسه هو انحرافٌ صامت — والبصمة المسجَّلة
+    مع كل قرار تصير كاذبةً عن دستورها.
+    """
+    from app.risk.constitution import CFD_ALLOW_SHORT, CONSTITUTION_VERSION
+
+    assert CFD_ALLOW_SHORT is True
+    assert CONSTITUTION_VERSION == "0.3.0", (
+        "الراية تغيّرت والإصدار لم يتغيّر — سياسةٌ تنزلق بلا سجل"
     )
+
+
+def test_the_fingerprint_moves_when_the_policy_moves():
+    """
+    البصمة تُسجَّل مع كل قرار مخاطرة. فإن لم تتحرّك بتحرّك الراية، صار
+    السجل يشهد لدستورٍ غير الذي حكم — وهو أسوأ من غياب السجل.
+    """
+    from unittest.mock import patch as _patch
+
+    from app.risk import constitution as C
+
+    before = C.constitution_fingerprint(RiskMode.VALIDATION, Broker.CAPITAL_COM)
+    with _patch.object(C, "CFD_ALLOW_SHORT", False):
+        after = C.constitution_fingerprint(RiskMode.VALIDATION, Broker.CAPITAL_COM)
+    assert before != after, "بصمةٌ لا تتأثّر بالراية — فالسجل لا يميّز الدستورين"
