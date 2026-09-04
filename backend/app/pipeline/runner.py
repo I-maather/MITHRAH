@@ -44,7 +44,6 @@ from ..risk.capital_costs import CfdTradeEconomics
 from ..risk.costs import CommissionSchedule, CostAssumptions
 from ..risk.engine import RiskEngine, SessionRiskState
 from ..risk.instrument_registry import InstrumentRegistry
-from ..risk.size_ladder import PORTFOLIO_LIMIT_EXCEEDED
 from ..strategies.base import Strategy
 
 
@@ -139,8 +138,6 @@ TIMEFRAME_EXCEPTION = "TIMEFRAME_EXCEPTION_DEMO_TRIAL"
 NO_STRATEGY_FOR_TIMEFRAME = "NO_STRATEGY_APPROVED_FOR_TIMEFRAME"
 #: أُقدِم على هذا الإعداد بعينه في هذه الدورة الزمنية من قبل.
 ENTRY_ALREADY_ATTEMPTED = "ENTRY_ALREADY_ATTEMPTED_FOR_SETUP"
-#: للأداة مركزٌ مفتوحٌ عند الوسيط — فلا يُضاعَف التعرّض عليها.
-SYMBOL_ALREADY_HELD = "SYMBOL_ALREADY_HELD"
 #: تعذّرت قراءة مراكز الوسيط — ولا يُفتَح مركزٌ على جهلٍ بما هو مفتوح.
 PORTFOLIO_READ_FAILED = "PORTFOLIO_READ_FAILED"
 
@@ -510,46 +507,29 @@ class Pipeline:
             )
 
         # ---------------------------------------------------------------
-        # ٣٫٥) بوابة المحفظة — **تُقرأ من الوسيط، لا من ذاكرةٍ لا نملكها.**
+        # ٣٫٥) ما هو مفتوحٌ **قبل** هذه الدورة — يُقرأ من الوسيط.
         #
-        # يوم 2026-09-04 فُتح على GBPUSD مركزان بحجم ٢٠٠ لكلٍّ منهما، من
-        # استراتيجيتين مختلفتين على الشمعة نفسها. وحارسُ الإعداد لا يمنع
-        # ذلك: مفتاحه يحمل اسم الاستراتيجية، فاستراتيجيتان تمرّان. والنتيجة
-        # ضِعفُ المخاطرة المعتمدة على أداةٍ واحدة، وهي بالضبط ما يمنعه
-        # الشرط السابع في هدف المشاركة اليومية.
+        # النظام لا يحتفظ بدفتر مراكز مفتوحة، و`local_positions` في
+        # المطابقة أدناه لم تكن إلا المركز الذي فُتح في هذه الدورة. فكانت
+        # تُقارَن بحساب الوسيط **كلّه**، فيظهر أيُّ مركزٍ ثانٍ على أداةٍ
+        # أخرى «غير معروفٍ لدينا» ويرتفع قاطع الطوارئ. ومعناه أن سقف
+        # «ثلاثة مراكز» في الدستور غير قابلٍ للبلوغ: الثاني يوقف النظام
+        # في الدورة التي تليه. وقع اليوم على GOLD بعد GBPUSD بدقيقة.
         #
-        # والقراءة من الوسيط لا من سجلٍّ عندنا مقصودة: النظام **لا يحتفظ
-        # بدفتر مراكز مفتوحة** — `local_positions` في المطابقة أدناه ليست
-        # إلا المركز الذي فُتح في هذه الدورة. فالمصدر الوحيد الصادق عمّا
-        # هو مفتوحٌ الآن هو حساب الوسيط نفسه.
+        # وقراءةُ ما هو مفتوحٌ قبل التنفيذ تُعطي المطابقةَ خطَّ أساسها بلا
+        # ادّعاء دفترٍ لا نملكه: يُطابَق الحسابُ كلُّه، والسؤال يصير
+        # «هل تغيّر شيءٌ غير الذي فعلناه؟» — وهو السؤال الصحيح.
+        #
+        # ودفترُ المراكز المفتوحة يبقى **عيباً مفتوحاً مسجَّلاً**: بلا
+        # سجلٍّ يعبر إعادةَ التشغيل لا تُبنى مطابقةٌ تصمد عبرها.
         # ---------------------------------------------------------------
         try:
-            open_positions = list(self.broker.get_positions(balances.account_id))
+            positions_before = list(self.broker.get_positions(balances.account_id))
         except Exception as exc:  # noqa: BLE001
             return self._no_trade(
                 "portfolio", PORTFOLIO_READ_FAILED,
                 f"تعذّرت قراءة المراكز المفتوحة من الوسيط: {type(exc).__name__}. "
-                "لا يُفتَح مركزٌ على جهلٍ بما هو مفتوح.",
-                now,
-            )
-        already = [p for p in open_positions if p.symbol.upper() == symbol.upper()]
-        if already:
-            return self._no_trade(
-                "portfolio", SYMBOL_ALREADY_HELD,
-                f"{symbol} له مركزٌ مفتوحٌ عند الوسيط بكمية "
-                f"{sum((p.quantity for p in already), Decimal('0'))} — "
-                "لا يُضاعَف التعرّض على الأداة نفسها.",
-                now,
-            )
-        _max_open = getattr(
-            getattr(getattr(self, "risk", None), "limits", None),
-            "max_open_positions",
-            None,
-        )
-        if _max_open is not None and len(open_positions) >= int(_max_open):
-            return self._no_trade(
-                "portfolio", PORTFOLIO_LIMIT_EXCEEDED,
-                f"المراكز المفتوحة {len(open_positions)} بلغت الحدّ {int(_max_open)}.",
+                "ولا تُبنى مطابقةٌ على جهلٍ بما هو مفتوح.",
                 now,
             )
 
@@ -790,7 +770,7 @@ class Pipeline:
             )
 
         # 9) Reconciliation
-        local = []
+        local = list(positions_before)
         if submission.order and submission.order.filled_quantity > 0:
             from ..contracts import Position, Side as _Side
 
@@ -817,7 +797,7 @@ class Pipeline:
             if submission.order.side is _Side.SELL:
                 filled = -filled
 
-            local = [
+            local = list(positions_before) + [
                 Position(
                     account_id=balances.account_id, symbol=symbol,
                     quantity=filled,
@@ -837,10 +817,7 @@ class Pipeline:
         # عيبٌ مفتوحٌ مسجَّل، ولا يُداوى بادّعاء المطابقة الشاملة.
         recon = reconcile(
             local_positions=local,
-            broker_positions=[
-                p for p in self.broker.get_positions(balances.account_id)
-                if p.symbol.upper() == symbol.upper()
-            ],
+            broker_positions=list(self.broker.get_positions(balances.account_id)),
             now=now,
         )
         self.audit.record(
