@@ -184,3 +184,39 @@ def test_raw_still_refuses_a_loopback_backend(state_path, capsys):
     assert main(["--backend", "http://127.0.0.1:8000", "--state", str(state_path), "--raw"]) == 2
     assert capsys.readouterr().out.strip() == ""
     assert challenges_on_disk(state_path) == []
+
+
+# ---------------------------------------------------------------------------
+# المالك — العطل الذي أعاد خمسمئة وقرأه التطبيق «رمزٌ مُستهلَك»
+# ---------------------------------------------------------------------------
+
+def test_a_file_owned_by_another_user_is_refused_before_it_is_written(state_path, monkeypatch):
+    """
+    الأداة منفصلة عن الخدمة عمداً. فإن شُغّلت بمستخدمٍ آخر، نقلت الكتابةُ
+    الذرّيّة ملكيةَ الملف إليه، فتُرفَض الخدمةُ عند القراءة بـ`PermissionError`
+    وتعيد ٥٠٠ — والتطبيق يقرأها «رمزٌ منتهٍ أو مُستهلَك» فتُولَّد رموزٌ بلا
+    نهاية. حدث ذلك فعلاً على الخادم.
+
+    فيُفحَص المالك **قبل** الكتابة، وتُقال العلّة بعلاجها.
+    """
+    import os
+
+    from app.mobile.store import MobileStateStore, MobileStoreError
+
+    store = MobileStateStore(state_path)
+    store.save(devices=[], tokens=[], challenges=[])
+
+    # كأنّ العملية تعمل بمستخدمٍ غير مالك الملف.
+    monkeypatch.setattr(os, "geteuid", lambda: os.stat(state_path).st_uid + 1)
+
+    with pytest.raises(MobileStoreError) as exc:
+        store.load()
+    assert "chown" in str(exc.value)
+
+
+def test_the_owner_check_passes_for_the_owning_process(state_path):
+    from app.mobile.store import MobileStateStore
+
+    store = MobileStateStore(state_path)
+    store.save(devices=[], tokens=[], challenges=[])
+    assert store.load()["devices"] == []

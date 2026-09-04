@@ -74,13 +74,40 @@ class MobileStateStore:
     # -- القراءة ------------------------------------------------------------
 
     def _check_permissions(self) -> None:
+        """
+        الصلاحيات **والمالك**.
+
+        ## ولماذا المالك أيضاً
+
+        الكتابة هنا ذرّيّة: ملفٌ مؤقّت ثم `os.replace`. والمؤقّت يملكه من
+        كتبه. فحين وُلِّد رمزُ اقترانٍ بـ`root` — والأداة منفصلة عن الخدمة
+        عمداً — انتقلت ملكيةُ الملف إلى `root`، فصارت الخدمة العاملة باسم
+        `mathrah` تُرفَض عند القراءة:
+
+            MobileStoreError: تعذّرت قراءة حالة الجوال (PermissionError)
+            POST /api/mobile/session/enroll → 500
+
+        والتطبيق يقرأ الخمسمئة «رمزٌ منتهٍ أو مُستهلَك» فتُولَّد رموزٌ بلا
+        نهاية، وكلٌّ منها يُعمّق العطل. حدث ذلك فعلاً.
+
+        فالمالك يُفحَص **قبل** أيّ كتابة: أداةٌ تعمل بمستخدمٍ آخر تتوقّف
+        برسالةٍ تحمل علاجها، ولا تكسر الخدمة صامتةً.
+        """
         if not self.enforce_permissions or os.name != "posix":
             return
-        mode = stat.S_IMODE(self.path.stat().st_mode)
+        info = self.path.stat()
+        mode = stat.S_IMODE(info.st_mode)
         if mode & 0o077:
             raise MobileStoreError(
                 f"ملف حالة الجوال مقروء لغير مالكه (الصلاحيات {oct(mode)}). "
                 f"صحّحيها بـ: chmod 600 {self.path}"
+            )
+        if info.st_uid != os.geteuid():
+            raise MobileStoreError(
+                f"ملف حالة الجوال يملكه المستخدم {info.st_uid} وهذه العملية "
+                f"تعمل بالمستخدم {os.geteuid()}. الكتابة تنقل الملكية فتتوقّف "
+                f"الخدمة عن قراءته. شغّلي الأداة بمستخدم الخدمة نفسه، أو: "
+                f"chown {info.st_uid} {self.path}"
             )
 
     def load(self) -> dict[str, Any]:

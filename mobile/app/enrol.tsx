@@ -1,7 +1,7 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
 import React, { useRef, useState } from 'react';
-import { TextInput, View } from 'react-native';
+import { Clipboard, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useSession } from '@/auth/SessionProvider';
@@ -123,6 +123,26 @@ export default function EnrolScreen(): React.JSX.Element {
             paddingVertical: theme.spacing.sm,
             color: theme.colors.textPrimary,
             marginTop: theme.spacing.sm,
+          }}
+        />
+        <Button
+          label={t.enrol.devPasteFromClipboard}
+          accessibilityLabel={t.enrol.devPasteFromClipboard}
+          tone="neutral"
+          testID="enrol-dev-clipboard-button"
+          onPress={() => {
+            // حافظةُ **الجهاز المحاكى** لا حافظة الماك: تُملأ بـ
+            // `xcrun simctl pbcopy booted`، فلا تمرّ الحمولة بشاشةٍ ولا سجل.
+            void (async () => {
+              const text = (await Clipboard.getString()).trim();
+              if (text.length === 0) {
+                setFailureAr(t.enrol.devPasteEmpty);
+                return;
+              }
+              setPasted(text);
+              handled.current = false;
+              await onScanned(text);
+            })();
           }}
         />
         <Button
