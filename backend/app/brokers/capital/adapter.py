@@ -78,6 +78,31 @@ from ...portfolio.book import ClosedTrade, OpenPosition
 from .safety import LIVE_API_ENABLED, LiveApiBlocked, ExecutionLock, assert_environment_allowed
 from .session import CapitalSession
 from .transport import Transport
+def _optional_decimal(value) -> Optional[Decimal]:
+    """رقمٌ من الوسيط أو `None`. الفراغ والنصّ غير الرقمي **ليسا صفراً**."""
+    if value is None or value == "":
+        return None
+    try:
+        return D(str(value))
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _parse_broker_time(value) -> Optional[datetime]:
+    """
+    زمنُ الوسيط. صيغته `2026-09-04T13:00:56.830` بلا منطقة، وهي UTC حين
+    يسمّي الحقل نفسه `...UTC`. يُوسَم صراحةً كي لا يُقارَن زمنٌ بلا منطقة
+    بزمنٍ بها فيرتفع `TypeError` في موضعٍ بعيد.
+    """
+    if not value:
+        return None
+    text = str(value).strip().replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
 
 logger = logging.getLogger(__name__)
 
@@ -171,33 +196,6 @@ class InstrumentNotAllowed(BrokerRejected):
 
 
 @dataclass
-
-def _optional_decimal(value) -> Optional[Decimal]:
-    """رقمٌ من الوسيط أو `None`. الفراغ والنصّ غير الرقمي **ليسا صفراً**."""
-    if value is None or value == "":
-        return None
-    try:
-        return D(str(value))
-    except Exception:  # noqa: BLE001
-        return None
-
-
-def _parse_broker_time(value) -> Optional[datetime]:
-    """
-    زمنُ الوسيط. صيغته `2026-09-04T13:00:56.830` بلا منطقة، وهي UTC حين
-    يسمّي الحقل نفسه `...UTC`. يُوسَم صراحةً كي لا يُقارَن زمنٌ بلا منطقة
-    بزمنٍ بها فيرتفع `TypeError` في موضعٍ بعيد.
-    """
-    if not value:
-        return None
-    text = str(value).strip().replace("Z", "+00:00")
-    try:
-        parsed = datetime.fromisoformat(text)
-    except ValueError:
-        return None
-    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
-
-
 class CapitalComAdapter(BrokerAdapter):
     """
     محوّل Capital.com. broker-neutral من الخارج، CFD-aware من الداخل.
