@@ -59,11 +59,22 @@ export const BUILD_TIME: string = asString(extra.buildTime, 'unknown');
 export const AUTO_LOCK_MINUTES: number = asNumber(extra.autoLockMinutes, 2);
 
 /**
- * بيانات المعاينة. تعمل فقط في التطوير أو عند رفع العلم صراحةً،
- * وكل شاشة تعرضها تحمل وسم «معاينة / Preview».
+ * بيانات المعاينة — **بقرارٍ صريح، لا بنوع البناء**.
+ *
+ * ## العطل الذي أُصلح هنا
+ *
+ * كانت الشرطية `extra.previewData === true || __DEV__`. و`useEndpoint` في
+ * وضع المعاينة **لا يُرسل طلب شبكة إطلاقاً**. فكانت النتيجة أنّ أيّ بناء
+ * تطوير — وهو البناء الوحيد الذي يمكن تشغيله على محاكٍ — لا يصل إلى الخادم
+ * أبداً، ويعرض «لا مركز مفتوح» بينما الحساب يحمل خمسة.
+ *
+ * أي أنّ الوسيلة الوحيدة للتحقّق قبل التسليم كانت مُعطَّلة بالتعريف: كل
+ * فحصٍ على المحاكي يفحص الثوابت، لا النظام.
+ *
+ * فالمعاينة تُطلب الآن: `EXPO_PUBLIC_PREVIEW_DATA=1`. وكل شاشة تعرضها تبقى
+ * تحمل وسم «معاينة / Preview».
  */
-export const PREVIEW_DATA_ENABLED: boolean =
-  extra.previewData === true || (typeof __DEV__ !== 'undefined' && __DEV__ === true);
+export const PREVIEW_DATA_ENABLED: boolean = extra.previewData === true;
 
 /** بادئة مجال الجوال. */
 export const API_PREFIX = '/api/mobile/v1';

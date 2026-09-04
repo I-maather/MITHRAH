@@ -18,6 +18,22 @@ import SettingsScreen from '../app/(app)/settings';
 import SystemScreen from '../app/(app)/system';
 import HistoryScreen from '../app/(app)/history';
 import { MIN_TOUCH_TARGET } from '@/theme';
+
+/**
+ * **وضعُ المعاينة يُطلَب هنا صراحةً.**
+ *
+ * كان `PREVIEW_DATA_ENABLED` يصير `true` تلقائياً حين `__DEV__` — وهي صحيحة
+ * داخل Jest. فكانت هذه الشاشات تُختبَر على بيانات المعاينة بلا أن يُعلن ذلك،
+ * وكان وضعُ المعاينة يمنع طلب الشبكة، فبقي مسار الخادم بلا اختبارٍ هنا
+ * (يغطّيه `sparse-data.test.tsx` صراحةً).
+ *
+ * صار الافتراضُ إطفاءً، فيُعلَن الاعتماد بدل أن يُورَث.
+ */
+jest.mock('@/api/config', () => ({
+  ...jest.requireActual('@/api/config'),
+  PREVIEW_DATA_ENABLED: true,
+}));
+
 import { renderWithHarness } from './helpers';
 
 /**

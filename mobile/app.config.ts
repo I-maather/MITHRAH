@@ -33,7 +33,10 @@ const apiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL ?? DEFAULT_API_BASE_URL;
 /** دقائق الخمول قبل القفل التلقائي. */
 const autoLockMinutes = Number(process.env.EXPO_PUBLIC_AUTO_LOCK_MINUTES ?? '2');
 
-/** تفعيل بيانات المعاينة صراحةً (وسوم «معاينة» تظهر في الواجهة). */
+/**
+ * تفعيل بيانات المعاينة — **صراحةً وحدها**. لا يُفعّلها كون البناء تطويرياً:
+ * وضعُ المعاينة يمنع طلب الشبكة، فبناءُ التطوير كان لا يصل إلى الخادم أبداً.
+ */
 const previewData = process.env.EXPO_PUBLIC_PREVIEW_DATA === '1';
 
 /**
