@@ -136,14 +136,37 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
-    if STOP_DISTANCE < details.min_stop_distance:
+    entry = quote.ask
+    # **الحدُّ يُحلّ إلى وحدة السعر قبل أن يُقارَن.** كان هذا السطر يقارن
+    # `0.0020` بـ`0.01` مباشرةً، و`0.01` عند هذا الوسيط
+    # `{"unit":"PERCENTAGE","value":0.01}` — أي ٠٫٠١٪ من السعر = ١٫١٦ نقطة
+    # على EURUSD، لا ١٠٠ نقطة. فكان يرفض وقفاً يفوق الحدّ الحقيقي
+    # سبعة عشر ضعفاً. وهذا آخرُ موضعٍ بقي فيه الخطأ الأصلي بعد
+    # إصلاح المحوّل ومحرّك المخاطر — والتشخيصُ أولى المواضع التي
+    # يجب ألّا يكذب فيها القياس، لأنّه المكان الذي نحتكم إليه حين نشكّ في البقية.
+    min_stop = details.min_stop_price_at(entry)
+    if details.min_stop_spec_unresolved or min_stop is None:
         print(
-            f"{BAD}⛔ وقفنا {STOP_DISTANCE} دون حدّ الوسيط "
-            f"{details.min_stop_distance} (كلاهما بوحدة السعر) — سيُرفَض.{END}",
+            f"{BAD}⛔ حدُّ الوقف عند الوسيط غير قابل للحلّ إلى وحدة السعر:{END}\n"
+            f"   القيمة={details.min_stop_distance} · "
+            f"الوحدة={details.min_stop_distance_unit!r} · المرجع={entry}\n"
+            f"   لا أُرسل أمراً بحدٍّ لا أعرف وحدته.",
             file=sys.stderr,
         )
         return 1
-    entry = quote.ask
+    if STOP_DISTANCE < min_stop:
+        print(
+            f"{BAD}⛔ وقفنا {STOP_DISTANCE} دون حدّ الوسيط المحلول {min_stop} "
+            f"(من {details.min_stop_distance} "
+            f"{details.min_stop_distance_unit} عند {entry}) — سيُرفَض.{END}",
+            file=sys.stderr,
+        )
+        return 1
+    print(
+        f"{DIM}   حدُّ الوسيط {details.min_stop_distance} "
+        f"{details.min_stop_distance_unit} ⇐ {min_stop} بوحدة السعر · "
+        f"ووقفنا {STOP_DISTANCE} فوقه{END}"
+    )
     stop = entry - STOP_DISTANCE
     target = entry + TARGET_DISTANCE
     print(f"{DIM}   السعر {entry} · الكمية {size} · وقف {stop} · هدف {target}{END}")
