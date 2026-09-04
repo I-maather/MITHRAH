@@ -147,3 +147,40 @@ def test_devices_and_tokens_are_not_disturbed_by_the_absorption(state_path):
 
     reloaded = service(state_path)
     assert device.device_id in reloaded._devices
+
+
+# ---------------------------------------------------------------------------
+# الحمولة نصّاً — للمحاكي، لا كاميرا فيه
+# ---------------------------------------------------------------------------
+
+def test_raw_prints_the_payload_alone_and_nothing_else(state_path, capsys):
+    """
+    `--raw` مخرَجٌ للحافظة لا للشاشة: الحمولة سطراً واحداً بلا رمزٍ ولا شرح،
+    كي تُوجَّه إلى `pbcopy` فلا تمرّ بسجلٍّ ولا تُلتقط في صورة.
+    """
+    from app.mobile.pairing import main
+
+    code = main([
+        "--backend", "https://example.invalid",
+        "--state", str(state_path),
+        "--raw",
+    ])
+    assert code == 0
+
+    out = capsys.readouterr().out.strip()
+    payload = json.loads(out)                     # سطرٌ واحد، JSON صالح
+    assert "\n" not in out
+    assert "\x1b" not in out                      # لا مسحُ شاشة ولا ألوان
+
+    # التحدّي نفسه على القرص — لا مسارٌ موازٍ ولا مخزنٌ آخر.
+    ids = {c["challenge_id"] for c in challenges_on_disk(state_path)}
+    assert payload["c"] in ids or payload.get("challenge_id") in ids
+
+
+def test_raw_still_refuses_a_loopback_backend(state_path, capsys):
+    """السهولة لا تُسقط الحارس: `127.0.0.1` تعني الجوالَ نفسه هنا أيضاً."""
+    from app.mobile.pairing import main
+
+    assert main(["--backend", "http://127.0.0.1:8000", "--state", str(state_path), "--raw"]) == 2
+    assert capsys.readouterr().out.strip() == ""
+    assert challenges_on_disk(state_path) == []
