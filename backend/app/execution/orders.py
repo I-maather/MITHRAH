@@ -16,6 +16,7 @@ from decimal import Decimal
 from enum import Enum
 from typing import Optional
 
+from .journal import ExecutionJournal, JournalUnavailable
 from ..audit.log import Actor, AuditAction, AuditLog, canonical_json
 from ..brokers.base import BrokerAdapter, BrokerRejected, BrokerTimeout
 from ..contracts import (
@@ -147,8 +148,22 @@ class ExecutionService:
     broker: BrokerAdapter
     audit: AuditLog
     guard: IdempotencyGuard = field(default_factory=IdempotencyGuard)
+    #: أثرُ الأمر في القاعدة. بلا مصنعِ جلساتٍ يبقى معطَّلاً — وهو ما تحتاجه
+    #: الاختبارات الوحدوية؛ أمّا الخدمة فتمرّره دائماً، ويحرس ذلك اختبار.
+    journal: "ExecutionJournal" = field(default_factory=lambda: ExecutionJournal())
 
     def submit(self, intent: OrderIntent) -> SubmissionResult:
+        """
+        الغلاف: يُرسل، ثم **يكتب الحسم مهما كان المآل**.
+
+        الكتابة بعد الإرسال لا تُسقط النتيجة أبداً: التنفيذ وقع، وفشلُ
+        تسجيله لا يُنكره — تبقى المحاولة غير محسومة فيقفل الإقلاع القادم.
+        """
+        result = self._submit(intent)
+        self.journal.settled(intent, result)
+        return result
+
+    def _submit(self, intent: OrderIntent) -> SubmissionResult:
         # 1) حماية من التكرار
         if self.guard.seen(intent.idempotency_key):
             self.audit.record(
@@ -178,7 +193,31 @@ class ExecutionService:
                 intent, None,
             )
 
-        # 3) الإرسال. نسجّل المفتاح *قبل* الإرسال: إن ضاع الرد، لا نعيد الإرسال أبداً.
+        # 3) **الأثر قبل الإرسال.** النيّة والمحاولة تُكتبان في القاعدة أوّلاً:
+        # حتى لو انقطعت العملية بعد الإرسال بلحظة، المحاولة مسجَّلة فيقفل
+        # الإقلاع القادم على الدخول حتى تُقرأ حالة الوسيط.
+        #
+        # وإن تعذّرت الكتابة **لا يُرسَل شيء**: إرسالٌ بلا أثر أسوأ من عدم
+        # الإرسال، لأنّ عدم الإرسال معلوم.
+        try:
+            self.journal.opened(
+                intent,
+                broker=self.broker.name,
+                environment=str(getattr(self.broker, "environment", "demo")),
+            )
+        except JournalUnavailable as exc:
+            self.audit.record(
+                actor=Actor.SYSTEM, action=AuditAction.ORDER_REJECTED,
+                decision="JOURNAL_UNAVAILABLE", reason_ar=str(exc),
+                source="ExecutionService", related_id=intent.client_order_id,
+            )
+            return SubmissionResult(
+                SubmissionOutcome.REJECTED,
+                f"لم يُرسَل الأمر: {exc}",
+                intent, None,
+            )
+
+        # نسجّل المفتاح *قبل* الإرسال: إن ضاع الرد، لا نعيد الإرسال أبداً.
         self.guard.remember(intent.idempotency_key)
         self.audit.record(
             actor=Actor.SYSTEM, action=AuditAction.ORDER_SUBMITTED,

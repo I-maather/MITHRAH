@@ -220,7 +220,18 @@ def build_system(settings: Settings | None = None) -> SystemState:
         notifier=lambda event: record_trigger(session, event),
     )
     risk_engine = RiskEngine(limits)
-    execution = ExecutionService(broker=broker, audit=audit, guard=IdempotencyGuard())
+    # **الأثر موصول.** بلا `session_factory` تبقى الجداول فارغة كما كانت
+    # يوم 2026-09-04: أربعةُ جداولٍ مصمَّمة ومختبَرة وصفرُ صفوفٍ فيها بعد
+    # يومٍ من التشغيل الحقيقي — وحارسُ «محاولةٌ غير محسومة» يقرأ الفراغ
+    # فيمرّ دائماً.
+    from ..execution.journal import ExecutionJournal
+
+    execution = ExecutionService(
+        broker=broker,
+        audit=audit,
+        guard=IdempotencyGuard(),
+        journal=ExecutionJournal(session_factory=get_session),
+    )
 
     registry = StrategyRegistry()
     registry.register(TrendPullbackV1())
