@@ -1,5 +1,5 @@
 {
-  "__comment_ar__": "الشكل المرجعي لعقد الجوال. يُفحَص من الطرفين: الخادم في backend/tests/test_mobile_contract.py، والتطبيق في mobile/__tests__/contract.test.ts. تغييرُ طرفٍ وحده يُسقط اختباراً.",
+  "__comment_ar__": "شكلُ الحمولة المرجعي بين الخادم والتطبيق. حُدِّث 2026-09-04: أُضيفت `sync` إلى كل قسمٍ يقرأ المحفظة، وصارت `position.has_position` تحتمل null لأن «لا أعرف» ليست «لا»، وصار `trades` يحمل حالة المزامنة والمحقَّق الكلي. الشاشة تفرّع على `sync.ok` قبل أي حقلٍ آخر.",
   "__non_nullable_paths__": [
     "candles.instruments",
     "candles.levels",
@@ -17,9 +17,13 @@
     "performance.calibration",
     "performance.sample_size",
     "performance.sufficient_sample",
-    "position.has_position",
+    "performance.sync",
     "position.notes_ar",
+    "position.positions",
     "position.protection_held_by_broker",
+    "position.sync",
+    "position.sync.ok",
+    "position.sync.stale",
     "profiles.available_profiles",
     "profiles.available_profiles[].description_ar",
     "profiles.available_profiles[].limits",
@@ -60,7 +64,11 @@
     "status.market.is_open",
     "status.market.reason_ar",
     "status.system_state",
-    "trades.trades"
+    "sync.ok",
+    "sync.stale",
+    "trades.sync",
+    "trades.trades",
+    "trades.unavailable"
   ],
   "status": {
     "broker": {
@@ -279,41 +287,84 @@
     "current_price": "nullable",
     "direction_ar": "nullable",
     "entry_price": "nullable",
-    "has_position": "boolean",
+    "has_position": "nullable",
     "instrument": "nullable",
     "instrument_ar": "nullable",
     "notes_ar": [
       "string"
     ],
     "notional_display": "nullable",
+    "open_count": "nullable",
     "opened_utc": "nullable",
+    "positions": [
+      {
+        "id": "nullable",
+        "instrument": "nullable",
+        "instrument_ar": "nullable",
+        "direction_ar": "nullable",
+        "opened_utc": "nullable",
+        "entry_price": "nullable",
+        "current_price": "nullable",
+        "stop_price": "nullable",
+        "take_profit_price": "nullable",
+        "size_display": "nullable",
+        "notional_display": "nullable",
+        "unrealised_pnl": "nullable",
+        "unrealised_pnl_sign": "nullable",
+        "risk_at_stop": "nullable",
+        "protection_held_by_broker": "boolean",
+        "strategy_ar": "nullable",
+        "kind": "string"
+      }
+    ],
     "protection_held_by_broker": "boolean",
     "risk_at_stop": "nullable",
     "size_display": "nullable",
     "stop_price": "nullable",
     "strategy_ar": "nullable",
+    "sync": {
+      "ok": "boolean",
+      "reason_code": "string",
+      "error_ar": "string",
+      "last_sync_utc": "nullable",
+      "age_seconds": "nullable",
+      "stale": "boolean"
+    },
     "take_profit_price": "nullable",
+    "total_unrealised": "nullable",
+    "unprotected_count": "nullable",
     "unrealised_pnl": "nullable",
     "unrealised_pnl_sign": "nullable"
   },
   "trades": {
+    "realised_pnl_total": "nullable",
+    "sync": {
+      "ok": "boolean",
+      "reason_code": "string",
+      "error_ar": "string",
+      "last_sync_utc": "nullable",
+      "age_seconds": "nullable",
+      "stale": "boolean"
+    },
     "trades": [
       {
-        "closed_utc": "string",
-        "direction_ar": "string",
-        "entry_price": "string",
-        "exit_price": "string",
-        "exit_reason_ar": "string",
-        "id": "string",
-        "instrument": "string",
-        "instrument_ar": "string",
-        "opened_utc": "string",
-        "outcome_ar": "string",
-        "realised_pnl": "string",
-        "realised_pnl_sign": "string",
-        "strategy_ar": "string"
+        "closed_utc": "nullable",
+        "direction_ar": "nullable",
+        "entry_price": "nullable",
+        "exit_price": "nullable",
+        "exit_reason_ar": "nullable",
+        "id": "nullable",
+        "instrument": "nullable",
+        "instrument_ar": "nullable",
+        "kind": "string",
+        "opened_utc": "nullable",
+        "outcome_ar": "nullable",
+        "realised_pnl": "nullable",
+        "realised_pnl_sign": "nullable",
+        "strategy_ar": "nullable"
       }
-    ]
+    ],
+    "unavailable": "boolean"
   },
   "performance": {
     "average_r": "nullable",
@@ -327,14 +378,22 @@
       }
     ],
     "expectancy": "nullable",
-    "insufficient_sample_note_ar": "string",
+    "insufficient_sample_note_ar": "nullable",
     "losses": "number",
-    "max_drawdown": "string",
-    "period_end_utc": "string",
-    "period_start_utc": "string",
-    "realised_pnl_total": "string",
+    "max_drawdown": "nullable",
+    "period_end_utc": "nullable",
+    "period_start_utc": "nullable",
+    "realised_pnl_total": "nullable",
     "sample_size": "number",
     "sufficient_sample": "boolean",
+    "sync": {
+      "ok": "boolean",
+      "reason_code": "string",
+      "error_ar": "string",
+      "last_sync_utc": "nullable",
+      "age_seconds": "nullable",
+      "stale": "boolean"
+    },
     "win_rate": "nullable",
     "wins": "number"
   },
@@ -446,5 +505,13 @@
       "target": "nullable"
     },
     "note_ar": "string"
+  },
+  "sync": {
+    "ok": "boolean",
+    "reason_code": "string",
+    "error_ar": "string",
+    "last_sync_utc": "nullable",
+    "age_seconds": "nullable",
+    "stale": "boolean"
   }
 }

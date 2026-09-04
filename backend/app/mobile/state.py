@@ -32,7 +32,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Any
+from typing import Any, Optional
 
 from ..clock import now_utc, forex_market_status
 
@@ -460,7 +460,10 @@ def _intelligence(sys: Any) -> dict[str, Any]:
 
 def _sync(sys: Any) -> dict[str, Any]:
     """
-    حالةُ المزامنة — تُعرَض دائماً، وهي التي تمنع قراءة الفراغ اطمئناناً.
+    حالةُ المزامنة — تُعرَض دائماً، وهي ما يمنع قراءةَ الفراغ اطمئناناً.
+
+    الشاشة تفرّع على `ok` **قبل** أي حقلٍ آخر: `ok=False` تعني «لم أقرأ»،
+    ولا تعني «لا شيء».
     """
     from ..clock import now_utc
 
@@ -469,7 +472,7 @@ def _sync(sys: Any) -> dict[str, Any]:
         return {
             "ok": False,
             "reason_code": "NOT_ATTEMPTED",
-            "error_ar": "لم تُقرأ المحفظة من الوسيط بعد. لا تُقرأ الشاشة على أنها «لا شيء».",
+            "error_ar": "لم تُقرأ المحفظة من الوسيط بعد.",
             "last_sync_utc": None,
             "age_seconds": None,
             "stale": True,
@@ -485,51 +488,66 @@ def _sync(sys: Any) -> dict[str, Any]:
     }
 
 
-def _one_position(position: Any) -> dict[str, Any]:
-    def _text(value):
-        return None if value is None else str(value)
+def _text(value: Any) -> Optional[str]:
+    return None if value is None else str(value)
 
+
+def _sign(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    return "+" if value > 0 else ("-" if value < 0 else "0")
+
+
+def _one_position(position: Any) -> dict[str, Any]:
     return {
-        "instrument": position.symbol,
-        "instrument_ar": position.symbol,
-        "direction": position.direction,
+        "id": position.deal_id or None,
+        "instrument": position.symbol or None,
+        "instrument_ar": position.symbol or None,
         "direction_ar": "بيع" if position.direction == "SELL" else "شراء",
-        "size_display": _text(abs(position.quantity)),
         "opened_utc": position.opened_utc.isoformat() if position.opened_utc else None,
         "entry_price": _text(position.entry_price),
+        "current_price": None,
         "stop_price": _text(position.stop_price),
         "take_profit_price": _text(position.take_profit_price),
+        "size_display": _text(abs(position.quantity)),
+        "notional_display": None,
         "unrealised_pnl": _text(position.unrealised_pnl),
-        "unrealised_pnl_sign": (
-            None if position.unrealised_pnl is None
-            else ("+" if position.unrealised_pnl > 0 else ("-" if position.unrealised_pnl < 0 else "0"))
-        ),
+        "unrealised_pnl_sign": _sign(position.unrealised_pnl),
         "risk_at_stop": _text(position.risk_at_stop),
-        "protected": position.is_protected,
-        "protection_held_by_broker": position.is_protected,
-        "deal_id": position.deal_id,
-        "deal_reference": position.deal_reference,
-        "kind": position.kind,
+        "protection_held_by_broker": bool(position.is_protected),
         "strategy_ar": position.strategy_ar,
-        "currency": position.currency,
+        "kind": position.kind,
     }
+
+
+#: الحقول التي تصفها الشاشة القديمة لمركزٍ واحد. تبقى كلّها حاضرةً دائماً.
+_EMPTY_POSITION = {
+    "instrument": None, "instrument_ar": None, "direction_ar": None,
+    "opened_utc": None, "entry_price": None, "current_price": None,
+    "stop_price": None, "take_profit_price": None, "size_display": None,
+    "notional_display": None, "unrealised_pnl": None,
+    "unrealised_pnl_sign": None, "risk_at_stop": None,
+    "protection_held_by_broker": True, "strategy_ar": None,
+}
 
 
 def _position(sys: Any) -> dict[str, Any]:
     """
     المراكز المفتوحة **كما يقولها الوسيط**.
 
-    كانت هذه الدالّة تُعيد `None` في كل حقل وجملةً واحدة: «لا مركز مفتوح.
-    لم يُرسَل أي أمر، والتنفيذ مقفول». كُتبت يوم كانت صادقة، وبقيت بعد أن
-    كذبت: يوم 2026-09-04 كان على الحساب خمسةُ مراكز والشاشة تقول لا شيء.
+    كانت تُعيد `None` في كل حقل وجملةً واحدة: «لا مركز مفتوح. لم يُرسَل أي
+    أمر، والتنفيذ مقفول». كُتبت يوم كانت صادقة، وبقيت بعد أن كذبت: يوم
+    2026-09-04 كان على الحساب خمسةُ مراكز والشاشة تقول لا شيء.
 
-    و«لا مركز» و«لم أستطع القراءة» لا يُعرضان بصورةٍ واحدة أبداً.
+    و`has_position` صارت تحتمل `null`: «لا أعرف» ليست «لا». والشاشة تقرأ
+    `sync.ok` أوّلاً.
     """
     sync = _sync(sys)
     snapshot = getattr(sys, "portfolio", None)
 
     if snapshot is None or not snapshot.ok:
         return {
+            **_EMPTY_POSITION,
             "sync": sync,
             "has_position": None,
             "open_count": None,
@@ -542,27 +560,35 @@ def _position(sys: Any) -> dict[str, Any]:
             ],
         }
 
-    positions = [_one_position(p) for p in snapshot.open_positions]
-    total = snapshot.total_unrealised()
-    notes = []
-    if not positions:
-        notes.append("لا مركز مفتوح — قراءةٌ ناجحة من الوسيط، لا افتراض.")
+    rows = [_one_position(p) for p in snapshot.open_positions]
     unprotected = snapshot.unprotected
+    total = snapshot.total_unrealised()
+
+    notes: list[str] = []
+    if not rows:
+        notes.append("لا مركز مفتوح — قراءةٌ ناجحة من الوسيط، لا افتراض.")
+    else:
+        notes.append(f"{len(rows)} مركزاً مفتوحاً، مقروءةً من حساب الوسيط.")
     if unprotected:
         notes.append(
-            "مراكز بلا وقفٍ عند الوسيط: "
+            "بلا وقفٍ عند الوسيط: "
             + "، ".join(p.symbol for p in unprotected)
             + " — حالةٌ حرجة."
         )
+    if sync["stale"]:
+        notes.append("القراءة قديمة — قد تكون الأرقام متأخّرة عن السوق.")
+
+    primary = _one_position(snapshot.open_positions[0]) if rows else dict(_EMPTY_POSITION)
+    primary.pop("id", None)
+    primary.pop("kind", None)
     return {
+        **primary,
         "sync": sync,
-        "has_position": len(positions) > 0,
-        "open_count": len(positions),
-        "positions": positions,
+        "has_position": len(rows) > 0,
+        "open_count": len(rows),
+        "positions": rows,
         "unprotected_count": len(unprotected),
-        "total_unrealised": None if total is None else str(total),
-        # يبقى الحقل المفرد للتوافق مع الشاشة القديمة — أوّلُ مركزٍ مفتوح.
-        **(_one_position(snapshot.open_positions[0]) if positions else {}),
+        "total_unrealised": _text(total),
         "notes_ar": notes,
     }
 
@@ -571,35 +597,47 @@ def _trades(sys: Any) -> dict[str, Any]:
     """
     الصفقات المغلقة ونتائجها المحقّقة.
 
-    كانت `lambda: []` مع تعليقٍ يقول «قائمة فارغة صادقة: لم يُرسَل أمرٌ
-    قط». وصارت كاذبةً يوم أُغلقت أوّل صفقتين بنتيجةٍ ‎−0.35‎ دولار.
+    كانت `lambda: []` بتعليقٍ يقول «قائمة فارغة صادقة: لم يُرسَل أمرٌ قط».
+    وصارت كاذبةً يوم أُغلقت أوّل صفقتين بمحقَّقٍ ‎−0.35‎ دولار.
+
+    والحقول التي لا يعطيها دفترُ المعاملات — سعرُ الدخول والخروج وسببُ
+    الخروج — تبقى `null` **ولا تُخمَّن**. رقمٌ مخترعٌ في شاشة نتائج أسوأ
+    من خانةٍ فارغة.
     """
     sync = _sync(sys)
     snapshot = getattr(sys, "portfolio", None)
     if snapshot is None or not snapshot.ok:
-        return {"sync": sync, "trades": [], "unavailable": True}
+        return {
+            "sync": sync, "trades": [], "unavailable": True,
+            "realised_pnl_total": None,
+        }
 
     rows = []
     for trade in snapshot.closed_trades:
+        outcome = trade.is_win
         rows.append({
-            "instrument": trade.symbol,
-            "realised_pnl": None if trade.realised_pnl is None else str(trade.realised_pnl),
-            "currency": trade.currency,
+            "id": trade.deal_id or trade.reference or None,
+            "instrument": trade.symbol or None,
+            "instrument_ar": trade.symbol or None,
+            "direction_ar": None,
+            "opened_utc": None,
             "closed_utc": trade.closed_utc.isoformat() if trade.closed_utc else None,
-            "is_win": trade.is_win,
-            "deal_id": trade.deal_id,
-            "reference": trade.reference,
-            "note": trade.note,
-            "kind": trade.kind,
+            "entry_price": None,
+            "exit_price": None,
+            "exit_reason_ar": trade.note or None,
+            "outcome_ar": (
+                None if outcome is None else ("رابحة" if outcome else "خاسرة")
+            ),
+            "realised_pnl": _text(trade.realised_pnl),
+            "realised_pnl_sign": _sign(trade.realised_pnl),
             "strategy_ar": trade.strategy_ar,
+            "kind": trade.kind,
         })
     return {
         "sync": sync,
         "trades": rows,
         "unavailable": False,
-        "realised_pnl_total": (
-            None if snapshot.realised_pnl_total is None else str(snapshot.realised_pnl_total)
-        ),
+        "realised_pnl_total": _text(snapshot.realised_pnl_total),
     }
 
 
@@ -607,17 +645,18 @@ def _performance(sys: Any) -> dict[str, Any]:
     """
     **الفراغ ليس صفراً، والعيّنة الصغيرة ليست أداءً.**
 
-    تُقرأ الأرقام من الصفقات المغلقة عند الوسيط. وتبقى النِّسب `null` حتى
-    تكفي العيّنة — لا `0` — كي لا تُقرأ يوماً على أنها نتيجةٌ قيست فكانت
-    صفراً. والمحقّق يُعرَض دائماً لأنه **مقيس**، لا مستنتَج.
+    المحقَّق يُعرَض لأنه **مقيس**؛ والنِّسب تبقى `null` حتى تكفي العيّنة، كي
+    لا تُقرأ يوماً على أنها نتيجةٌ قيست فكانت صفراً.
     """
-    snapshot = getattr(sys, "portfolio", None)
     sync = _sync(sys)
+    snapshot = getattr(sys, "portfolio", None)
     if snapshot is None or not snapshot.ok:
         return {
-            "sync": sync, "sample_size": None, "sufficient_sample": False,
-            "insufficient_sample_note_ar": sync["error_ar"] or "لم تُقرأ المحفظة.",
-            "wins": None, "losses": None, "win_rate": None, "average_r": None,
+            "sync": sync, "sample_size": 0, "sufficient_sample": False,
+            "insufficient_sample_note_ar": (
+                sync["error_ar"] or "لم تُقرأ المحفظة من الوسيط — لا عيّنة تُقاس."
+            ),
+            "wins": 0, "losses": 0, "win_rate": None, "average_r": None,
             "expectancy": None, "max_drawdown": None, "realised_pnl_total": None,
             "calibration": [], "period_start_utc": None, "period_end_utc": None,
         }
@@ -632,8 +671,8 @@ def _performance(sys: Any) -> dict[str, Any]:
         "sufficient_sample": enough,
         "insufficient_sample_note_ar": (
             None if enough else
-            f"العيّنة {len(closed)} صفقة — أقلّ من ثلاثين. لا نسبة ربح ولا توقّع "
-            "يُقرأ منها، والمحقّق أدناه مقيسٌ لا مستنتَج."
+            f"العيّنة {len(closed)} صفقة — أقلّ من ثلاثين. لا نسبة ربح ولا "
+            "توقّع يُقرأ منها. والمحقَّق أدناه مقيسٌ لا مستنتَج."
         ),
         "wins": wins,
         "losses": losses,
@@ -641,9 +680,7 @@ def _performance(sys: Any) -> dict[str, Any]:
         "average_r": None,
         "expectancy": None,
         "max_drawdown": None,
-        "realised_pnl_total": (
-            None if snapshot.realised_pnl_total is None else str(snapshot.realised_pnl_total)
-        ),
+        "realised_pnl_total": _text(snapshot.realised_pnl_total),
         "calibration": [],
         "period_start_utc": None,
         "period_end_utc": None,
