@@ -1,7 +1,7 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
 import React, { useRef, useState } from 'react';
-import { View } from 'react-native';
+import { TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useSession } from '@/auth/SessionProvider';
@@ -34,6 +34,19 @@ import { useTheme } from '@/theme';
  *
  * فيُحفَظ نصّ الرمز الذي رُفض ويُتجاهَل تماماً بعدها. ورمزٌ **جديد** يختلف
  * نصّه فيُعالَج فوراً بلا لمسة — وهو ما تحتاجه المالكة بالضبط.
+ *
+ * ## الاقتران على المحاكي
+ *
+ * المحاكي لا يملك كاميرا. فبلا مدخلٍ آخر لا يمكن **إطلاقاً** التحقّق من أن
+ * التطبيق يعرض بيانات الخادم الحقيقية قبل تسليم بناءٍ إلى الجهاز — أي أن كل
+ * دليلٍ بصريّ يبقى مؤجَّلاً إلى ما بعد التسليم، وهو عكس الترتيب الصحيح.
+ *
+ * فحقلُ لصقٍ يظهر تحت `__DEV__` وحده. وليس مساراً موازياً: الحمولة نفسها،
+ * و`enrolDevice` نفسها، والتحدّي نفسه لمرةٍ واحدة، والخادم نفسه. المختلف هو
+ * وسيلة نقل الحمولة إلى التطبيق — عدسةٌ هناك، حافظةٌ هنا.
+ *
+ * و`__DEV__` تُطوى إلى `false` في حزمة الإصدار، فيسقط الفرع كلّه من الحزمة
+ * القابلة للتثبيت. يحرس ذلك اختبارٌ صريح.
  */
 export default function EnrolScreen(): React.JSX.Element {
   const theme = useTheme();
@@ -47,6 +60,8 @@ export default function EnrolScreen(): React.JSX.Element {
   const handled = useRef(false);
   /** نصّ آخر رمز رُفض — لا يُعاد إرساله أبداً. */
   const rejectedRaw = useRef<string | null>(null);
+  /** حقل اللصق — تطوير فقط. */
+  const [pasted, setPasted] = useState('');
 
   const onScanned = async (raw: string): Promise<void> => {
     if (handled.current) {
@@ -75,6 +90,58 @@ export default function EnrolScreen(): React.JSX.Element {
     } finally {
       setBusy(false);
     }
+  };
+
+  /**
+   * اللصق — تطوير فقط. الشرط ثابتٌ يُطوى وقت البناء، فلا يبقى منه شيء في
+   * حزمة الإصدار.
+   */
+  const devPaste = (): React.JSX.Element | null => {
+    if (!__DEV__) {
+      return null;
+    }
+    return (
+      <Card testID="enrol-dev-paste">
+        <Text variant="bodyStrong">{t.enrol.devPasteTitle}</Text>
+        <Text variant="caption" tone="secondary">
+          {t.enrol.devPasteBody}
+        </Text>
+        <TextInput
+          testID="enrol-dev-paste-input"
+          value={pasted}
+          onChangeText={setPasted}
+          placeholder={t.enrol.devPastePlaceholder}
+          placeholderTextColor={theme.colors.textTertiary}
+          autoCapitalize="none"
+          autoCorrect={false}
+          secureTextEntry
+          style={{
+            borderWidth: 1,
+            borderColor: theme.colors.border,
+            borderRadius: theme.radii.md,
+            paddingHorizontal: theme.spacing.md,
+            paddingVertical: theme.spacing.sm,
+            color: theme.colors.textPrimary,
+            marginTop: theme.spacing.sm,
+          }}
+        />
+        <Button
+          label={t.enrol.devPasteAction}
+          accessibilityLabel={t.enrol.devPasteAction}
+          testID="enrol-dev-paste-button"
+          onPress={() => {
+            const raw = pasted.trim();
+            if (raw.length === 0) {
+              setFailureAr(t.enrol.devPasteEmpty);
+              return;
+            }
+            // القفلان نفسهما: لا يُعاد إرسال حمولةٍ رُفضت، ولا تُرسَل مرتين.
+            handled.current = false;
+            void onScanned(raw);
+          }}
+        />
+      </Card>
+    );
   };
 
   const body = (): React.JSX.Element => {
@@ -133,6 +200,7 @@ export default function EnrolScreen(): React.JSX.Element {
     );
   };
 
+
   return (
     <View
       testID="enrol-screen"
@@ -159,6 +227,8 @@ export default function EnrolScreen(): React.JSX.Element {
       ) : null}
 
       {busy ? <Text variant="caption" tone="secondary">{t.enrol.working}</Text> : null}
+
+      {devPaste()}
 
       {body()}
 
