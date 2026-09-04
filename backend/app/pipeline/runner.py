@@ -542,7 +542,9 @@ class Pipeline:
                 now,
             )
         _max_open = getattr(
-            getattr(self.risk_engine, "limits", None), "max_open_positions", None
+            getattr(getattr(self, "risk", None), "limits", None),
+            "max_open_positions",
+            None,
         )
         if _max_open is not None and len(open_positions) >= int(_max_open):
             return self._no_trade(
