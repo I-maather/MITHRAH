@@ -50,6 +50,13 @@ INSTRUMENT_SPEC_UNRESOLVED = "INSTRUMENT_SPEC_UNRESOLVED"
 CONVERSION_COST_UNMEASURED = "CONVERSION_COST_UNMEASURED"
 TIMEFRAME_MISMATCH = "TIMEFRAME_MISMATCH"
 PORTFOLIO_LIMIT_EXCEEDED = "PORTFOLIO_LIMIT_EXCEEDED"
+#: لم تُقرأ حقيقةُ المحفظة من الوسيط — فلا تُعرَف حدود التعرّض.
+#: حارسٌ أعمى ليس حارساً: يُفشَل مغلقاً ولا يُفتَح مركز.
+RECONCILIATION_NOT_READY = "RECONCILIATION_NOT_READY"
+#: للأداة تعرّضٌ قائم ولا تُجيز الاستراتيجية الإضافة عليه.
+DUPLICATE_INSTRUMENT_EXPOSURE = "DUPLICATE_INSTRUMENT_EXPOSURE"
+#: عددُ المراكز بلغ السقف المعلن في الدستور.
+POSITION_COUNT_EXCEEDED = "POSITION_COUNT_EXCEEDED"
 #: **الرمز نفسه الذي يستعمله المحرّك.** رمزان لسببٍ واحد يجعلان تقرير
 #: الرفض يقسم السبب الواحد قسمين، ويبدو كلٌّ منهما نصف ما هو.
 MARGIN_EXCEEDS_AVAILABLE = "MARGIN_EXCEEDS_AVAILABLE_FUNDS"

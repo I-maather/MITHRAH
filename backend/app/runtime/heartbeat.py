@@ -30,6 +30,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 import logging
 from datetime import date, timedelta
 from typing import Optional
@@ -39,6 +40,7 @@ from ..clock import now_utc
 from ..contracts import Bar, DataSource, Decision
 from ..money import D
 from ..portfolio.book import read_portfolio, unavailable, PORTFOLIO_NOT_ATTEMPTED
+from ..risk.size_ladder import RECONCILIATION_NOT_READY
 from ..pipeline.runner import MacroAssessment, NewsBlackout, PipelineResult
 from ..risk.session_state import load_session_state
 from ..scheduling import JobKind
@@ -295,6 +297,60 @@ def register_runtime_jobs(state, *, interval_seconds: int = DEFAULT_INTERVAL_SEC
         # في المنتصف — وهو ما لا يمكن إعادة إنتاجه ولا تفسيره في التدقيق.
         session_state = load_session_state(
             state.db_session, baseline_equity=state.limits.baseline_equity
+        )
+
+        # ---------------------------------------------------------------
+        # **حالةُ التعرّض تُصحَّح من الوسيط قبل أن يُسأل محرّك المخاطر.**
+        #
+        # `load_session_state` تقرأ `open_symbols` من جدول `TradeRow` حيث
+        # `closed_at_utc IS NULL`. والجدول **لا يُكتَب فيه عند فتح مركز** —
+        # فيعود فارغاً دائماً، فتقرأ بوابةُ مصدر التعرّض «لا مركز مفتوح»
+        # ويقرأ سقفُ المراكز صفراً.
+        #
+        # وأثرُ ذلك مقيس: يوم 2026-09-04 بلغت المراكز المفتوحة عند الوسيط
+        # **خمسة** والسقف المعلن في الدستور ثلاثة، ولم يمنع شيء — لأن
+        # الشرط مكتوبٌ في `engine.py` ويقرأ عدّاداً لا يملؤه أحد.
+        #
+        # فيُصحَّح من حساب الوسيط: هو المرجع، لا ذاكرتنا. ودفترٌ دائم يعبر
+        # إعادة التشغيل يبقى مطلوباً (C1) للنسبة والتاريخ — لكن **حارس
+        # اللحظة يجب أن يرى اللحظة**.
+        #
+        # وحين تتعذّر القراءة **لا يُفتَح مركز**: حارسٌ أعمى ليس حارساً،
+        # والفشلُ هنا مغلقٌ لا مفتوح.
+        # ---------------------------------------------------------------
+        snapshot = getattr(state, "portfolio", None)
+        if snapshot is None or not snapshot.ok:
+            state.last_result = _no_trade(
+                RECONCILIATION_NOT_READY,
+                (
+                    "لم تُقرأ المراكز من الوسيط، فلا تُعرَف حدود التعرّض. "
+                    "لا يُفتَح مركزٌ على جهلٍ بما هو مفتوح."
+                ),
+                "runtime",
+            )
+            return
+
+        reserved: list[str] = []
+        try:
+            for order in state.broker.get_orders(""):
+                symbol = getattr(order, "symbol", "") or ""
+                if symbol:
+                    reserved.append(symbol.upper())
+        except Exception:  # noqa: BLE001
+            # أمرٌ معلّقٌ لا يُقرأ = تعرّضٌ محجوزٌ مجهول. يُفشَل مغلقاً.
+            state.last_result = _no_trade(
+                RECONCILIATION_NOT_READY,
+                "تعذّرت قراءة الأوامر المعلّقة — وهي تعرّضٌ محجوز. لا فتحَ مركز.",
+                "runtime",
+            )
+            return
+
+        held = [s.upper() for s in snapshot.exposure_by_symbol()]
+        session_state = replace(
+            session_state,
+            open_positions=len(snapshot.open_positions) + len(reserved),
+            open_symbols=tuple(sorted(set(held) | set(reserved))),
+            unrealized_pnl=snapshot.total_unrealised() or D("0"),
         )
         state.session_state = session_state
 
