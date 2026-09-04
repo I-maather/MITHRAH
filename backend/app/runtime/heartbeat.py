@@ -265,6 +265,30 @@ def register_runtime_jobs(state, *, interval_seconds: int = DEFAULT_INTERVAL_SEC
             state.ledger_error_ar = f"تعذّرت كتابة الدفتر: {type(exc).__name__}."
             logging.getLogger(__name__).warning("ledger sync failed: %s", type(exc).__name__)
 
+        # **الإدارة تعمل والإيقاف قائم.** الإيقاف يمنع فتح المراكز؛ ومركزٌ
+        # مفتوحٌ لا يُدار ليس موقوفاً — هو متروك. والخطّة تُبنى ولا تُنفَّذ
+        # ما لم تكن هناك سياسةٌ معلَنةٌ بدليل: اليوم لا واحدة، فالخطّة فارغة
+        # والمراكز على خروجها الثابت المعتمد.
+        try:
+            from ..db.session import get_session
+            from ..portfolio.ledger import open_rows
+            from ..positions.engine import PositionManager
+            from ..positions.policy import REGISTRY as POLICY_REGISTRY
+
+            snapshot = getattr(state, "portfolio", None)
+            if snapshot is not None and getattr(snapshot, "ok", False):
+                with get_session() as book_session:
+                    state.management_plan = PositionManager(POLICY_REGISTRY).plan(
+                        broker_positions=snapshot.open_positions,
+                        book_rows=open_rows(book_session),
+                        now=snapshot.as_of_utc,
+                    )
+        except Exception as exc:  # noqa: BLE001
+            state.management_error_ar = f"تعذّر بناء خطّة الإدارة: {type(exc).__name__}."
+            logging.getLogger(__name__).warning(
+                "management plan failed: %s", type(exc).__name__
+            )
+
     def run_decision() -> None:
         # **المراقبة قبل البوابة.** تُقرأ المحفظة أولاً كي تبقى الشاشة
         # صادقةً والمطابقة ممكنةً حتى والنظام موقوف.

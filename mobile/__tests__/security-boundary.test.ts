@@ -209,6 +209,8 @@ describe('سطح المسارات', () => {
       'risk',
       'profiles',
       'positions/current',
+      'sync',
+      'management',
       'trades',
       'performance',
       'providers/health',
@@ -284,8 +286,12 @@ describe('لا واجهة تداول في العميل', () => {
         'getCurrentPosition',
         'getDecision',
         'getIntelligence',
+        // 2026-09-04: قراءتان فقط — حالةُ المزامنة، وخطّةُ إدارة المراكز.
+        // كلتاهما قراءة، ولا واحدة تفتح شيئاً ولا تعدّل مركزاً من الجهاز.
+        'getManagement',
         'getNotifications',
         'getPerformance',
+        'getSync',
         'getProfiles',
         'getProviderHealth',
         'getRisk',

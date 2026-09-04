@@ -22,6 +22,7 @@ const ALLOWED: Record<string, string> = {
   chart: '/(app)/chart',
   profiles: '/(app)/profiles',
   position: '/(app)/position',
+  management: '/(app)/management',
   history: '/(app)/history',
   performance: '/(app)/performance',
   providers: '/(app)/providers',

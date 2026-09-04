@@ -669,3 +669,54 @@ export interface DeviceRevokeResult {
   device_id: string;
   at_utc: string;
 }
+
+
+/**
+ * إدارةُ المراكز بعد الفتح.
+ *
+ * `skipped` ليست حشواً: شاشةٌ تعرض الأفعال وحدها تُخفي السؤال الأهمّ —
+ * لماذا لم يتحرّك شيء؟ وكلُّ سياسةٍ معلَنة تظهر بقدراتها وإصدارها، فيُعرَف
+ * ما هو مفعَّلٌ فعلاً لا ما هو مكتوبٌ في وصف الاستراتيجية.
+ */
+export interface ManagementActionView {
+  deal_id: string | null;
+  symbol: string | null;
+  kind: string | null;
+  kind_ar: string | null;
+  reason_ar: string | null;
+  policy_version: string | null;
+  strategy: string | null;
+  strategy_version: string | null;
+  old_value: string | null;
+  new_value: string | null;
+  at_utc: string | null;
+}
+
+export interface ManagementSkipView {
+  deal_id: string | null;
+  symbol: string | null;
+  code: string | null;
+  code_ar: string | null;
+  reason_ar: string | null;
+}
+
+export interface ManagementPolicyView {
+  strategy: string | null;
+  strategy_version: string | null;
+  policy_version: string | null;
+  capabilities: string[];
+  fixed_only: boolean;
+}
+
+export interface ManagementData {
+  sync: SyncView;
+  available: boolean;
+  reason_ar: string | null;
+  plan_at_utc: string | null;
+  action_count: number | null;
+  actions: ManagementActionView[];
+  skipped: ManagementSkipView[];
+  declared_policies: ManagementPolicyView[];
+  dynamic_enabled: boolean;
+  notes_ar: string[];
+}

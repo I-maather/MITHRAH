@@ -15,6 +15,7 @@ import type {
   StatusData,
   TradesData,
   SyncView,
+  ManagementData,
 } from '@/api/types';
 
 /**
@@ -528,6 +529,49 @@ const sync: SyncView = {
   stale: false,
 };
 
+const management: ManagementData = {
+  sync,
+  available: true,
+  reason_ar: '',
+  plan_at_utc: '2026-09-04T17:24:41+00:00',
+  action_count: 1,
+  actions: [
+    {
+      deal_id: 'PREVIEW-1',
+      symbol: 'EURUSD',
+      kind: 'MOVE_STOP',
+      kind_ar: 'نقلُ الوقف',
+      reason_ar: 'ربحٌ بلغ 1.0R — الوقف إلى نقطة الدخول (معاينة).',
+      policy_version: 'preview-1',
+      strategy: 'PREVIEW',
+      strategy_version: 'v0',
+      old_value: '1.15900',
+      new_value: '1.16000',
+      at_utc: '2026-09-04T17:24:41+00:00',
+    },
+  ],
+  skipped: [
+    {
+      deal_id: 'PREVIEW-2',
+      symbol: 'GOLD',
+      code: 'FIXED_ONLY',
+      code_ar: 'سياسةُ خروجٍ ثابت',
+      reason_ar: 'سياسة fixed-1: خروجٌ ثابتٌ بلا تحريك.',
+    },
+  ],
+  declared_policies: [
+    {
+      strategy: 'PREVIEW',
+      strategy_version: 'v0',
+      policy_version: 'preview-1',
+      capabilities: ['BREAK_EVEN', 'FIXED_EXIT'],
+      fixed_only: false,
+    },
+  ],
+  dynamic_enabled: true,
+  notes_ar: ['بيانات معاينة — ليست حالة النظام.'],
+};
+
 export const fixtures = {
   status,
   intelligence,
@@ -536,6 +580,7 @@ export const fixtures = {
   profiles,
   position,
   sync,
+  management,
   trades,
   performance,
   providers,

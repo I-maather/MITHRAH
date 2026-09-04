@@ -285,6 +285,64 @@ class CapitalComAdapter(BrokerAdapter):
             raise CapitalMalformedResponse(f"جسد غير متوقَّع من {path}.")
         return body
 
+    def _put(self, path: str, payload: dict) -> dict:
+        """
+        التعديل — الطريقة الثالثة التي تُغيّر حالةً عند الوسيط.
+
+        القاعدة نفسها: **لا إعادة محاولة عند المهلة ولا عند رفض المصادقة**.
+        طلبُ تعديلٍ قد يكون وصل لا يُعاد؛ وتعديلٌ يُرسَل مرّتين قد يُطبَّق على
+        حالةٍ تغيّرت بينهما. الغموض يُعاد إلى المستدعي ولا يُداوى هنا.
+        """
+        self.session.ensure_session()
+        response = self.transport.send(
+            "PUT", self._url(path), headers=self.session.auth_headers(), json=payload
+        )
+        if response.status in (401, 403):
+            raise CapitalSessionExpired(
+                "رُفضت المصادقة أثناء التعديل. لا تجديد ولا إعادة محاولة: "
+                "الطلب قد يكون وصل."
+            )
+        if response.status == 404:
+            raise CapitalNotFound(f"المسار {path} أعاد 404.")
+        if not response.ok:
+            raise CapitalTransportError(
+                f"استجابة غير ناجحة {response.status} من {path}."
+                f"{_broker_reason(response)}"
+            )
+        body = response.body
+        if not isinstance(body, dict):
+            raise CapitalMalformedResponse(f"جسد غير متوقَّع من {path}.")
+        return body
+
+    def modify_position_protection(
+        self,
+        deal_id: str,
+        *,
+        stop_price: Optional[Decimal] = None,
+        take_profit_price: Optional[Decimal] = None,
+    ) -> str:
+        """
+        يعدّل حمايةَ مركزٍ قائم — **بهويّة الوسيط لا بالرمز**.
+
+        الرمز لا يكفي: كابيتال يسمح بعدّة مراكز على الأداة الواحدة، وكان على
+        GBPUSD ثلاثة في يومٍ واحد. تعديلٌ «على GBPUSD» يصيب أيَّها شاء.
+
+        ولا يُرسَل طلبٌ فارغ: نداءٌ بلا قيمةٍ جديدة يستهلك حدَّ المعدّل ويُدخل
+        غموضاً بلا فائدة.
+
+        يعيد `dealReference` كي تُقرأ نتيجةُ التعديل من الوسيط لا من نيّتنا.
+        """
+        payload: dict = {}
+        if stop_price is not None:
+            payload["stopLevel"] = float(stop_price)
+        if take_profit_price is not None:
+            payload["profitLevel"] = float(take_profit_price)
+        if not payload:
+            raise ValueError("لا قيمةَ جديدة — لا يُرسَل تعديلٌ فارغ.")
+
+        body = self._put(position_path(deal_id), payload)
+        return str(body.get("dealReference") or "")
+
     def _post(self, path: str, payload: dict) -> dict:
         """
         الإرسال الوحيد في هذا المحوّل.

@@ -514,5 +514,58 @@
     "ok": "boolean",
     "reason_code": "string",
     "stale": "boolean"
+  },
+  "management": {
+    "sync": {
+      "age_seconds": "number",
+      "error_ar": "string",
+      "last_sync_utc": "string",
+      "ok": "boolean",
+      "reason_code": "string",
+      "stale": "boolean"
+    },
+    "available": "boolean",
+    "reason_ar": "string",
+    "plan_at_utc": "string",
+    "action_count": "number",
+    "actions": [
+      {
+        "deal_id": "string",
+        "symbol": "string",
+        "kind": "string",
+        "kind_ar": "string",
+        "reason_ar": "string",
+        "policy_version": "string",
+        "strategy": "string",
+        "strategy_version": "string",
+        "old_value": "string",
+        "new_value": "string",
+        "at_utc": "string"
+      }
+    ],
+    "skipped": [
+      {
+        "deal_id": "string",
+        "symbol": "string",
+        "code": "string",
+        "code_ar": "string",
+        "reason_ar": "string"
+      }
+    ],
+    "declared_policies": [
+      {
+        "strategy": "string",
+        "strategy_version": "string",
+        "policy_version": "string",
+        "capabilities": [
+          "string"
+        ],
+        "fixed_only": "boolean"
+      }
+    ],
+    "dynamic_enabled": "boolean",
+    "notes_ar": [
+      "string"
+    ]
   }
 }

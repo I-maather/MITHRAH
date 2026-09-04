@@ -22,6 +22,8 @@ import type {
   ScanData,
   CandlesData,
   PerformanceData,
+  ManagementData,
+  SyncView,
   PositionData,
   ProfilesData,
   ProvidersData,
@@ -165,6 +167,14 @@ export class MobileApiClient {
 
   getCurrentPosition(): Promise<MobileEnvelope<PositionData>> {
     return this.read<PositionData>('positions/current');
+  }
+
+  getSync(): Promise<MobileEnvelope<SyncView>> {
+    return this.read<SyncView>('sync');
+  }
+
+  getManagement(): Promise<MobileEnvelope<ManagementData>> {
+    return this.read<ManagementData>('management');
   }
 
   getTrades(): Promise<MobileEnvelope<TradesData>> {

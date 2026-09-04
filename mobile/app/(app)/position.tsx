@@ -244,6 +244,12 @@ export default function PositionScreen(): React.JSX.Element {
           href="/(app)/chart"
         />
         <NavRow
+          testID="nav-management"
+          label={t.nav.management}
+          hint={t.navHint.management}
+          href="/(app)/management"
+        />
+        <NavRow
           testID="nav-history"
           label={t.nav.history}
           hint={t.navHint.history}

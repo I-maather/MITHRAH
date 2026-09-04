@@ -15,6 +15,10 @@ export const READ_ROUTES = [
   'risk',
   'profiles',
   'positions/current',
+  // حالةُ قراءة المحفظة وحدها — تُسأل قبل أي رقم: «هل قرأتَ؟» قبل «ماذا رأيت؟».
+  'sync',
+  // ما فُعل بالمراكز بعد الفتح، **وما لم يُفعَل ولماذا**.
+  'management',
   'trades',
   'performance',
   'providers/health',

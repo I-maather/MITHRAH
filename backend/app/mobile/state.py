@@ -656,6 +656,93 @@ def _trades(sys: Any) -> dict[str, Any]:
     }
 
 
+#: أسماءُ الأفعال بالعربية — الشاشة لا تعرض رموزاً إنجليزية.
+_ACTION_AR = {
+    "MOVE_STOP": "نقلُ الوقف",
+    "CLOSE": "إغلاقٌ كامل",
+    "PARTIAL_CLOSE": "إغلاقٌ جزئي",
+}
+
+_SKIP_AR = {
+    "NOT_RECONCILED": "لم تُطابَق حقيقتُه لحظتَها",
+    "UNATTRIBUTED": "بلا نسبةٍ إلى قرار",
+    "FIXED_ONLY": "سياسةُ خروجٍ ثابت",
+    "NO_CHANGE": "لا تغيير",
+    "NO_STOP": "لا وقفَ يُقاس به R",
+}
+
+
+def _management(sys: Any) -> dict[str, Any]:
+    """
+    إدارةُ المراكز بعد الفتح — **ما فُعل، وما لم يُفعَل ولماذا**.
+
+    شاشةٌ تعرض الأفعال وحدها تُخفي السؤال الأهمّ: لماذا لم يتحرّك شيء؟ فكلُّ
+    مركزٍ مُتخطّى يظهر بسببه، وكلُّ سياسةٍ معلَنة تظهر بقدراتها وإصدارها.
+
+    والحقيقةُ اليوم صريحة: لا سياسةَ ديناميكيةٍ واحدة مفعّلة، لأنّ الدليل
+    شرطُ التفعيل ولا دليلَ لواحدة. فالمراكز على خروجها الثابت المعتمد.
+    """
+    from ..positions.policy import REGISTRY as _POLICIES
+
+    sync = _sync(sys)
+    plan = getattr(sys, "management_plan", None)
+    error = getattr(sys, "management_error_ar", "") or ""
+
+    declared = [policy.as_dict() for policy in _POLICIES.declared()]
+    dynamic = [d for d in declared if not d["fixed_only"]]
+
+    if plan is None:
+        return {
+            "sync": sync,
+            "available": False,
+            "reason_ar": error or "لم تُبنَ خطّةُ إدارةٍ بعد — المحفظة لم تُقرأ.",
+            "plan_at_utc": None,
+            "action_count": None,
+            "actions": [],
+            "skipped": [],
+            "declared_policies": declared,
+            "dynamic_enabled": bool(dynamic),
+            "notes_ar": [],
+        }
+
+    actions = []
+    for action in plan.actions:
+        row = action.as_dict()
+        row["kind_ar"] = _ACTION_AR.get(action.kind, action.kind)
+        actions.append(row)
+
+    skipped = [
+        {
+            "deal_id": s.deal_id,
+            "symbol": s.symbol,
+            "code": s.code,
+            "code_ar": _SKIP_AR.get(s.code, s.code),
+            "reason_ar": s.reason_ar,
+        }
+        for s in plan.skipped
+    ]
+
+    notes = list(plan.notes_ar)
+    if not dynamic:
+        notes.append(
+            "لا سياسةَ إدارةٍ ديناميكية مفعّلة: الدليل شرطُ التفعيل، "
+            "والمراكز على خروجها الثابت المعتمد عند الدخول."
+        )
+
+    return {
+        "sync": sync,
+        "available": True,
+        "reason_ar": error,
+        "plan_at_utc": plan.at_utc.isoformat(),
+        "action_count": len(plan.actions),
+        "actions": actions,
+        "skipped": skipped,
+        "declared_policies": declared,
+        "dynamic_enabled": bool(dynamic),
+        "notes_ar": notes,
+    }
+
+
 def _performance(sys: Any) -> dict[str, Any]:
     """
     **الفراغ ليس صفراً، والعيّنة الصغيرة ليست أداءً.**
@@ -977,6 +1064,7 @@ def build_mobile_state(sys: Any) -> Any:
         "position": lambda: _position(sys),
         "trades": lambda: _trades(sys),
         "sync": lambda: _sync(sys),
+        "management": lambda: _management(sys),
         "performance": lambda: _performance(sys),
         "providers": lambda: _providers(sys),
         "scan": lambda: _scan(sys),

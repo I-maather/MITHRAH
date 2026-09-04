@@ -26,7 +26,7 @@ interface Tab {
 export const TABS: Tab[] = [
   { path: '/home', label: 'الرئيسية', owns: ['/home'] },
   { path: '/decision', label: 'القرار', owns: ['/decision', '/scan', '/chart', '/intelligence', '/profiles'] },
-  { path: '/position', label: 'المحفظة', owns: ['/position', '/history', '/performance'] },
+  { path: '/position', label: 'المحفظة', owns: ['/position', '/management', '/history', '/performance'] },
   { path: '/system', label: 'النظام', owns: ['/system', '/providers', '/audit', '/settings', '/notifications', '/emergency'] },
 ];
 

@@ -56,6 +56,7 @@ export default function AuthenticatedLayout(): React.JSX.Element {
       <Stack.Screen name="profiles" options={{ title: t.nav.profiles }} />
       <Stack.Screen name="position" options={{ title: t.nav.position }} />
       <Stack.Screen name="history" options={{ title: t.nav.history }} />
+      <Stack.Screen name="management" options={{ title: t.nav.management }} />
       <Stack.Screen name="performance" options={{ title: t.nav.performance }} />
       <Stack.Screen name="providers" options={{ title: t.nav.providers }} />
       <Stack.Screen name="notifications" options={{ title: t.nav.notifications }} />
