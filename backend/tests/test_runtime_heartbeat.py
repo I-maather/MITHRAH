@@ -14,6 +14,7 @@ import pytest
 from app.clock import now_utc
 from app.contracts import Decision
 from app.money import D
+from app.risk.engine import SessionRiskState
 from app.runtime import heartbeat as hb
 from app.scheduling import JobKind, SafeScheduler, UnsafeScheduledJob
 
@@ -64,8 +65,27 @@ class FakeBroker:
         return SimpleNamespace(account_id="TEST", total_cash=D("140"), settled_cash=D("140"))
 
 
+def _session_state() -> SessionRiskState:
+    """
+    حالةُ مخاطرةٍ **حقيقية** لا نصّاً بديلاً.
+
+    كان المزيّف يُعيد `"STATE"`. وصارت الحلقة تُصحّح الحالة من الوسيط
+    (`replace(...)` على عدد المراكز وأسمائها والربح غير المحقق)، و`replace`
+    على نصٍّ ترفع `TypeError` تبتلعها مهمةُ المجدول — فتبدو الدورة كأنها
+    لم تُستدعَ.
+
+    وبديلٌ لا يحمل نوعَ ما يبدّله يُخفي عطلاً لا يكشفه.
+    """
+    return SessionRiskState(
+        baseline_equity=D("140"), current_equity=D("140"),
+        realized_pnl_today=D("0"), realized_pnl_week=D("0"),
+        unrealized_pnl=D("0"), open_positions=0,
+        entry_orders_today=0, consecutive_losses=0,
+    )
+
+
 def build_state(monkeypatch, **over):
-    monkeypatch.setattr(hb, "load_session_state", lambda *a, **k: "STATE")
+    monkeypatch.setattr(hb, "load_session_state", lambda *a, **k: _session_state())
     ks = SimpleNamespace(is_active=False, state=SimpleNamespace(current_event=None))
     state = SimpleNamespace(
         locally_paused=over.pop("locally_paused", False),
@@ -156,9 +176,13 @@ def test_a_healthy_cycle_calls_the_pipeline_with_real_inputs(monkeypatch):
 def test_risk_state_is_re_read_every_cycle(monkeypatch):
     """الخسائر تتراكم بين الدورات — حالةٌ تُقرأ مرة واحدة تكذب بعد أول صفقة."""
     reads: list[int] = []
-    monkeypatch.setattr(hb, "load_session_state", lambda *a, **k: reads.append(1) or "STATE")
+    monkeypatch.setattr(
+        hb, "load_session_state", lambda *a, **k: (reads.append(1), _session_state())[1]
+    )
     state = build_state(monkeypatch)
-    monkeypatch.setattr(hb, "load_session_state", lambda *a, **k: reads.append(1) or "STATE")
+    monkeypatch.setattr(
+        hb, "load_session_state", lambda *a, **k: (reads.append(1), _session_state())[1]
+    )
     run_once(state)
     state.scheduler.jobs[hb.DECISION_JOB].next_run_utc = now_utc()
     run_once(state)
