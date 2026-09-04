@@ -226,6 +226,65 @@ class PositionRow(Base):
     closed_at_utc: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class PositionBookRow(Base):
+    """
+    **دفترُ المراكز الدائم** — هويّةُ الوسيط أوّلاً، لا الرمز.
+
+    ## لماذا جدولٌ جديد بجانب `positions`
+
+    `positions` جدولٌ محاسبيّ مفتاحه الرمز والحساب، ولم يُكتَب فيه شيء قط:
+    يوم 2026-09-04 كان الحساب يحمل خمسة مراكز والجدول فارغاً، فقرأ سقفُ
+    العدد صفراً. وإصلاح ذلك كان قراءةَ الوسيط كلَّ دورة (C2). لكن القراءة
+    وحدها لا تنجو من إعادة تشغيل: ما لم يُكتَب لا يُقارَن بعد الإقلاع، ولا
+    يُعرَف مركزٌ **ظهر بيننا** من مركزٍ كان موجوداً.
+
+    ## ولماذا `broker_deal_id` هو المفتاح
+
+    كابيتال يسمح بعدّة مراكز على الأداة الواحدة — وكان على GBPUSD ثلاثة في
+    اليوم نفسه. فمفتاحٌ بالرمز يُسقط أحدَها على الآخر ويقول «مطابَق» وفي
+    الحساب ثلاثة أضعاف. هويّةُ المركز عند الوسيط هي المفتاح الوحيد الذي لا
+    يلتبس.
+
+    ## والنسب
+
+    `client_order_id` → `deal_reference` → `broker_deal_id` سلسلةٌ تُقرأ من
+    `broker_orders`، ومنها يُعرَف أيُّ قرارٍ وأيُّ استراتيجيةٍ بأيّ إصدار
+    فتحت المركز. ما لا يُنسَب يُسمّى `UNATTRIBUTED` صراحةً — ولا يُخمَّن.
+    """
+
+    __tablename__ = "position_book"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    #: هويّة المركز لدى الوسيط — المفتاح الحقيقي.
+    broker_deal_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    account_id: Mapped[str] = mapped_column(String(64), default="", index=True)
+    symbol: Mapped[str] = mapped_column(String(24), index=True)
+    #: موقّعة: السالب بيع.
+    quantity: Mapped[Decimal] = mapped_column(MONEY)
+    entry_price: Mapped[Decimal | None] = mapped_column(MONEY)
+    stop_price: Mapped[Decimal | None] = mapped_column(MONEY)
+    take_profit_price: Mapped[Decimal | None] = mapped_column(MONEY)
+    currency: Mapped[str] = mapped_column(String(8), default="")
+    #: OPEN · CLOSED · ORPHANED
+    state: Mapped[str] = mapped_column(String(16), default="OPEN", index=True)
+    #: STRATEGY · COMMISSIONING · UNATTRIBUTED
+    kind: Mapped[str] = mapped_column(String(24), default="UNATTRIBUTED")
+    #: LINKED إن وُجد أمرٌ يربطه بقرار، وإلا UNLINKED. لا تخمين بينهما.
+    attribution: Mapped[str] = mapped_column(String(16), default="UNLINKED")
+    deal_reference: Mapped[str | None] = mapped_column(String(64), index=True)
+    client_order_id: Mapped[str | None] = mapped_column(String(64), index=True)
+    risk_decision_id: Mapped[int | None] = mapped_column(ForeignKey("risk_decisions.id"))
+    strategy_name: Mapped[str] = mapped_column(String(64), default="")
+    strategy_version: Mapped[str] = mapped_column(String(24), default="")
+    opened_at_utc: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    #: أوّل دورةٍ رأيناه فيها — يفرّق ما فُتح بيننا عمّا وجدناه.
+    first_seen_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    last_seen_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    closed_at_utc: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    realised_pnl: Mapped[Decimal | None] = mapped_column(MONEY)
+    #: آخر إقلاعٍ رآه مفتوحاً — يجيب «هل نجا المركز إعادة التشغيل؟».
+    seen_after_restart: Mapped[bool] = mapped_column(default=False)
+
+
 class TradeRow(Base):
     __tablename__ = "trades"
     id: Mapped[int] = mapped_column(primary_key=True)

@@ -15,6 +15,7 @@ from app.clock import now_utc
 from app.contracts import Decision
 from app.money import D
 from app.risk.engine import SessionRiskState
+from tests.runtime_fixtures import passing_startup
 from app.runtime import heartbeat as hb
 from app.scheduling import JobKind, SafeScheduler, UnsafeScheduledJob
 
@@ -102,6 +103,9 @@ def build_state(monkeypatch, **over):
         scheduler=SafeScheduler(),
         session_state=None,
         last_result=None,
+        # بوابةُ الإقلاع: **غيابُ التقرير حجب**. البديل يعلن اجتيازها صراحةً
+        # كي يُفحَص ما بعدها؛ ومنعُها يُختبَر في ملفها.
+        startup=over.pop("startup", passing_startup()),
     )
     for k, v in over.items():
         setattr(state, k, v)

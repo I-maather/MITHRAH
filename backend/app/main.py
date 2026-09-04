@@ -90,6 +90,12 @@ async def _lifespan(_app: FastAPI):
     beat = None
     try:
         state = system()
+        # **بوابةُ الإقلاع تُنفَّذ قبل أوّل دورة.** كانت مكتوبةً منذ 0.2 ولا
+        # تُستدعى من أي مكان: وحدةٌ سليمة غير موصولة. تُسجّل حكمها في
+        # `state.startup`، ويقرؤه `run_decision` فيمنع الدخول حتى تُجتاز.
+        from .runtime.startup import run as run_startup_gate
+
+        run_startup_gate(state)
         register_runtime_jobs(state)
         beat = Heartbeat(state)
         beat.start()

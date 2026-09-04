@@ -13,6 +13,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
+from tests.runtime_fixtures import passing_startup
+
 from app.money import D
 from app.portfolio.book import OpenPosition
 from app.risk.engine import SessionRiskState
@@ -97,6 +99,7 @@ def _state(monkeypatch, broker):
         scheduler=SafeScheduler(),
         session_state=None,
         last_result=None,
+        startup=passing_startup(),
         last_scan=[],
         portfolio=None,
         providers=SimpleNamespace(calendar=None),

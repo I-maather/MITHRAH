@@ -249,6 +249,22 @@ def register_runtime_jobs(state, *, interval_seconds: int = DEFAULT_INTERVAL_SEC
                 account_id=account_id,
             )
 
+        # **ثم تُكتَب.** اللقطة في الذاكرة تموت مع العملية، وما لا يُكتَب لا
+        # يُقارَن بعد الإقلاع: لا يُعرَف مركزٌ فُتح بيننا من مركزٍ وجدناه،
+        # ولا يُكشَف مركزٌ اختفى بلا صفقةٍ تقابله. و`sync` ترفض الكتابة حين
+        # `ok=False` — فعجزٌ عن القراءة لا يصير إغلاقاً مكتوباً.
+        try:
+            from ..db.session import get_session
+            from ..portfolio.ledger import sync as _sync_book
+
+            with get_session() as book_session:
+                state.ledger_sync = _sync_book(book_session, state.portfolio)
+        except Exception as exc:  # noqa: BLE001
+            # الدفتر لا يُسقط الدورة: القراءة نجحت والمراقبة قائمة، والكتابة
+            # عطلٌ يُسجَّل ويُعالَج — لا سببٌ لإيقاف الحراسة.
+            state.ledger_error_ar = f"تعذّرت كتابة الدفتر: {type(exc).__name__}."
+            logging.getLogger(__name__).warning("ledger sync failed: %s", type(exc).__name__)
+
     def run_decision() -> None:
         # **المراقبة قبل البوابة.** تُقرأ المحفظة أولاً كي تبقى الشاشة
         # صادقةً والمطابقة ممكنةً حتى والنظام موقوف.
@@ -259,6 +275,17 @@ def register_runtime_jobs(state, *, interval_seconds: int = DEFAULT_INTERVAL_SEC
                 "LOCALLY_PAUSED",
                 "فتحُ المراكز موقوفٌ بقرارك. المراكز القائمة تُقرأ وتُراقَب.",
                 "runtime",
+            )
+            return
+
+        # بوابةُ الإقلاع — **بعد** تحديث المحفظة وقبل أيّ تقييمٍ للدخول.
+        # ترتيبُها هذا مقصود: المراقبة لا تنتظر البوابة، والدخول لا يسبقها.
+        from .startup import STARTUP_RECONCILIATION_PENDING, blocks_new_entries
+
+        startup_block = blocks_new_entries(state)
+        if startup_block is not None:
+            state.last_result = _no_trade(
+                STARTUP_RECONCILIATION_PENDING, startup_block, "runtime"
             )
             return
 

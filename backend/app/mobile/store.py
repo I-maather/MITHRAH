@@ -73,11 +73,11 @@ class MobileStateStore:
 
     # -- القراءة ------------------------------------------------------------
 
-    def _check_permissions(self) -> None:
+    def _check_owner(self) -> None:
         """
-        الصلاحيات **والمالك**.
+        المالك — **حارسٌ على الكتابة وحدها**.
 
-        ## ولماذا المالك أيضاً
+        ## السبب
 
         الكتابة هنا ذرّيّة: ملفٌ مؤقّت ثم `os.replace`. والمؤقّت يملكه من
         كتبه. فحين وُلِّد رمزُ اقترانٍ بـ`root` — والأداة منفصلة عن الخدمة
@@ -92,22 +92,29 @@ class MobileStateStore:
 
         فالمالك يُفحَص **قبل** أيّ كتابة: أداةٌ تعمل بمستخدمٍ آخر تتوقّف
         برسالةٍ تحمل علاجها، ولا تكسر الخدمة صامتةً.
+
+        والقراءة لا تُمنَع: قارئٌ آخر لا يضرّ، ومنعُه يُعطّل التشخيص بلا سبب.
+        الضررُ في الكتابة وحدها.
         """
+        if not self.enforce_permissions or os.name != "posix" or not self.path.exists():
+            return
+        owner = self.path.stat().st_uid
+        if owner != os.geteuid():
+            raise MobileStoreError(
+                f"ملف حالة الجوال يملكه المستخدم {owner} وهذه العملية تعمل "
+                f"بالمستخدم {os.geteuid()}. الكتابة تنقل الملكية فتتوقّف الخدمة "
+                f"عن قراءته. شغّلي الأداة بمستخدم الخدمة نفسه، أو: "
+                f"chown {owner} {self.path}"
+            )
+
+    def _check_permissions_mode(self) -> None:
         if not self.enforce_permissions or os.name != "posix":
             return
-        info = self.path.stat()
-        mode = stat.S_IMODE(info.st_mode)
+        mode = stat.S_IMODE(self.path.stat().st_mode)
         if mode & 0o077:
             raise MobileStoreError(
                 f"ملف حالة الجوال مقروء لغير مالكه (الصلاحيات {oct(mode)}). "
                 f"صحّحيها بـ: chmod 600 {self.path}"
-            )
-        if info.st_uid != os.geteuid():
-            raise MobileStoreError(
-                f"ملف حالة الجوال يملكه المستخدم {info.st_uid} وهذه العملية "
-                f"تعمل بالمستخدم {os.geteuid()}. الكتابة تنقل الملكية فتتوقّف "
-                f"الخدمة عن قراءته. شغّلي الأداة بمستخدم الخدمة نفسه، أو: "
-                f"chown {info.st_uid} {self.path}"
             )
 
     def load(self) -> dict[str, Any]:
@@ -120,7 +127,7 @@ class MobileStateStore:
         """
         if not self.path.exists():
             return {"devices": [], "tokens": [], "challenges": []}
-        self._check_permissions()
+        self._check_permissions_mode()
         try:
             raw = json.loads(self.path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
@@ -145,6 +152,7 @@ class MobileStateStore:
         self, *, devices: list[dict], tokens: list[dict],
         challenges: list[dict] | None = None,
     ) -> None:
+        self._check_owner()
         payload = {
             "schema": SCHEMA_VERSION,
             "devices": devices,

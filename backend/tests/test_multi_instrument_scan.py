@@ -37,6 +37,7 @@ from app.risk.constitution import (
     exposure_bucket,
 )
 from app.runtime.heartbeat import _chosen
+from tests.runtime_fixtures import passing_startup
 
 NOW = datetime(2026, 9, 1, 12, 0, tzinfo=timezone.utc)
 
@@ -208,6 +209,7 @@ class FakeState:
         self.last_scan = []
         self.last_bars: dict = {}
         self.session_state = None
+        self.startup = passing_startup()
 
 
 def decision_job(state):

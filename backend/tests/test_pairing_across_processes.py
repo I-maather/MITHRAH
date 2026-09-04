@@ -209,8 +209,11 @@ def test_a_file_owned_by_another_user_is_refused_before_it_is_written(state_path
     # كأنّ العملية تعمل بمستخدمٍ غير مالك الملف.
     monkeypatch.setattr(os, "geteuid", lambda: os.stat(state_path).st_uid + 1)
 
+    # القراءة تبقى مسموحة — قارئٌ آخر لا يضرّ، والضرر في الكتابة.
+    assert store.load()["devices"] == []
+
     with pytest.raises(MobileStoreError) as exc:
-        store.load()
+        store.save(devices=[], tokens=[], challenges=[])
     assert "chown" in str(exc.value)
 
 
