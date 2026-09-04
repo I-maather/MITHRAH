@@ -308,8 +308,52 @@ export interface ProfilesData {
 // positions/current
 // ---------------------------------------------------------------------------
 
+/**
+ * حالةُ قراءة المحفظة من الوسيط.
+ *
+ * تُقرأ **قبل** أي حقلٍ آخر. `ok=false` تعني «لم أقرأ»، ولا تعني «لا شيء» —
+ * والخلط بينهما هو ما جعل الشاشة تقول «لا مركز مفتوح» وعلى الحساب خمسة.
+ */
+export interface SyncView {
+  ok: boolean;
+  reason_code: string;
+  error_ar: string;
+  last_sync_utc: string | null;
+  age_seconds: number | null;
+  stale: boolean;
+}
+
+export interface OpenPositionView {
+  id: string | null;
+  instrument: string | null;
+  instrument_ar: string | null;
+  direction_ar: string | null;
+  opened_utc: string | null;
+  entry_price: string | null;
+  current_price: string | null;
+  stop_price: string | null;
+  take_profit_price: string | null;
+  size_display: string | null;
+  notional_display: string | null;
+  unrealised_pnl: string | null;
+  unrealised_pnl_sign: 'POSITIVE' | 'NEGATIVE' | 'FLAT' | null;
+  risk_at_stop: string | null;
+  /** الوقف **لدى الوسيط**. `false` = مركزٌ بلا حماية، وهي حالة حرجة. */
+  protection_held_by_broker: boolean;
+  strategy_ar: string | null;
+  /** `STRATEGY` أو `COMMISSIONING` أو `UNATTRIBUTED` — لا يُخمَّن. */
+  kind: string;
+}
+
 export interface PositionData {
-  has_position: boolean;
+  sync: SyncView;
+  /** `null` = تعذّرت القراءة. ليست `false`، لأن «لا أعرف» ليست «لا». */
+  has_position: boolean | null;
+  open_count: number | null;
+  positions: OpenPositionView[];
+  unprotected_count: number | null;
+  total_unrealised: string | null;
+  /** الحقول المفردة تصف **أوّل** مركزٍ مفتوح — للشاشة القديمة. */
   instrument_ar: string | null;
   instrument: string | null;
   direction_ar: string | null;
@@ -323,7 +367,6 @@ export interface PositionData {
   unrealised_pnl: string | null;
   unrealised_pnl_sign: 'POSITIVE' | 'NEGATIVE' | 'FLAT' | null;
   risk_at_stop: string | null;
-  /** الوقف والهدف **لدى الوسيط** — لا يعتمدان على التطبيق. */
   protection_held_by_broker: boolean;
   strategy_ar: string | null;
   notes_ar: string[];
@@ -334,11 +377,16 @@ export interface PositionData {
 // ---------------------------------------------------------------------------
 
 export interface TradeRecord {
-  id: string;
-  instrument: string;
+  /**
+   * دفترُ المعاملات عند الوسيط يعطي الأداة والزمن والمحقَّق، ولا يعطي سعرَ
+   * الدخول والخروج وسببَ الخروج والاتجاه. فتبقى `null` **ولا تُخمَّن**:
+   * رقمٌ مخترعٌ في شاشة نتائج أسوأ من خانةٍ فارغة.
+   */
+  id: string | null;
+  instrument: string | null;
   instrument_ar: string | null;
-  direction_ar: string;
-  opened_utc: string;
+  direction_ar: string | null;
+  opened_utc: string | null;
   closed_utc: string | null;
   entry_price: string | null;
   exit_price: string | null;
@@ -347,10 +395,16 @@ export interface TradeRecord {
   outcome_ar: string | null;
   strategy_ar: string | null;
   exit_reason_ar: string | null;
+  /** يفصل صفقةَ التشغيل عن الصفقة الاستراتيجية. */
+  kind: string;
 }
 
 export interface TradesData {
+  sync: SyncView;
   trades: TradeRecord[];
+  /** `true` = لم تُقرأ الصفقات. القائمة الفارغة حينها ليست «لا صفقات». */
+  unavailable: boolean;
+  realised_pnl_total: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -367,6 +421,7 @@ export interface CalibrationBucket {
 }
 
 export interface PerformanceData {
+  sync: SyncView;
   sample_size: number;
   sufficient_sample: boolean;
   insufficient_sample_note_ar: string | null;

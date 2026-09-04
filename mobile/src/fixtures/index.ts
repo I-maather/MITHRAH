@@ -14,6 +14,7 @@ import type {
   RiskData,
   StatusData,
   TradesData,
+  SyncView,
 } from '@/api/types';
 
 /**
@@ -252,6 +253,38 @@ const profiles: ProfilesData = {
 };
 
 const position: PositionData = {
+    sync: {
+      ok: true,
+      reason_code: 'OK',
+      error_ar: '',
+      last_sync_utc: '2026-09-04T17:24:41Z',
+      age_seconds: 3,
+      stale: false,
+    },
+    open_count: 1,
+    positions: [
+      {
+        id: 'PREVIEW-P1',
+        instrument: 'EURUSD',
+        instrument_ar: 'يورو/دولار',
+        direction_ar: 'شراء',
+        opened_utc: '2026-09-04T16:01:48Z',
+        entry_price: '1.16194',
+        current_price: '1.16210',
+        stop_price: '1.15935',
+        take_profit_price: '1.16712',
+        size_display: '300',
+        notional_display: '348.58',
+        unrealised_pnl: '0.05',
+        unrealised_pnl_sign: 'POSITIVE',
+        risk_at_stop: '0.78',
+        protection_held_by_broker: true,
+        strategy_ar: 'معاينة',
+        kind: 'STRATEGY',
+      },
+    ],
+    unprotected_count: 0,
+    total_unrealised: null,
   has_position: false,
   instrument_ar: null,
   instrument: null,
@@ -272,6 +305,16 @@ const position: PositionData = {
 };
 
 const trades: TradesData = {
+  sync: {
+    ok: true,
+    reason_code: 'OK',
+    error_ar: '',
+    last_sync_utc: '2026-09-04T17:24:41Z',
+    age_seconds: 3,
+    stale: false,
+  },
+  unavailable: false,
+  realised_pnl_total: '-0.35',
   trades: [
     {
       id: 'PREVIEW-T1',
@@ -287,6 +330,7 @@ const trades: TradesData = {
       outcome_ar: 'هدف',
       strategy_ar: 'ارتداد داخل اتجاه',
       exit_reason_ar: 'بلوغ الهدف لدى الوسيط.',
+      kind: 'STRATEGY',
     },
     {
       id: 'PREVIEW-T2',
@@ -302,11 +346,20 @@ const trades: TradesData = {
       outcome_ar: 'وقف',
       strategy_ar: 'ارتداد داخل اتجاه',
       exit_reason_ar: 'ضرب الوقف المحفوظ لدى الوسيط.',
+      kind: 'STRATEGY',
     },
   ],
 };
 
 const performance: PerformanceData = {
+    sync: {
+      ok: true,
+      reason_code: 'OK',
+      error_ar: '',
+      last_sync_utc: '2026-09-04T17:24:41Z',
+      age_seconds: 3,
+      stale: false,
+    },
   sample_size: 2,
   sufficient_sample: false,
   insufficient_sample_note_ar:
@@ -459,6 +512,21 @@ const candles: CandlesData = {
   note_ar: 'شموع معاينة مولَّدة — ليست سوقاً. (معاينة)',
 };
 
+/**
+ * حالةُ المزامنة وحدها — تُطلَب بلا جلب كل شيء.
+ *
+ * أُضيفت يوم ظهر أن الشاشة تعرض «لا مركز مفتوح» وعلى الحساب خمسة: تحتاج
+ * الشاشة أن تسأل «هل قرأتَ؟» قبل «ماذا رأيت؟».
+ */
+const sync: SyncView = {
+  ok: true,
+  reason_code: 'OK',
+  error_ar: '',
+  last_sync_utc: '2026-09-04T17:24:41Z',
+  age_seconds: 3,
+  stale: false,
+};
+
 export const fixtures = {
   status,
   intelligence,
@@ -466,6 +534,7 @@ export const fixtures = {
   risk,
   profiles,
   position,
+  sync,
   trades,
   performance,
   providers,

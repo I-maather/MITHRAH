@@ -79,7 +79,68 @@ export default function PositionScreen(): React.JSX.Element {
       onRefresh={refresh}
       refreshing={loading}
     >
-      {!data.has_position ? (
+      {/*
+        **حالةُ المزامنة تُقرأ قبل أي رقم.**
+
+        كانت الشاشة تفرّع على `has_position` وحدها، والخادمُ يُرسل `false`
+        سواءٌ لم يجد مركزاً أم لم يستطع أن يقرأ. فيوم 2026-09-04 كان على
+        الحساب خمسةُ مراكز والشاشة تقول «لا مركز مفتوح».
+
+        و«لا شيء» و«لم أعرف» لا يُعرضان بصورةٍ واحدة أبداً.
+      */}
+      {!data.sync.ok ? (
+        <Banner
+          testID="position-sync-error"
+          tone="negative"
+          title="تعذّرت قراءة المحفظة"
+          body={`${data.sync.error_ar} — هذه ليست «صفر مراكز»، هذه قراءةٌ لم تنجح.`}
+        />
+      ) : data.sync.stale ? (
+        <Banner
+          testID="position-sync-stale"
+          tone="caution"
+          title="قراءةٌ قديمة"
+          body={`آخر مزامنة قبل ${data.sync.age_seconds ?? '—'} ثانية. الأرقام قد تكون متأخّرة عن السوق.`}
+        />
+      ) : null}
+
+      {data.unprotected_count !== null && data.unprotected_count > 0 ? (
+        <Banner
+          testID="position-unprotected"
+          tone="negative"
+          title="مركزٌ بلا حماية"
+          body={`${data.unprotected_count} مركزاً بلا وقفٍ عند الوسيط — حالةٌ حرجة.`}
+        />
+      ) : null}
+
+      {data.open_count !== null && data.open_count > 1 ? (
+        <Card testID="position-all-card" title={`المراكز المفتوحة (${data.open_count})`}>
+          {data.positions.map((position) => (
+            <View key={position.id ?? `${position.instrument}-${position.opened_utc}`}>
+              <Field
+                label={`${position.instrument_ar ?? position.instrument ?? '—'} · ${
+                  position.direction_ar ?? '—'
+                } · ${position.size_display ?? '—'}`}
+                value={position.unrealised_pnl}
+                tone={presentPnlTone(position.unrealised_pnl_sign)}
+              />
+              <Text variant="caption" tone="secondary" accessibilityRole="text">
+                {`دخول ${position.entry_price ?? '—'} · وقف ${
+                  position.stop_price ?? '—'
+                } · هدف ${position.take_profit_price ?? '—'}${
+                  position.protection_held_by_broker ? '' : ' · بلا حماية'
+                }`}
+              </Text>
+              <Divider />
+            </View>
+          ))}
+          {data.total_unrealised !== null ? (
+            <Field label="مجموع غير المحقّق" value={data.total_unrealised} />
+          ) : null}
+        </Card>
+      ) : null}
+
+      {data.has_position === null ? null : !data.has_position ? (
         <Vacancy
           testID="position-empty"
           what={t.position.none}

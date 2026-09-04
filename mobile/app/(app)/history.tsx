@@ -3,6 +3,7 @@ import { View } from 'react-native';
 
 import { useEndpoint } from '@/api/useEndpoint';
 import {
+  Banner,
   Card,
   Divider,
   Vacancy,
@@ -56,7 +57,36 @@ export default function HistoryScreen(): React.JSX.Element {
       onRefresh={refresh}
       refreshing={loading}
     >
-      {data.trades.length === 0 ? (
+      {/*
+        **قائمةٌ فارغة لا تُعرَض «لا صفقات» قبل أن نعرف أننا قرأنا.**
+
+        كان الخادم يُعيد `[]` ثابتة بتعليقٍ يقول «قائمة فارغة صادقة: لم
+        يُرسَل أمرٌ قط» — وصارت كاذبةً يوم أُغلقت أوّل صفقتين بمحقَّقٍ
+        ‎−0.35‎ دولار. فالشاشة تسأل `sync.ok` أوّلاً.
+      */}
+      {!data.sync.ok || data.unavailable ? (
+        <Banner
+          testID="history-sync-error"
+          tone="negative"
+          title="تعذّرت قراءة الصفقات"
+          body={`${data.sync.error_ar} — القائمة الفارغة هنا ليست «لا صفقات».`}
+        />
+      ) : data.sync.stale ? (
+        <Banner
+          testID="history-sync-stale"
+          tone="caution"
+          title="قراءةٌ قديمة"
+          body={`آخر مزامنة قبل ${data.sync.age_seconds ?? '—'} ثانية.`}
+        />
+      ) : null}
+
+      {data.sync.ok && !data.unavailable && data.realised_pnl_total !== null ? (
+        <Card testID="history-total-card" title="المحقَّق الكلي">
+          <Field label="مجموع الصفقات المغلقة" value={data.realised_pnl_total} large />
+        </Card>
+      ) : null}
+
+      {!data.sync.ok || data.unavailable ? null : data.trades.length === 0 ? (
         <Vacancy
           testID="history-empty"
           what={t.history.empty}
@@ -65,7 +95,7 @@ export default function HistoryScreen(): React.JSX.Element {
         />
       ) : (
         data.trades.map((trade) => (
-          <Card key={trade.id} testID={`trade-${trade.id}`}>
+          <Card key={trade.id ?? `${trade.instrument}-${trade.closed_utc}`} testID={`trade-${trade.id ?? 'x'}`}>
             <View
               style={{
                 flexDirection: 'row',
@@ -82,6 +112,9 @@ export default function HistoryScreen(): React.JSX.Element {
               <Text variant="bodyStrong" style={{ flex: 1 }}>
                 {trade.instrument_ar ?? trade.instrument}
               </Text>
+              {trade.kind === 'COMMISSIONING' ? (
+                <StatusPill label="تشغيل" tone="neutral" />
+              ) : null}
               {trade.outcome_ar !== null ? (
                 <StatusPill
                   label={trade.outcome_ar}

@@ -493,9 +493,18 @@ def _text(value: Any) -> Optional[str]:
 
 
 def _sign(value: Any) -> Optional[str]:
+    """
+    إشارةُ الربح بالرموز التي **يفكّها التطبيق فعلاً**.
+
+    كتبتُها أوّلاً `"+"` و`"-"` و`"0"`، والتطبيق يُعلن
+    `'POSITIVE' | 'NEGATIVE' | 'FLAT' | null`. وعقدُ JSON يحفظ النوع
+    (`string`) لا القيم المسموحة، فلا يمسك هذا الخلاف حارسٌ واحد: يمرّ
+    الاختبار ويصل إلى الشاشة رمزٌ لا تعرفه. القيمُ تُكتب هنا كما يقرؤها
+    الطرف الآخر حرفاً بحرف.
+    """
     if value is None:
         return None
-    return "+" if value > 0 else ("-" if value < 0 else "0")
+    return "POSITIVE" if value > 0 else ("NEGATIVE" if value < 0 else "FLAT")
 
 
 def _one_position(position: Any) -> dict[str, Any]:
