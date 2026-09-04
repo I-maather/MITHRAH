@@ -273,14 +273,37 @@ def test_the_idempotency_guard_still_halts_when_it_is_reached():
 
 
 def test_reconciliation_mismatch_halts():
+    """
+    **الاختلاف الذي يوقف النظام هو ما يظهر أثناء الدورة.**
+
+    كان المركز الغريب يُزرع قبل التشغيل، والمطابقة تقارن المركزَ المفتوحَ
+    في هذه الدورة وحده بحساب الوسيط كلّه — فأيُّ مركزٍ قائمٍ يوقف النظام،
+    حتى مركزٌ فتحه هو نفسه في الدورة السابقة. ومعناه أن سقف ثلاثة مراكز
+    غيرُ قابلٍ للبلوغ. فصار خطُّ الأساس ما قُرئ قبل التنفيذ، والسؤالُ: هل
+    تغيّر شيءٌ غير الذي فعلناه؟ ⇒ يُزرع الغريب **بعد** القراءة الأولى.
+
+    والغرباءُ الموجودون قبل الإقلاع يُمسكهم فحصُ الإقلاع
+    (`LOCKED_PENDING_RECONCILIATION`)، لا دورةُ القرار.
+    """
     pipeline, broker, audit, ks, state = build()
     from app.contracts import Position
 
-    broker._positions["AAPL"] = Position(
-        account_id="DU0000000", symbol="AAPL", quantity=D("3"),
-        average_cost=D("200"), as_of_utc=MID_SESSION,
-    )
+    original_get_positions = broker.get_positions
+    reads = {"count": 0}
+
+    def get_positions(account_id):
+        reads["count"] += 1
+        if reads["count"] > 1:
+            broker._positions["AAPL"] = Position(
+                account_id="DU0000000", symbol="AAPL", quantity=D("3"),
+                average_cost=D("200"), as_of_utc=MID_SESSION,
+            )
+        return original_get_positions(account_id)
+
+    broker.get_positions = get_positions  # type: ignore[method-assign]
+
     result = run(pipeline, state)
+    assert reads["count"] >= 2, "الدورة لم تقرأ المراكز قبل التنفيذ وبعده."
     assert result.decision is Decision.HALTED
     assert result.reason_code == "RECONCILIATION_MISMATCH"
     assert ks.is_active
