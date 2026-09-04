@@ -271,6 +271,10 @@ def test_every_read_route_is_declared_and_no_other():
         "status", "intelligence/latest", "decision/latest", "risk", "profiles",
         "positions/current", "trades", "performance", "providers/health",
         "notifications", "audit/recent", "scan/latest", "market/candles",
+        # 2026-09-04: `sync` — حالةُ قراءة المحفظة وحدها، تُطلَب بلا جلب
+        # كل شيء. أُضيفت يوم ظهر أن الشاشة تعرض «لا مركز مفتوح» بينما على
+        # الحساب خمسة: الشاشة تحتاج أن تسأل «هل قرأتَ؟» قبل «ماذا رأيت؟».
+        "sync",
     }
 
 

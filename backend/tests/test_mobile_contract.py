@@ -150,7 +150,9 @@ def test_server_section_matches_the_client_contract(section, contract, state):
 def test_list_sections_carry_the_contracted_element_shape(contract, state):
     """`trades` و`notifications` قائمتان — يُفحَص شكل عناصرهما إن وُجدت."""
     problems: list[str] = []
-    _check(contract["trades"]["trades"], state["trades"], "trades", problems)
+    # `trades` صار كائناً يحمل القائمة وحالة المزامنة معها — لأن قائمةً
+    # وحدها لا تفرّق بين «لا صفقات» و«لم أقرأ»، وهو الفرق الذي كلّف يوماً.
+    _check(contract["trades"]["trades"], state["trades"]["trades"], "trades", problems)
     _check(
         contract["notifications"]["notifications"],
         state["notifications"],
@@ -192,6 +194,7 @@ def test_contract_covers_every_declared_read_route():
         "audit/recent": "audit",
         "scan/latest": "scan",
         "market/candles": "candles",
+        "sync": "sync",
     }
     assert set(route_to_section) == set(READ_ROUTES), (
         "تغيّرت مسارات القراءة ولم يُحدَّث الربط بالعقد."
