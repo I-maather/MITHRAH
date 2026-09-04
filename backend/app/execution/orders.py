@@ -256,14 +256,37 @@ class ExecutionService:
                 f"تعذّر الإرسال ({type(exc).__name__}) ولم يُقرأ أثرٌ عند الوسيط.",
                 intent, recovered, requires_kill_switch=True,
             )
-        # 4) التأكيد من الوسيط — لا نثق بالاستجابة الأولى وحدها
-        confirmed = self.broker.confirm_order(intent.client_order_id)
+        # 4) التأكيد من الوسيط — لا نثق بالاستجابة الأولى وحدها.
+        #
+        # **والمرجع الذي نسأل به مرجعُ الوسيط لا مرجعُنا.** كان السؤال
+        # يُطرح بـ`intent.client_order_id` — وهو معرّفٌ نولّده نحن ولا
+        # يعرفه كابيتال؛ إيصاله الوحيد `dealReference` الذي يعيده الإرسال،
+        # ويضعه المحوّل في `order.client_order_id`. فكان الجواب «لا أعرف»
+        # في كل مرّة، فيُعلَن أمرٌ مؤكَّدٌ محميٌّ مجهولَ المصير ويُرفع فوقه
+        # قاطع الطوارئ.
+        #
+        # وقع ذلك في 2026-09-04 على **أول صفقة استراتيجية كاملة**: مركز
+        # GBPUSD قصير بحجم ٢٠٠ فُتح فعلاً عند 1.34997 بوقفٍ عند 1.35364 —
+        # أي بالضبط ما وافقت عليه المخاطر — ثم أوقف النظام نفسه عنه
+        # وسمّاه «مجهولاً». وأسوأ ما في الخطأ أنه يقع **بعد** نجاح كل شيء.
+        reference = (order.client_order_id or "").strip() or intent.client_order_id
+        confirmed = self.broker.confirm_order(reference)
         if confirmed.status is OrderStatus.UNKNOWN:
-            return SubmissionResult(
-                SubmissionOutcome.UNCONFIRMED,
-                "تعذر تأكيد الأمر من الوسيط بعد الإرسال.",
-                intent, order, requires_kill_switch=True,
-            )
+            # `place_order` في هذا المحوّل لا يعود إلا بعد أن يقرأ تأكيداً
+            # من الوسيط ويتحقّق من الوقف عنده. فإن كان بين أيدينا تنفيذٌ
+            # مُثبَت، فالجهل هنا جهلُ السؤال لا جهلُ الحال — ولا يجوز أن
+            # يُترجَم إلى حالة طوارئ.
+            if order is not None and order.status in (
+                OrderStatus.FILLED,
+                OrderStatus.PARTIALLY_FILLED,
+            ):
+                confirmed = order
+            else:
+                return SubmissionResult(
+                    SubmissionOutcome.UNCONFIRMED,
+                    "تعذر تأكيد الأمر من الوسيط بعد الإرسال.",
+                    intent, order, requires_kill_switch=True,
+                )
         return self._verify_fill(intent, confirmed)
 
     def _try_recover(self, intent: OrderIntent) -> Optional[BrokerOrder]:
