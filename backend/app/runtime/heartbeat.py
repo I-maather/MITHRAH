@@ -38,6 +38,7 @@ from ..brokers.capital.errors import CapitalAuthLockout
 from ..clock import now_utc
 from ..contracts import Bar, DataSource, Decision
 from ..money import D
+from ..portfolio.book import read_portfolio, unavailable, PORTFOLIO_NOT_ATTEMPTED
 from ..pipeline.runner import MacroAssessment, NewsBlackout, PipelineResult
 from ..risk.session_state import load_session_state
 from ..scheduling import JobKind
@@ -214,10 +215,48 @@ def register_runtime_jobs(state, *, interval_seconds: int = DEFAULT_INTERVAL_SEC
     المهمة `ANALYSIS` لا `MUTATING`: تقرّر وتكتب، ولا تلمس الوسيط بتعديل.
     """
 
+    def _refresh_portfolio() -> None:
+        """
+        يقرأ حقيقةَ المحفظة من الوسيط. **يُنفَّذ في كل دورة، موقوفاً كان
+        النظام أم عاملاً.**
+
+        الإيقاف المحلي كان يعود قبل هذا السطر، فيتوقّف كلُّ شيء: لا رؤية
+        للمراكز ولا تقييم خروج ولا مطابقة. ويوم 2026-09-04 بقيت خمسةُ
+        مراكز ساعاتٍ بلا مراقبة، لا يحرسها إلا وقفُها عند الوسيط.
+
+        والإيقاف يمنع **فتح** المراكز، لا **رؤيتها**. ومركزٌ لا يُرى لا
+        يُدار، ومركزٌ لا يُدار ليس موقوفاً — هو متروك.
+        """
+        account_id = ""
+        try:
+            balances = state.broker.get_balances(
+                getattr(state.broker, "account_id", "") or ""
+            )
+            account_id = getattr(balances, "account_id", "") or ""
+        except Exception:  # noqa: BLE001
+            account_id = getattr(state.broker, "account_id", "") or ""
+        try:
+            state.portfolio = read_portfolio(
+                state.broker, account_id=account_id, at=now_utc()
+            )
+        except Exception as exc:  # noqa: BLE001
+            state.portfolio = unavailable(
+                at=now_utc(),
+                reason_code=PORTFOLIO_NOT_ATTEMPTED,
+                error_ar=f"تعذّر تحديث لقطة المحفظة: {type(exc).__name__}.",
+                account_id=account_id,
+            )
+
     def run_decision() -> None:
+        # **المراقبة قبل البوابة.** تُقرأ المحفظة أولاً كي تبقى الشاشة
+        # صادقةً والمطابقة ممكنةً حتى والنظام موقوف.
+        _refresh_portfolio()
+
         if getattr(state, "locally_paused", False):
             state.last_result = _no_trade(
-                "LOCALLY_PAUSED", "التداول موقوف محلياً بقرارك. لا تقييم.", "runtime"
+                "LOCALLY_PAUSED",
+                "فتحُ المراكز موقوفٌ بقرارك. المراكز القائمة تُقرأ وتُراقَب.",
+                "runtime",
             )
             return
 

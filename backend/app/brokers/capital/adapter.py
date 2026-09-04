@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Optional, Sequence
 
@@ -46,6 +46,7 @@ from .endpoints import (
     PATH_MARKET_NAVIGATION,
     PATH_MARKETS,
     PATH_POSITIONS,
+    PATH_TRANSACTIONS,
     PATH_WORKING_ORDERS,
     CapitalEnvironment,
     confirm_path,
@@ -73,6 +74,7 @@ from .models import (
     MarketSummary,
     mask_account_id,
 )
+from ...portfolio.book import ClosedTrade, OpenPosition
 from .safety import LIVE_API_ENABLED, LiveApiBlocked, ExecutionLock, assert_environment_allowed
 from .session import CapitalSession
 from .transport import Transport
@@ -169,6 +171,33 @@ class InstrumentNotAllowed(BrokerRejected):
 
 
 @dataclass
+
+def _optional_decimal(value) -> Optional[Decimal]:
+    """رقمٌ من الوسيط أو `None`. الفراغ والنصّ غير الرقمي **ليسا صفراً**."""
+    if value is None or value == "":
+        return None
+    try:
+        return D(str(value))
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _parse_broker_time(value) -> Optional[datetime]:
+    """
+    زمنُ الوسيط. صيغته `2026-09-04T13:00:56.830` بلا منطقة، وهي UTC حين
+    يسمّي الحقل نفسه `...UTC`. يُوسَم صراحةً كي لا يُقارَن زمنٌ بلا منطقة
+    بزمنٍ بها فيرتفع `TypeError` في موضعٍ بعيد.
+    """
+    if not value:
+        return None
+    text = str(value).strip().replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
 class CapitalComAdapter(BrokerAdapter):
     """
     محوّل Capital.com. broker-neutral من الخارج، CFD-aware من الداخل.
@@ -688,6 +717,75 @@ class CapitalComAdapter(BrokerAdapter):
             if position.epic.upper() == epic.upper():
                 return ExecutionUncertainty.RESOLVED_FILLED, position
         return ExecutionUncertainty.RESOLVED_ABSENT, None
+
+    # ------------------------------------------------------------------
+    # حقيقةُ المحفظة — قراءةٌ فقط، وهي ما يقرأه الجوالُ والمخاطرُ والمطابقة
+    # ------------------------------------------------------------------
+    def list_open_positions_detailed(self) -> list[OpenPosition]:
+        """
+        المراكز المفتوحة **بوقفها وهدفها وربحها**، بكميةٍ موقّعة.
+
+        `CapitalPosition` تكفي للمطابقة ولا تكفي للعرض: الجوال يحتاج الوقف
+        والهدف وزمن الفتح والربح غير المحقّق، وقد كانت كلّها `None` ثابتة
+        في طبقة الجوال. وهذه الدالّة هي مصدرها.
+        """
+        self._require_connection()
+        body = self._get(PATH_POSITIONS)
+        rows: list[OpenPosition] = []
+        for row in (body.get("positions") or []):
+            pos = row.get("position") or {}
+            market = row.get("market") or {}
+            size = _optional_decimal(pos.get("size"))
+            if size is not None and str(pos.get("direction") or "").upper() == "SELL":
+                # **الجهة تُحمَل في الرقم.** مركزٌ قصير يُقرأ سالباً، وإلا
+                # طابق موجبٌ موجباً وقيل «مطابَق» على اتجاهين متعاكسين.
+                size = -size
+            rows.append(OpenPosition(
+                symbol=str(market.get("epic") or ""),
+                quantity=size if size is not None else D("0"),
+                entry_price=_optional_decimal(pos.get("level")),
+                stop_price=_optional_decimal(pos.get("stopLevel")),
+                take_profit_price=_optional_decimal(pos.get("profitLevel")),
+                opened_utc=_parse_broker_time(pos.get("createdDateUTC")),
+                deal_id=str(pos.get("dealId") or ""),
+                deal_reference=str(pos.get("dealReference") or ""),
+                unrealised_pnl=_optional_decimal(pos.get("upl")),
+                currency=str(pos.get("currency") or ""),
+            ))
+        return rows
+
+    def list_recent_transactions(
+        self, *, last_period_seconds: int = 86400
+    ) -> list[ClosedTrade]:
+        """
+        الصفقات المغلقة ونتائجها المحقّقة.
+
+        **الصيغة مقصودة ومقيسة.** `?from=...&to=...` على هذا الوسيط تُعيد
+        `{"errorCode": ...}` بلا بيانات ولا خطأ صريح — جرّبتُها فبدا أن
+        «لا معاملات»، فبقيت نتيجةُ أول صفقة استراتيجية مجهولةً بينما كان
+        الوسيط يعرفها. و`?lastPeriod=` هي الصيغة التي تُجيب:
+
+            {"date": "...", "instrumentName": "GBPUSD", "size": "-0.34",
+             "currency": "USD", "note": "Trade closed", "dealId": "..."}
+
+        و`size` هنا **ليست كميةً**: هي الربح/الخسارة المحقّق. اسمٌ مضلّل من
+        الوسيط، يُترجَم هنا مرّةً واحدة إلى `realised_pnl` كي لا يُقرأ
+        كمّيةً في أي موضعٍ آخر.
+        """
+        self._require_connection()
+        body = self._get(f"{PATH_TRANSACTIONS}?lastPeriod={int(last_period_seconds)}")
+        rows: list[ClosedTrade] = []
+        for item in (body.get("transactions") or []):
+            rows.append(ClosedTrade(
+                symbol=str(item.get("instrumentName") or ""),
+                realised_pnl=_optional_decimal(item.get("size")),
+                currency=str(item.get("currency") or ""),
+                closed_utc=_parse_broker_time(item.get("dateUtc") or item.get("date")),
+                deal_id=str(item.get("dealId") or ""),
+                reference=str(item.get("reference") or ""),
+                note=str(item.get("note") or ""),
+            ))
+        return rows
 
     # ------------------------------------------------------------------
     # العمليات المُعدِّلة — مبنية ومقفلة

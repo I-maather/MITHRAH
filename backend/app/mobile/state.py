@@ -458,55 +458,192 @@ def _intelligence(sys: Any) -> dict[str, Any]:
     }
 
 
+def _sync(sys: Any) -> dict[str, Any]:
+    """
+    حالةُ المزامنة — تُعرَض دائماً، وهي التي تمنع قراءة الفراغ اطمئناناً.
+    """
+    from ..clock import now_utc
+
+    snapshot = getattr(sys, "portfolio", None)
+    if snapshot is None:
+        return {
+            "ok": False,
+            "reason_code": "NOT_ATTEMPTED",
+            "error_ar": "لم تُقرأ المحفظة من الوسيط بعد. لا تُقرأ الشاشة على أنها «لا شيء».",
+            "last_sync_utc": None,
+            "age_seconds": None,
+            "stale": True,
+        }
+    now = now_utc()
+    return {
+        "ok": bool(snapshot.ok),
+        "reason_code": snapshot.reason_code,
+        "error_ar": snapshot.error_ar,
+        "last_sync_utc": snapshot.as_of_utc.isoformat(),
+        "age_seconds": snapshot.age_seconds(now),
+        "stale": snapshot.is_stale(now),
+    }
+
+
+def _one_position(position: Any) -> dict[str, Any]:
+    def _text(value):
+        return None if value is None else str(value)
+
+    return {
+        "instrument": position.symbol,
+        "instrument_ar": position.symbol,
+        "direction": position.direction,
+        "direction_ar": "بيع" if position.direction == "SELL" else "شراء",
+        "size_display": _text(abs(position.quantity)),
+        "opened_utc": position.opened_utc.isoformat() if position.opened_utc else None,
+        "entry_price": _text(position.entry_price),
+        "stop_price": _text(position.stop_price),
+        "take_profit_price": _text(position.take_profit_price),
+        "unrealised_pnl": _text(position.unrealised_pnl),
+        "unrealised_pnl_sign": (
+            None if position.unrealised_pnl is None
+            else ("+" if position.unrealised_pnl > 0 else ("-" if position.unrealised_pnl < 0 else "0"))
+        ),
+        "risk_at_stop": _text(position.risk_at_stop),
+        "protected": position.is_protected,
+        "protection_held_by_broker": position.is_protected,
+        "deal_id": position.deal_id,
+        "deal_reference": position.deal_reference,
+        "kind": position.kind,
+        "strategy_ar": position.strategy_ar,
+        "currency": position.currency,
+    }
+
+
 def _position(sys: Any) -> dict[str, Any]:
     """
-    لا مركز مفتوح، ونعلم ذلك: لم يُرسَل أمرٌ قط، والتنفيذ مقفول.
+    المراكز المفتوحة **كما يقولها الوسيط**.
 
-    `protection_held_by_broker` يبقى `True`: الوقف والهدف — متى وُجدا —
-    يُحفظان لدى الوسيط لا في هذا التطبيق. الحقل يقول قاعدة لا حالة.
+    كانت هذه الدالّة تُعيد `None` في كل حقل وجملةً واحدة: «لا مركز مفتوح.
+    لم يُرسَل أي أمر، والتنفيذ مقفول». كُتبت يوم كانت صادقة، وبقيت بعد أن
+    كذبت: يوم 2026-09-04 كان على الحساب خمسةُ مراكز والشاشة تقول لا شيء.
+
+    و«لا مركز» و«لم أستطع القراءة» لا يُعرضان بصورةٍ واحدة أبداً.
     """
+    sync = _sync(sys)
+    snapshot = getattr(sys, "portfolio", None)
+
+    if snapshot is None or not snapshot.ok:
+        return {
+            "sync": sync,
+            "has_position": None,
+            "open_count": None,
+            "positions": [],
+            "unprotected_count": None,
+            "total_unrealised": None,
+            "notes_ar": [
+                sync["error_ar"] or "تعذّرت قراءة المحفظة من الوسيط.",
+                "هذه ليست «صفر مراكز» — هذه قراءةٌ لم تنجح.",
+            ],
+        }
+
+    positions = [_one_position(p) for p in snapshot.open_positions]
+    total = snapshot.total_unrealised()
+    notes = []
+    if not positions:
+        notes.append("لا مركز مفتوح — قراءةٌ ناجحة من الوسيط، لا افتراض.")
+    unprotected = snapshot.unprotected
+    if unprotected:
+        notes.append(
+            "مراكز بلا وقفٍ عند الوسيط: "
+            + "، ".join(p.symbol for p in unprotected)
+            + " — حالةٌ حرجة."
+        )
     return {
-        "has_position": sys.session_state.open_positions > 0,
-        "instrument_ar": None,
-        "instrument": None,
-        "direction_ar": None,
-        "opened_utc": None,
-        "entry_price": None,
-        "current_price": None,
-        "stop_price": None,
-        "take_profit_price": None,
-        "size_display": None,
-        "notional_display": None,
-        "unrealised_pnl": None,
-        "unrealised_pnl_sign": None,
-        "risk_at_stop": None,
-        "protection_held_by_broker": True,
-        "strategy_ar": None,
-        "notes_ar": ["لا مركز مفتوح. لم يُرسَل أي أمر، والتنفيذ مقفول."],
+        "sync": sync,
+        "has_position": len(positions) > 0,
+        "open_count": len(positions),
+        "positions": positions,
+        "unprotected_count": len(unprotected),
+        "total_unrealised": None if total is None else str(total),
+        # يبقى الحقل المفرد للتوافق مع الشاشة القديمة — أوّلُ مركزٍ مفتوح.
+        **(_one_position(snapshot.open_positions[0]) if positions else {}),
+        "notes_ar": notes,
+    }
+
+
+def _trades(sys: Any) -> dict[str, Any]:
+    """
+    الصفقات المغلقة ونتائجها المحقّقة.
+
+    كانت `lambda: []` مع تعليقٍ يقول «قائمة فارغة صادقة: لم يُرسَل أمرٌ
+    قط». وصارت كاذبةً يوم أُغلقت أوّل صفقتين بنتيجةٍ ‎−0.35‎ دولار.
+    """
+    sync = _sync(sys)
+    snapshot = getattr(sys, "portfolio", None)
+    if snapshot is None or not snapshot.ok:
+        return {"sync": sync, "trades": [], "unavailable": True}
+
+    rows = []
+    for trade in snapshot.closed_trades:
+        rows.append({
+            "instrument": trade.symbol,
+            "realised_pnl": None if trade.realised_pnl is None else str(trade.realised_pnl),
+            "currency": trade.currency,
+            "closed_utc": trade.closed_utc.isoformat() if trade.closed_utc else None,
+            "is_win": trade.is_win,
+            "deal_id": trade.deal_id,
+            "reference": trade.reference,
+            "note": trade.note,
+            "kind": trade.kind,
+            "strategy_ar": trade.strategy_ar,
+        })
+    return {
+        "sync": sync,
+        "trades": rows,
+        "unavailable": False,
+        "realised_pnl_total": (
+            None if snapshot.realised_pnl_total is None else str(snapshot.realised_pnl_total)
+        ),
     }
 
 
 def _performance(sys: Any) -> dict[str, Any]:
     """
-    **الفراغ هنا ليس صفراً.** لا صفقة واحدة، فلا نسبة ربح ولا توقّع.
+    **الفراغ ليس صفراً، والعيّنة الصغيرة ليست أداءً.**
 
-    وكل مقياس استنتاجي يبقى `null` — لا `0` — كي لا يُقرأ يوماً على أنه
-    نتيجة قيست فكانت صفراً.
+    تُقرأ الأرقام من الصفقات المغلقة عند الوسيط. وتبقى النِّسب `null` حتى
+    تكفي العيّنة — لا `0` — كي لا تُقرأ يوماً على أنها نتيجةٌ قيست فكانت
+    صفراً. والمحقّق يُعرَض دائماً لأنه **مقيس**، لا مستنتَج.
     """
+    snapshot = getattr(sys, "portfolio", None)
+    sync = _sync(sys)
+    if snapshot is None or not snapshot.ok:
+        return {
+            "sync": sync, "sample_size": None, "sufficient_sample": False,
+            "insufficient_sample_note_ar": sync["error_ar"] or "لم تُقرأ المحفظة.",
+            "wins": None, "losses": None, "win_rate": None, "average_r": None,
+            "expectancy": None, "max_drawdown": None, "realised_pnl_total": None,
+            "calibration": [], "period_start_utc": None, "period_end_utc": None,
+        }
+
+    closed = [t for t in snapshot.closed_trades if t.realised_pnl is not None]
+    wins = sum(1 for t in closed if t.is_win)
+    losses = sum(1 for t in closed if t.is_win is False)
+    enough = len(closed) >= 30
     return {
-        "sample_size": 0,
-        "sufficient_sample": False,
+        "sync": sync,
+        "sample_size": len(closed),
+        "sufficient_sample": enough,
         "insufficient_sample_note_ar": (
-            "لا صفقة واحدة بعد. لا نسبة ربح ولا توقّع يُقرأ من عيّنة فارغة، "
-            "ولا أداء يُعرض قبل Backtest وShadow Mode."
+            None if enough else
+            f"العيّنة {len(closed)} صفقة — أقلّ من ثلاثين. لا نسبة ربح ولا توقّع "
+            "يُقرأ منها، والمحقّق أدناه مقيسٌ لا مستنتَج."
         ),
-        "wins": 0,
-        "losses": 0,
-        "win_rate": None,
+        "wins": wins,
+        "losses": losses,
+        "win_rate": (wins / len(closed)) if (enough and closed) else None,
         "average_r": None,
         "expectancy": None,
         "max_drawdown": None,
-        "realised_pnl_total": None,
+        "realised_pnl_total": (
+            None if snapshot.realised_pnl_total is None else str(snapshot.realised_pnl_total)
+        ),
         "calibration": [],
         "period_start_utc": None,
         "period_end_utc": None,
@@ -786,8 +923,8 @@ def build_mobile_state(sys: Any) -> Any:
         "decision": lambda: _decision(sys),
         "intelligence": lambda: _intelligence(sys),
         "position": lambda: _position(sys),
-        # قائمة فارغة صادقة هنا: لم يُرسَل أمرٌ قط، فلا صفقة أُغفلت.
-        "trades": lambda: [],
+        "trades": lambda: _trades(sys),
+        "sync": lambda: _sync(sys),
         "performance": lambda: _performance(sys),
         "providers": lambda: _providers(sys),
         "scan": lambda: _scan(sys),
