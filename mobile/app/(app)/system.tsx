@@ -2,7 +2,14 @@ import React, { useState } from 'react';
 import { View } from 'react-native';
 
 import { useEndpoint } from '@/api/useEndpoint';
-import { BUNDLE_IDENTIFIER } from '@/api/config';
+import {
+  APP_VERSION,
+  BUILD_COMMIT,
+  BUILD_NUMBER,
+  BUILD_TIME,
+  BUNDLE_IDENTIFIER,
+  TRADING_ENVIRONMENT,
+} from '@/api/config';
 import { useSession } from '@/auth/SessionProvider';
 import { ApiError } from '@/api/client';
 import {
@@ -104,6 +111,16 @@ export default function SystemScreen(): React.JSX.Element {
         <Divider />
         <Field label={t.system.backend} value={verdict.baseUrl} />
         <Field label={t.system.bundleId} value={BUNDLE_IDENTIFIER} />
+        <Field label="نسخة التطبيق" value={APP_VERSION} />
+        <Field label="رقم البناء" value={BUILD_NUMBER} />
+        <Field label="كوميت التطبيق" value={BUILD_COMMIT} />
+        <Field label="زمن البناء" value={BUILD_TIME} />
+        <Field
+          label="بيئة التداول"
+          value={TRADING_ENVIRONMENT}
+          tone={TRADING_ENVIRONMENT === 'REAL' ? 'negative' : 'info'}
+        />
+        <Field label="كوميت الخادم" value={data?.backend_commit ?? null} />
         <Field label={t.system.device} value={deviceId} />
       </Card>
 

@@ -71,6 +71,7 @@
     "trades.unavailable"
   ],
   "status": {
+    "backend_commit": "string",
     "broker": {
       "account_masked": "string",
       "connected": "boolean",

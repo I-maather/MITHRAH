@@ -7,6 +7,11 @@ import Constants from 'expo-constants';
 
 interface Extra {
   apiBaseUrl?: unknown;
+  appVersion?: unknown;
+  buildNumber?: unknown;
+  buildCommit?: unknown;
+  buildTime?: unknown;
+  tradingEnvironment?: unknown;
   bundleIdentifier?: unknown;
   autoLockMinutes?: unknown;
   previewData?: unknown;
@@ -29,6 +34,26 @@ export const BUNDLE_IDENTIFIER: string = asString(
   extra.bundleIdentifier ?? Constants.expoConfig?.ios?.bundleIdentifier,
   'com.maather.autonomoustrader',
 );
+
+/** نسخةُ التطبيق — من `package.json`، مصدرٌ واحد. */
+export const APP_VERSION: string = asString(extra.appVersion, 'unknown');
+
+/** رقمُ البناء. */
+export const BUILD_NUMBER: string = asString(extra.buildNumber, 'unknown');
+
+/** كوميتُ البناء — يُثبَّت وقت البناء ويُعرض، فتُعرف النسخة التي في اليد. */
+export const BUILD_COMMIT: string = asString(extra.buildCommit, 'unknown');
+
+/**
+ * بيئةُ التداول المعلَنة في البناء — `DEMO` أو `REAL`.
+ *
+ * تُعرَض شارةً ظاهرة. وشاشةٌ لا تقول أيَّهما ليست ملتبسة، هي خطرة: القرار
+ * الذي يُتَّخذ على أنه تجريبيٌّ وهو حقيقي لا يُستدرَك.
+ */
+export const TRADING_ENVIRONMENT: string = asString(extra.tradingEnvironment, 'UNSET');
+
+/** زمنُ البناء. */
+export const BUILD_TIME: string = asString(extra.buildTime, 'unknown');
 
 /** دقائق الخمول قبل القفل التلقائي. */
 export const AUTO_LOCK_MINUTES: number = asNumber(extra.autoLockMinutes, 2);

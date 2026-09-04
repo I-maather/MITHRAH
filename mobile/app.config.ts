@@ -60,10 +60,70 @@ const previewData = process.env.EXPO_PUBLIC_PREVIEW_DATA === '1';
  */
 const enablePush = process.env.EXPO_PUBLIC_ENABLE_PUSH === '1';
 
+/**
+ * نسخةُ التطبيق وكوميتُه — **يُثبَّتان وقت البناء ويُعرضان في شاشة النظام.**
+ *
+ * كان `app.config.ts` يقول `0.4.0` و`package.json` يقول `0.6.1`، ولا كوميت
+ * في التطبيق إطلاقاً. فلم يكن ممكناً أن تُعرف أي نسخةٍ على الجهاز، ولا أن
+ * يُقارَن ما في اليد بما نُشر. ورقمان متناقضان أسوأ من رقمٍ واحد خاطئ:
+ * كلاهما يُقرأ على أنه الحقيقة.
+ *
+ * المصدر الآن `package.json` وحده، والكوميت يأتي من البيئة وقت البناء.
+ */
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const appVersion: string = require('./package.json').version;
+const buildNumber: string = process.env.EXPO_PUBLIC_BUILD_NUMBER ?? '2';
+const buildCommit: string = process.env.EXPO_PUBLIC_BUILD_COMMIT ?? 'unknown';
+const buildTime: string = process.env.EXPO_PUBLIC_BUILD_TIME ?? 'unknown';
+/** بيئةُ التداول — تُثبَّت وقت البناء وتُعرض. لا يُبنى إصدارٌ بلا إعلانها. */
+const tradingEnvironment: string =
+  process.env.EXPO_PUBLIC_TRADING_ENVIRONMENT ?? 'UNSET';
+
+/**
+ * **حارسٌ على العنوان.** الافتراضي `http://127.0.0.1:8000` يعني على الجوال
+ * الجوالَ نفسه — أي تطبيقٌ يُبنى فلا يصل إلى شيء، ويُقرأ صمتُه على أنه
+ * «لا بيانات». يُمنع البناء به إلا في التطوير.
+ */
+/**
+ * **حرّاسُ البناء.** إصدارٌ قابلٌ للتثبيت لا يُبنى ناقصاً.
+ *
+ * كل واحدٍ منها أُضيف عن سببٍ لا عن احتياط:
+ *  · `127.0.0.1` على الجوال تعني الجوالَ نفسه — تطبيقٌ لا يصل إلى شيء،
+ *    ويُقرأ صمتُه على أنه «لا بيانات».
+ *  · عنوانٌ غائب: الشيء نفسه بصورةٍ أوضح.
+ *  · بيئةُ تداولٍ غير معلَنة: شاشةٌ لا تقول DEMO أو REAL خطرٌ لا التباس.
+ *  · كوميتٌ مجهول: نسخةٌ على الجهاز لا تُقارَن بما نُشر على الخادم — وهو
+ *    ما وقع فعلاً: `app.config` يقول 0.4.0 و`package.json` يقول 0.6.1
+ *    ولا كوميت في التطبيق إطلاقاً.
+ *
+ * وتُرفَع في بناء الإصدار وحده؛ التطويرُ يمرّ.
+ */
+const isReleaseBuild =
+  process.env.NODE_ENV === 'production' || process.env.EXPO_PUBLIC_RELEASE === '1';
+
+if (isReleaseBuild) {
+  const faults: string[] = [];
+  if (!process.env.EXPO_PUBLIC_API_BASE_URL) {
+    faults.push('EXPO_PUBLIC_API_BASE_URL غير مضبوط.');
+  }
+  if (apiBaseUrl.includes('127.0.0.1') || apiBaseUrl.includes('localhost')) {
+    faults.push('عنوان الخادم حلقةٌ محلية — لا يصل إليه الجوال.');
+  }
+  if (tradingEnvironment !== 'DEMO' && tradingEnvironment !== 'REAL') {
+    faults.push('EXPO_PUBLIC_TRADING_ENVIRONMENT يجب أن تكون DEMO أو REAL.');
+  }
+  if (buildCommit === 'unknown') {
+    faults.push('كوميت البناء مجهول — شغّلي البناء عبر scripts/build_env.sh.');
+  }
+  if (faults.length > 0) {
+    throw new Error('بناءٌ ناقص:\n  - ' + faults.join('\n  - '));
+  }
+}
+
 const config: ExpoConfig = {
   name: 'Maather Trader',
   slug: 'maather-trader',
-  version: '0.4.0',
+  version: appVersion,
   orientation: 'portrait',
   scheme: 'maather',
   userInterfaceStyle: 'automatic',
@@ -77,7 +137,7 @@ const config: ExpoConfig = {
   platforms: ['ios'],
   ios: {
     bundleIdentifier,
-    buildNumber: '1',
+    buildNumber,
     supportsTablet: false,
     // الوصول للشبكة يمرّ بـTLS. لا استثناء عام.
     infoPlist: {
@@ -150,6 +210,11 @@ const config: ExpoConfig = {
   extra: {
     apiBaseUrl,
     bundleIdentifier,
+    appVersion,
+    buildNumber,
+    buildCommit,
+    buildTime,
+    tradingEnvironment,
     autoLockMinutes: Number.isFinite(autoLockMinutes) ? autoLockMinutes : 2,
     previewData,
     /**

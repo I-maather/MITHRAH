@@ -67,6 +67,11 @@ def _iso(value: Any) -> str | None:
 # ---------------------------------------------------------------------------
 
 def _status(sys: Any) -> dict[str, Any]:
+    # **الخادم يقول أي شيفرةٍ يشغّل.** التطبيق يحمل كوميت بنائه، والخادم
+    # يحمل كوميت نشره — وبلا الرقمين معاً لا يمكن الجزم أن ما على الشاشة
+    # هو ما يعمل. عُرضا معاً في شاشة النظام.
+    from ..main import _BOOT_COMMIT
+
     market = forex_market_status()
     health = sys.health()
     kill = sys.kill_switch
@@ -160,6 +165,7 @@ def _status(sys: Any) -> dict[str, Any]:
         "upcoming_event": None,
         "last_refresh_utc": now_utc().isoformat(),
         "no_trade_reason_ar": _no_trade_reason(sys),
+        "backend_commit": _BOOT_COMMIT,
     }
 
 

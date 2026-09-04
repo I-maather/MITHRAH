@@ -100,6 +100,8 @@ export interface UpcomingEventView {
 }
 
 export interface StatusData {
+  /** كوميتُ الخادم — يُقارَن بكوميت بناء التطبيق. */
+  backend_commit: string;
   system_state: SystemPhase;
   system_state_ar: string | null;
   locally_paused: boolean;

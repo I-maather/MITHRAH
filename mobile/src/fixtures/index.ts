@@ -47,6 +47,7 @@ export function previewOr<T>(value: T): T | null {
 export const isPreviewMode = (): boolean => PREVIEW_DATA_ENABLED;
 
 const status: StatusData = {
+  backend_commit: 'preview',
   system_state: 'PAUSED',
   system_state_ar: 'موقوف محلياً (معاينة)',
   locally_paused: true,
