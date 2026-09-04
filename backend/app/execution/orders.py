@@ -349,19 +349,33 @@ def reconcile(
 ) -> ReconciliationResult:
     """مطابقة سجلاتنا مع الوسيط. أي اختلاف = مشكلة، لا 'تقريب'."""
     problems: list[str] = []
-    local_map = {p.symbol: p for p in local_positions}
-    broker_map = {p.symbol: p for p in broker_positions}
+
+    # **الأداة تحتمل أكثر من مركز، فتُجمع كمياتها لا يمحو أحدُها الآخر.**
+    #
+    # كان الجانبان يُبنيان قاموساً مفتاحه الرمز، فيُسقط المركزُ الثاني على
+    # الأداة نفسها الأولَ ويبقى واحدٌ يُقارَن. وكابيتال يسمح بعدّة مراكز
+    # على الأداة الواحدة: يوم 2026-09-04 كان على GBPUSD مركزان بـ٢٠٠ لكلٍّ
+    # منهما، فقرأ المطابِق ‎-200‎ على الجانبين وقال «مطابَق» — وفي الحساب
+    # ‎-400‎. أي أن الخطأ كان يُخفي فارقاً حقيقياً لا يخترعه.
+    def _totals(positions: list[Position]) -> dict[str, Decimal]:
+        totals: dict[str, Decimal] = {}
+        for position in positions:
+            totals[position.symbol] = totals.get(position.symbol, Decimal("0")) + position.quantity
+        return totals
+
+    local_map = _totals(local_positions)
+    broker_map = _totals(broker_positions)
 
     for symbol in sorted(set(local_map) | set(broker_map)):
         local = local_map.get(symbol)
         remote = broker_map.get(symbol)
         if local is None:
-            problems.append(f"مركز غير معروف لدينا موجود في حساب الوسيط: {symbol} كمية {remote.quantity}.")
+            problems.append(f"مركز غير معروف لدينا موجود في حساب الوسيط: {symbol} كمية {remote}.")
         elif remote is None:
-            problems.append(f"مركز مسجّل لدينا وغير موجود لدى الوسيط: {symbol} كمية {local.quantity}.")
-        elif abs(local.quantity - remote.quantity) > tolerance:
+            problems.append(f"مركز مسجّل لدينا وغير موجود لدى الوسيط: {symbol} كمية {local}.")
+        elif abs(local - remote) > tolerance:
             problems.append(
-                f"اختلاف كمية {symbol}: لدينا {local.quantity} ولدى الوسيط {remote.quantity}."
+                f"اختلاف كمية {symbol}: لدينا {local} ولدى الوسيط {remote}."
             )
 
     return ReconciliationResult(

@@ -44,6 +44,7 @@ from ..risk.capital_costs import CfdTradeEconomics
 from ..risk.costs import CommissionSchedule, CostAssumptions
 from ..risk.engine import RiskEngine, SessionRiskState
 from ..risk.instrument_registry import InstrumentRegistry
+from ..risk.size_ladder import PORTFOLIO_LIMIT_EXCEEDED
 from ..strategies.base import Strategy
 
 
@@ -138,6 +139,10 @@ TIMEFRAME_EXCEPTION = "TIMEFRAME_EXCEPTION_DEMO_TRIAL"
 NO_STRATEGY_FOR_TIMEFRAME = "NO_STRATEGY_APPROVED_FOR_TIMEFRAME"
 #: أُقدِم على هذا الإعداد بعينه في هذه الدورة الزمنية من قبل.
 ENTRY_ALREADY_ATTEMPTED = "ENTRY_ALREADY_ATTEMPTED_FOR_SETUP"
+#: للأداة مركزٌ مفتوحٌ عند الوسيط — فلا يُضاعَف التعرّض عليها.
+SYMBOL_ALREADY_HELD = "SYMBOL_ALREADY_HELD"
+#: تعذّرت قراءة مراكز الوسيط — ولا يُفتَح مركزٌ على جهلٍ بما هو مفتوح.
+PORTFOLIO_READ_FAILED = "PORTFOLIO_READ_FAILED"
 
 
 #: مفرداتان لشيءٍ واحد: الوسيط يسمّي الدقّة `HOUR_4` والاستراتيجيات
@@ -504,6 +509,48 @@ class Pipeline:
                 now,
             )
 
+        # ---------------------------------------------------------------
+        # ٣٫٥) بوابة المحفظة — **تُقرأ من الوسيط، لا من ذاكرةٍ لا نملكها.**
+        #
+        # يوم 2026-09-04 فُتح على GBPUSD مركزان بحجم ٢٠٠ لكلٍّ منهما، من
+        # استراتيجيتين مختلفتين على الشمعة نفسها. وحارسُ الإعداد لا يمنع
+        # ذلك: مفتاحه يحمل اسم الاستراتيجية، فاستراتيجيتان تمرّان. والنتيجة
+        # ضِعفُ المخاطرة المعتمدة على أداةٍ واحدة، وهي بالضبط ما يمنعه
+        # الشرط السابع في هدف المشاركة اليومية.
+        #
+        # والقراءة من الوسيط لا من سجلٍّ عندنا مقصودة: النظام **لا يحتفظ
+        # بدفتر مراكز مفتوحة** — `local_positions` في المطابقة أدناه ليست
+        # إلا المركز الذي فُتح في هذه الدورة. فالمصدر الوحيد الصادق عمّا
+        # هو مفتوحٌ الآن هو حساب الوسيط نفسه.
+        # ---------------------------------------------------------------
+        try:
+            open_positions = list(self.broker.get_positions(balances.account_id))
+        except Exception as exc:  # noqa: BLE001
+            return self._no_trade(
+                "portfolio", PORTFOLIO_READ_FAILED,
+                f"تعذّرت قراءة المراكز المفتوحة من الوسيط: {type(exc).__name__}. "
+                "لا يُفتَح مركزٌ على جهلٍ بما هو مفتوح.",
+                now,
+            )
+        already = [p for p in open_positions if p.symbol.upper() == symbol.upper()]
+        if already:
+            return self._no_trade(
+                "portfolio", SYMBOL_ALREADY_HELD,
+                f"{symbol} له مركزٌ مفتوحٌ عند الوسيط بكمية "
+                f"{sum((p.quantity for p in already), Decimal('0'))} — "
+                "لا يُضاعَف التعرّض على الأداة نفسها.",
+                now,
+            )
+        _max_open = getattr(
+            getattr(self.risk_engine, "limits", None), "max_open_positions", None
+        )
+        if _max_open is not None and len(open_positions) >= int(_max_open):
+            return self._no_trade(
+                "portfolio", PORTFOLIO_LIMIT_EXCEEDED,
+                f"المراكز المفتوحة {len(open_positions)} بلغت الحدّ {int(_max_open)}.",
+                now,
+            )
+
         # 4/5) Eligibility
         eligibility = check_eligibility(
             symbol=symbol, quote=quote, details=details, permissions=permissions,
@@ -776,9 +823,22 @@ class Pipeline:
                     as_of_utc=now,
                 )
             ]
+        # **المطابقة تسأل عمّا فعلناه للتوّ، ولا تدّعي دفتراً لا نملكه.**
+        #
+        # كانت تقارن `local` — وهي المركز الواحد الذي فُتح في هذه الدورة —
+        # بحساب الوسيط **كلّه**. فأيُّ مركزٍ ثانٍ مفتوحٍ على أداةٍ أخرى يظهر
+        # «غير معروفٍ لدينا» ويرفع قاطع الطوارئ. ومعناه أن سقف «ثلاثة
+        # مراكز» في الدستور غير قابلٍ للبلوغ أصلاً: المركز الثاني يوقف
+        # النظام في الدورة التي يليه. وقع ذلك على GOLD بعد GBPUSD.
+        #
+        # ⇒ يُقارَن الرمز المتداوَل وحده. وغيابُ دفتر المراكز المفتوحة
+        # عيبٌ مفتوحٌ مسجَّل، ولا يُداوى بادّعاء المطابقة الشاملة.
         recon = reconcile(
             local_positions=local,
-            broker_positions=list(self.broker.get_positions(balances.account_id)),
+            broker_positions=[
+                p for p in self.broker.get_positions(balances.account_id)
+                if p.symbol.upper() == symbol.upper()
+            ],
             now=now,
         )
         self.audit.record(
