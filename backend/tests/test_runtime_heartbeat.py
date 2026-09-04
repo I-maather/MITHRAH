@@ -48,6 +48,21 @@ class FakeBroker:
     def get_candles(self, symbol, *, resolution="DAY", max_bars=200):
         return [FakeCandle() for _ in range(self._bars)]
 
+    # **المزيّفُ يجب أن يحمل ما يحمله الحقيقي.**
+    #
+    # صارت الحلقة تقرأ المراكز والأوامر المعلّقة من الوسيط قبل أي قرار،
+    # وتُفشَل مغلقاً إن لم تقرأ. ومزيّفٌ بلا هذا السطح كان يجعل كل دورةٍ
+    # تُردّ بـ`RECONCILIATION_NOT_READY` — وهو سلوكٌ صحيح، والنقصُ في
+    # المزيّف لا في الحارس.
+    def get_positions(self, account_id=""):
+        return []
+
+    def get_orders(self, account_id=""):
+        return []
+
+    def get_balances(self, account_id=""):
+        return SimpleNamespace(account_id="TEST", total_cash=D("140"), settled_cash=D("140"))
+
 
 def build_state(monkeypatch, **over):
     monkeypatch.setattr(hb, "load_session_state", lambda *a, **k: "STATE")
