@@ -809,6 +809,15 @@ def broker_state(sys: SystemState = Depends(system)):
         "account_masked": None,
         "local_trading_paused": sys.locally_paused,
         "execution_lock": sys.execution_lock.as_dict(),
+        # **القفلُ المعروض ليس بالضرورة القفلَ الحاكم.** السطرُ أعلاه
+        # يقرأ قفل `SystemState`، والذي يمنع الإرسال فعلاً هو قفلُ
+        # الناقل داخل المحوّل. ليلةَ 2026-09-03 كان المعروض «مفتوحاً»
+        # والناقلُ يرفع `ExecutionLocked` — فبدا النظام سليماً وهو
+        # ممنوع. لذلك تُنشر الطبقتان صراحةً ومعهما إجابةُ «هل تتّفقان؟».
+        "execution_lock_layers": getattr(sys.broker, "execution_lock_layers", None),
+        "execution_lock_consistent": getattr(
+            sys.broker, "execution_lock_consistent", None
+        ),
         "risk_mode": limits.mode.value,
         "risk_constitution_version": CONSTITUTION_VERSION,
         "kill_switch": {
