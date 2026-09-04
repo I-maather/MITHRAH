@@ -28,7 +28,9 @@ WORK="${2:-/tmp/mathrah-pre}"
 SRC=/opt/mathrah
 
 rm -rf "$WORK" || exit 90
-git init -q -b main "$WORK"                                    || exit 91
+# فرعُ البداية ليس `main`: git يرفض الجلب إلى فرعٍ مُستخرَجٍ في شجرة عمل،
+# و`git init -b main` يجعل HEAD يشير إلى `main` قبل وجودها.
+git init -q -b _bootstrap "$WORK"                              || exit 91
 git -C "$WORK" fetch -q --no-tags "$SRC" "+${REF}:refs/heads/main" || exit 92
 git -C "$WORK" checkout -q main                                || exit 93
 
