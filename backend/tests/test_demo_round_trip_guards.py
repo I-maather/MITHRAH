@@ -209,8 +209,15 @@ def test_the_diagnostic_sends_through_the_execution_service_not_the_adapter():
     كان `adapter.place_order(intent)` — يتخطّى حارس التكرار والمعاينة وخط
     التدقيق ودفتر الأوامر. فيُثبت أنّ المحوّل يعمل لا أنّ النظام يعمل.
     """
-    assert "service.submit(intent)" in SOURCE
-    assert "adapter.place_order(" not in SOURCE
+    # **يُفحَص الكود لا النثر.** أوّل صياغةٍ لهذا الحارس سقطت على تعليقٍ
+    # يشرح العطل القديم ويذكر `adapter.place_order(intent)` حرفياً. وحارسٌ
+    # يقرأ التعليقات يمنع شرحَ ما أُصلح — فيُحذَف الشرح إرضاءً له، وتضيع
+    # الذاكرة التي هي نصف قيمة هذا المستودع.
+    code = "\n".join(
+        line for line in SOURCE.splitlines() if not line.lstrip().startswith("#")
+    )
+    assert "service.submit(intent)" in code
+    assert "adapter.place_order(" not in code
     # والكائن هو الذي يعمل، لا نسخةٌ تُبنى في التشخيص.
-    assert "from app.main import system" in SOURCE
-    assert "build_system" not in SOURCE
+    assert "from app.main import system" in code
+    assert "build_system" not in code
