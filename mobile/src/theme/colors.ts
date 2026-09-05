@@ -24,6 +24,14 @@ export interface ColorScheme {
 
   accent: string;
   accentSoft: string;
+  /**
+   * الجمر **نصّاً**. الصبغة نفسها بإضاءةٍ أخفض.
+   *
+   * لون العلامة يُملأ به ولا يُكتَب به دائماً: `#B85A26` على تعبئته الفاتحة
+   * يبلغ 3.96:1، ونصُّ الشارة ليس نصّاً كبيراً. والهوية معتمدة فلا تُغيَّر
+   * صبغتها — يُغيَّر الدور: تعبئةٌ بلون، وكتابةٌ بلونٍ يُقرأ.
+   */
+  accentText: string;
 
   positive: string;
   positiveSoft: string;
@@ -61,6 +69,7 @@ export const lightColors: ColorScheme = {
 
   accent: palette.jamr.light,
   accentSoft: palette.jamr.lightSoft,
+  accentText: palette.jamr.lightText,
 
   positive: palette.nakhl.light,
   positiveSoft: '#E3EFE8',
@@ -89,6 +98,8 @@ export const darkColors: ColorScheme = {
 
   accent: palette.jamr.dark,
   accentSoft: palette.jamr.darkSoft,
+  // في الداكن يبلغ الجمر 5.38:1 على تعبئته، فلا حاجة إلى نسخةٍ ثانية.
+  accentText: palette.jamr.dark,
 
   positive: palette.nakhl.dark,
   positiveSoft: '#122419',
@@ -122,7 +133,7 @@ export const toneOf = (colors: ColorScheme, tone: ToneName): Tone => {
     case 'info':
       return { fg: colors.info, bg: colors.infoSoft };
     case 'accent':
-      return { fg: colors.accent, bg: colors.accentSoft };
+      return { fg: colors.accentText, bg: colors.accentSoft };
     case 'neutral':
     default:
       return { fg: colors.textSecondary, bg: colors.surfaceSunken };

@@ -33,7 +33,8 @@ function band(r: number): { word: string; step: 0 | 1 | 2 } {
  * ليس الرصيد؛ وهنا الرقم الكبير هو **ما تبقّى من مخاطرة اليوم**.
  *
  * **٢. الثخانة تحمل التصعيد لا اللون.** كان الشريط يصعّد بلونٍ وحده
- * (0.6 ⇒ تحذير، 0.85 ⇒ خطر) و`importantForAccessibility="no"` يخفيه عن
+ * (0.6 ⇒ تحذير، 0.85 ⇒ خطر) و`importantForAccessibility="no"
+            testID="risk-meter-track"` يخفيه عن
  * قارئ الشاشة. فمن لا يميّز الألوان — أو ينظر في الشمس — لا يرى شيئاً.
  * الآن: 2px ⇒ 3px ⇒ 5px، **ومعها كلمة منطوقة ومكتوبة**.
  *
@@ -96,7 +97,9 @@ export function RiskMeter({
           style={{
             height,
             borderRadius: height / 2,
-            backgroundColor: theme.colors.surfaceSunken,
+            // **الكلّ كان لا يُرى.** `surfaceSunken` على `surface` يبلغ 1.24:1،
+              // فتُعرَض النسبة بلا مرجعٍ بصريّ: يُرى الممتلئ ولا يُرى ممّاذا.
+              backgroundColor: theme.colors.borderStrong,
             overflow: 'hidden',
             flexDirection: 'row',
           }}

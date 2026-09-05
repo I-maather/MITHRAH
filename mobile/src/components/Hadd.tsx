@@ -61,7 +61,14 @@ export interface HaddProps {
   accessibilityLabel?: string;
 }
 
-const TRACK_HEIGHT = 1;
+// **المدى كان لا يُرى.** `border` على السطح يبلغ 1.37:1 في الفاتح
+// و1.51:1 في الداكن، وعتبة WCAG لعناصر الواجهة غير النصّية 3:1. فكان
+// يُرى الشاهدُ ولا يُرى **ما يُقاس عليه** — أي أنّ العنصر الذي بُني ليقول
+// «أين أنتِ من الحدّ» كان يقول «أين أنتِ» وحدها.
+const TRACK_HEIGHT = 2;
+/** علامتا نهايةٍ تجعلان المدى مقروءاً بلا لون. */
+const CAP_WIDTH = 2;
+const CAP_HEIGHT = 6;
 const TICK_HEIGHT = 13;
 const MARK_HEIGHT = 5;
 const RAIL_HEIGHT = TICK_HEIGHT;
@@ -96,7 +103,7 @@ export function Hadd({
   const toneColor = (tone: HaddThreshold['tone']): string => {
     if (tone === 'positive') return theme.colors.positive;
     if (tone === 'negative') return theme.colors.negative;
-    return theme.colors.border;
+    return theme.colors.borderStrong;
   };
 
   const spoken =
@@ -144,9 +151,33 @@ export function Hadd({
             right: 0,
             left: 0,
             height: TRACK_HEIGHT,
-            backgroundColor: theme.colors.border,
+            backgroundColor: theme.colors.borderStrong,
           }}
         />
+
+          {/* طرفا المدى — يُقرأ المدى بهما حتى بلا لون. */}
+          <View
+            testID="hadd-cap-start"
+            style={{
+              position: 'absolute',
+              right: 0,
+              width: CAP_WIDTH,
+              height: CAP_HEIGHT,
+              top: -(CAP_HEIGHT - TRACK_HEIGHT) / 2,
+              backgroundColor: theme.colors.borderStrong,
+            }}
+          />
+          <View
+            testID="hadd-cap-end"
+            style={{
+              position: 'absolute',
+              left: 0,
+              width: CAP_WIDTH,
+              height: CAP_HEIGHT,
+              top: -(CAP_HEIGHT - TRACK_HEIGHT) / 2,
+              backgroundColor: theme.colors.borderStrong,
+            }}
+          />
 
         {/* المستهلَك */}
         {showFill && pos > 0 ? (
