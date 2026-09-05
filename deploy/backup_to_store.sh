@@ -14,6 +14,11 @@
 #
 # فيُركَّب الوعاء إن لزم، ويُدفَع، ويُتحقَّق من تطابق المخزن بعد الدفع —
 # ولا يُقال «تمّ» إلا بعد المطابقة.
+
+# الوعاء الخارجي أولاً — لا كتابةَ على مستودعٍ غائب.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/scripts/mathrah_mount.sh" 2>/dev/null \
+  && mathrah_require || { echo "⛔ المستودع العامل غير متاح."; exit 90; }
+
 set -u
 
 REPO="${1:-$HOME/Developer/Maather-Autonomous-Trader}"
