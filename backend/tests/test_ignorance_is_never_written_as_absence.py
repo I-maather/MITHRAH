@@ -20,17 +20,19 @@ from decimal import Decimal
 import pytest
 
 from app.db.models import Base, PositionBookRow
-from app.portfolio.book import OpenPosition, PortfolioSnapshot
+from app.portfolio.book import ClosedTrade, OpenPosition, PortfolioSnapshot
 from app.portfolio.ledger import (
     CLOSE_CONFIRMATIONS,
     RECON_CONFIRMED,
     RECON_STALE,
+    RECON_UNRESOLVED,
     STATE_OPEN,
     exposure,
     mark_restart,
     open_rows,
     stale_rows,
     sync,
+    unresolved_rows,
 )
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
@@ -58,9 +60,29 @@ def _pos(deal_id: str, symbol: str = "EURUSD", qty: str = "100") -> OpenPosition
     )
 
 
-def _snap(*positions: OpenPosition, ok: bool = True, at: datetime = NOW) -> PortfolioSnapshot:
+def _snap(
+    *positions: OpenPosition,
+    ok: bool = True,
+    at: datetime = NOW,
+    closed: tuple[ClosedTrade, ...] = (),
+) -> PortfolioSnapshot:
     return PortfolioSnapshot(
-        ok=ok, account_id="acct", as_of_utc=at, open_positions=list(positions)
+        ok=ok,
+        account_id="acct",
+        as_of_utc=at,
+        open_positions=list(positions),
+        closed_trades=tuple(closed),
+    )
+
+
+def _evidence(deal_id: str, pnl: str = "-0.79") -> ClosedTrade:
+    """صفقةٌ مغلقةٌ في دفتر المعاملات — الدليل المستقلّ."""
+    return ClosedTrade(
+        symbol="EURUSD",
+        realised_pnl=Decimal(pnl),
+        currency="USD",
+        closed_utc=LATER,
+        deal_id=deal_id,
     )
 
 
@@ -134,14 +156,15 @@ def test_one_empty_but_successful_snapshot_closes_nothing(session):
     assert len(result.notes_ar) >= 2, "غيابٌ بلا ملاحظة هو المحو الصامت نفسه"
 
 
-def test_the_close_arrives_only_after_the_threshold(session):
+def test_the_close_arrives_only_after_the_threshold_and_with_evidence(session):
     _seed(session)
+    proof = (_evidence("d-1"), _evidence("d-2", "0.15"))
     for _ in range(CLOSE_CONFIRMATIONS - 1):
-        assert sync(session, _snap(at=LATER)).closed == ()
-    final = sync(session, _snap(at=LATER))
+        assert sync(session, _snap(at=LATER, closed=proof)).closed == ()
+    final = sync(session, _snap(at=LATER, closed=proof))
     assert sorted(final.closed) == ["d-1", "d-2"]
     assert open_rows(session) == []
-    assert any("مغلقاً" in note for note in final.notes_ar)
+    assert any("دفترُ المعاملات" in note for note in final.notes_ar)
 
 
 # ٥ — لا تكرار ولا تبدُّل هويّة
@@ -170,10 +193,81 @@ def test_a_confirmed_close_is_labelled_confirmed(session):
     يُقرأ «لا نعرف أمُغلقٌ هو» — وهو عكس ما جرى.
     """
     _seed(session)
+    proof = (_evidence("d-1"), _evidence("d-2"))
     for _ in range(CLOSE_CONFIRMATIONS):
-        sync(session, _snap(at=LATER))
+        sync(session, _snap(at=LATER, closed=proof))
     rows = session.query(PositionBookRow).all()
     assert {r.state for r in rows} == {"CLOSED"}
     assert {r.reconciliation for r in rows} == {RECON_CONFIRMED}, (
         "الإغلاق المؤكَّد وُسم غيرَ مؤكَّد"
     )
+
+
+# ── الغياب بلا دليل ─────────────────────────────────────────────────
+
+
+def test_the_threshold_without_evidence_never_writes_closed(session):
+    """قائمةٌ فارغة تفتح السؤال ولا تُجيبه.
+
+    غيابُ صفٍّ عن قائمة المراكز يحتمل الإغلاق ويحتمل غيره: ترحيلاً عند
+    الوسيط، أو حساباً آخر في الطلب، أو نافذةً بين جلستين. فبلوغُ العتبة
+    بلا صفقةٍ في دفتر المعاملات لا يُنتج إغلاقاً — يُنتج سؤالاً معلَّقاً.
+    """
+    _seed(session)
+    for _ in range(CLOSE_CONFIRMATIONS + 2):
+        result = sync(session, _snap(at=LATER))
+        assert result.closed == ()
+
+    rows = session.query(PositionBookRow).all()
+    assert {r.state for r in rows} == {STATE_OPEN}
+    assert {r.reconciliation for r in rows} == {RECON_UNRESOLVED}
+    assert len(unresolved_rows(session)) == 2
+    assert sorted(result.unresolved) == ["d-1", "d-2"]
+
+
+def test_an_unresolved_row_carries_no_invented_close(session):
+    """لا سعرَ إغلاقٍ ولا ربحٌ ولا خسارةٌ بالتخمين."""
+    _seed(session)
+    for _ in range(CLOSE_CONFIRMATIONS + 1):
+        sync(session, _snap(at=LATER))
+    for row in session.query(PositionBookRow).all():
+        assert row.closed_at_utc is None, "كُتب وقتُ إغلاقٍ بلا دليل"
+        assert row.realised_pnl is None, "كُتبت نتيجةٌ بلا دليل"
+
+
+def test_an_unresolved_row_still_counts_and_still_blocks(session):
+    _seed(session)
+    for _ in range(CLOSE_CONFIRMATIONS + 1):
+        sync(session, _snap(at=LATER))
+    assert len(open_rows(session)) == 2
+    assert exposure(open_rows(session)) == {
+        "EURUSD": Decimal("100"),
+        "GBPUSD": Decimal("-200"),
+    }
+    assert len(stale_rows(session)) == 2, "الجهل لا يُحجَب به الدخول"
+
+
+def test_evidence_writes_the_brokers_own_numbers(session):
+    _seed(session)
+    proof = (_evidence("d-1", "-1.25"),)
+    for _ in range(CLOSE_CONFIRMATIONS):
+        sync(session, _snap(at=LATER, closed=proof))
+    closed = [r for r in session.query(PositionBookRow).all() if r.broker_deal_id == "d-1"]
+    assert len(closed) == 1
+    assert closed[0].state == "CLOSED"
+    assert closed[0].realised_pnl == Decimal("-1.25")
+    assert closed[0].closed_at_utc is not None
+
+
+def test_a_resolved_row_and_an_unresolved_row_are_not_confused(session):
+    """دليلٌ لواحدٍ لا يُغلق الآخر."""
+    _seed(session)
+    proof = (_evidence("d-1"),)
+    for _ in range(CLOSE_CONFIRMATIONS):
+        result = sync(session, _snap(at=LATER, closed=proof))
+    assert result.closed == ("d-1",)
+    assert result.unresolved == ("d-2",)
+    rows = {r.broker_deal_id: r for r in session.query(PositionBookRow).all()}
+    assert rows["d-1"].state == "CLOSED"
+    assert rows["d-2"].state == STATE_OPEN
+    assert rows["d-2"].reconciliation == RECON_UNRESOLVED

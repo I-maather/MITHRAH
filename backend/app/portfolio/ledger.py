@@ -44,6 +44,12 @@ ATTRIBUTION_UNLINKED = "UNLINKED"
 #: حالةُ المعرفة — لا حالةُ المركز.
 RECON_CONFIRMED = "CONFIRMED"
 RECON_STALE = "STALE"
+#: غاب عن عتبةِ لقطاتٍ ناجحة **ولا دليلَ مستقلّ على إغلاقه**.
+#:
+#: وهي ليست درجةً ثالثةً من الجهل — هي حالةٌ تُوجب التدخّل: نعرف أنّ شيئاً
+#: تغيّر، ولا نعرف ماذا. فيبقى الصفّ مفتوحاً ويُعَدّ في التعرّض، ويُحجَب
+#: الدخول، ولا يُكتَب له سعرُ إغلاقٍ ولا ربحٌ ولا خسارة.
+RECON_UNRESOLVED = "UNRESOLVED"
 
 #: كم لقطةً **ناجحة** متتاليةً يجب أن يغيب فيها المركز قبل أن يُكتَب مغلقاً.
 #:
@@ -69,6 +75,8 @@ class LedgerSync:
     unattributed: tuple[str, ...] = ()
     #: مراكز في الدفتر لم تظهر في هذه اللقطة — **تبقى مفتوحةً وتُعدّ**.
     stale: tuple[str, ...] = ()
+    #: بلغت العتبة ولا دليلَ مستقلّ على إغلاقها — تدخّلٌ لازم.
+    unresolved: tuple[str, ...] = ()
     #: مراكز غابت ولم تبلغ عتبةَ التأكيد بعد — إغلاقٌ مؤجَّلٌ لا صامت.
     pending_close: tuple[str, ...] = ()
     notes_ar: tuple[str, ...] = ()
@@ -246,17 +254,53 @@ def sync(session: Session, snapshot: PortfolioSnapshot) -> Optional[LedgerSync]:
     # `STALE` ويستمرّ في التعرّض والمخاطر، ولا يُكتَب مغلقاً إلا بعد
     # `CLOSE_CONFIRMATIONS` لقطةً ناجحةً متتاليةً غاب فيها — ومع ملاحظةٍ
     # تقول لماذا.
+    # دليلُ الإغلاق يصل في اللقطة نفسها: `list_recent_transactions` تُقرأ
+    # مع المراكز، فلا نداءَ إضافيّ ولا نافذةَ زمنيةٍ بين المصدرين.
+    closed_by_deal = {
+        (t.deal_id or "").strip(): t for t in snapshot.closed_trades if (t.deal_id or "").strip()
+    }
+    closed_by_reference = {
+        (t.reference or "").strip(): t
+        for t in snapshot.closed_trades
+        if (t.reference or "").strip()
+    }
+
     closed: list[str] = []
     stale: list[str] = []
     pending: list[str] = []
+    unresolved: list[str] = []
     for row in open_rows(session):
         if row.broker_deal_id in seen:
             continue
         row.absent_confirmations = int(row.absent_confirmations or 0) + 1
         row.reconciliation = RECON_STALE
         if row.absent_confirmations >= CLOSE_CONFIRMATIONS:
+            # **الغيابُ من قائمةٍ ليس دليلَ إغلاق.**
+            #
+            # قائمةُ المراكز تقول «ما هو مفتوحٌ الآن»؛ وغيابُ صفٍّ عنها
+            # يحتمل الإغلاق ويحتمل غيره: ترحيلاً عند الوسيط، أو حساباً
+            # آخر في الطلب، أو نافذةً بين جلستين. فبلوغُ العتبة يفتح
+            # السؤال ولا يُجيبه — والجواب يأتي من **دفتر المعاملات**:
+            # صفقةٌ مغلقةٌ بهويّة هذا المركز، بسعرها ونتيجتها كما يقولهما
+            # الوسيط. ولا يُخمَّن سعرُ إغلاقٍ ولا ربحٌ ولا خسارة أبداً.
+            evidence = closed_by_deal.get(row.broker_deal_id) or (
+                closed_by_reference.get(row.deal_reference or "")
+                if row.deal_reference
+                else None
+            )
+            if evidence is None:
+                row.reconciliation = RECON_UNRESOLVED
+                unresolved.append(row.broker_deal_id)
+                notes.append(
+                    f"مركز {row.broker_deal_id} غاب عن {row.absent_confirmations} "
+                    "لقطةً ناجحةً متتالية ولا صفقةَ إغلاقٍ تقابله في دفتر "
+                    "المعاملات — لا يُكتَب مغلقاً. يبقى محسوباً ويُحجَب الدخول."
+                )
+                continue
             row.state = STATE_CLOSED
-            row.closed_at_utc = now
+            row.closed_at_utc = evidence.closed_utc or now
+            if evidence.realised_pnl is not None:
+                row.realised_pnl = evidence.realised_pnl
             # **الإغلاق نفسه مؤكَّد.** `reconciliation` تصف الثقة في
             # `state` لا في وجود المركز: صفٌّ بقي `STALE` بعد أن كُتب
             # مغلقاً يُقرأ «لا نعرف أمُغلقٌ هو» — وهو عكسُ ما جرى، فقد
@@ -266,7 +310,18 @@ def sync(session: Session, snapshot: PortfolioSnapshot) -> Optional[LedgerSync]:
             closed.append(row.broker_deal_id)
             notes.append(
                 f"مركز {row.broker_deal_id} غاب عن {row.absent_confirmations} "
-                "لقطةً ناجحةً متتالية — كُتب مغلقاً."
+                "لقطةً ناجحةً متتالية، ودفترُ المعاملات يحمل إغلاقه"
+                + (
+                    f" عند {evidence.closed_utc.isoformat()}"
+                    if evidence.closed_utc is not None
+                    else ""
+                )
+                + (
+                    f" بنتيجة {evidence.realised_pnl}"
+                    if evidence.realised_pnl is not None
+                    else " بلا نتيجةٍ مذكورة"
+                )
+                + " — كُتب مغلقاً بأرقام الوسيط."
             )
         else:
             stale.append(row.broker_deal_id)
@@ -286,6 +341,7 @@ def sync(session: Session, snapshot: PortfolioSnapshot) -> Optional[LedgerSync]:
         changed=tuple(changed),
         unattributed=tuple(dict.fromkeys(unattributed)),
         stale=tuple(stale),
+        unresolved=tuple(unresolved),
         pending_close=tuple(pending),
         notes_ar=tuple(notes),
     )
@@ -314,6 +370,11 @@ def mark_restart(session: Session) -> int:
 def stale_rows(session: Session) -> list[PositionBookRow]:
     """المراكز المفتوحة التي لم تُؤكَّد بعد — يُحجب الدخول ما دامت."""
     return [r for r in open_rows(session) if r.reconciliation != RECON_CONFIRMED]
+
+
+def unresolved_rows(session: Session) -> list[PositionBookRow]:
+    """ما بلغ عتبة الغياب بلا دليلِ إغلاق — يحتاج تدخّلاً لا انتظاراً."""
+    return [r for r in open_rows(session) if r.reconciliation == RECON_UNRESOLVED]
 
 
 def as_positions(rows: list[PositionBookRow]) -> list[dict]:

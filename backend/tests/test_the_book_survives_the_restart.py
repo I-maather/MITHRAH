@@ -76,9 +76,13 @@ def _position(deal_id: str, symbol: str, quantity: str, *, stop=None, reference=
     )
 
 
-def _snapshot(*positions, at=NOW, ok=True):
+def _snapshot(*positions, at=NOW, ok=True, closed=()):
     return PortfolioSnapshot(
-        as_of_utc=at, ok=ok, account_id="acct", open_positions=tuple(positions)
+        as_of_utc=at,
+        ok=ok,
+        account_id="acct",
+        open_positions=tuple(positions),
+        closed_trades=tuple(closed),
     )
 
 
@@ -165,10 +169,18 @@ def test_a_position_that_left_the_broker_is_not_closed_on_one_snapshot(session):
     assert any("يبقى" in note for note in result.notes_ar), "غابَ بلا ملاحظة"
 
 
-def test_the_close_needs_repeated_confirmation(session):
+def test_the_close_needs_repeated_confirmation_and_independent_evidence(session):
+    from app.portfolio.book import ClosedTrade
+
+    proof = (
+        ClosedTrade(
+            symbol="GBPUSD", realised_pnl=D("-0.79"), currency="USD",
+            closed_utc=LATER, deal_id="d-1",
+        ),
+    )
     sync(session, _snapshot(_position("d-1", "GBPUSD", "-200")))
-    sync(session, _snapshot(at=LATER))
-    result = sync(session, _snapshot(at=LATER))
+    sync(session, _snapshot(at=LATER, closed=proof))
+    result = sync(session, _snapshot(at=LATER, closed=proof))
 
     assert result is not None and result.closed == ("d-1",)
     assert open_rows(session) == []
