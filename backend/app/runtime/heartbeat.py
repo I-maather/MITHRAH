@@ -313,6 +313,34 @@ def register_runtime_jobs(state, *, interval_seconds: int = DEFAULT_INTERVAL_SEC
             )
             return
 
+        # **وبوابةُ الإقلاع لا تكفي وحدها.** هي تُقيَّم مرّةً؛ وفقدانُ التأكيد
+        # يقع في أيّ دورة. فمركزٌ في الدفتر لم تُؤكِّده لقطةٌ ناجحة بعدُ يعني
+        # أنّنا لا نعرف تعرّضنا الحقيقي الآن — والدخول فوق جهلٍ بالتعرّض هو
+        # ما يُراد منعه، لا الدخول بعد إقلاعٍ ناجح.
+        try:
+            from ..db.session import get_session
+            from ..portfolio.ledger import stale_rows as _stale_rows
+
+            with get_session() as _s:
+                _stale = [r.broker_deal_id for r in _stale_rows(_s)]
+        except Exception:  # noqa: BLE001
+            _stale = None
+        if _stale is None:
+            state.last_result = _no_trade(
+                RECONCILIATION_NOT_READY,
+                "تعذّرت قراءة حالة المطابقة من الدفتر — لا فتحَ مركز.",
+                "runtime",
+            )
+            return
+        if _stale:
+            state.last_result = _no_trade(
+                RECONCILIATION_NOT_READY,
+                f"{len(_stale)} مركزاً في الدفتر لم تؤكّده لقطةٌ ناجحة بعد "
+                "— التعرّض القائم غير مؤكَّد. المراقبة مستمرّة ولا فتحَ مركز.",
+                "runtime",
+            )
+            return
+
         try:
             connected = state.broker.health_check()
         except Exception:  # noqa: BLE001
@@ -396,11 +424,43 @@ def register_runtime_jobs(state, *, interval_seconds: int = DEFAULT_INTERVAL_SEC
             )
             return
 
+        # **العدّ يشمل ما لم يُؤكَّد بعد.** كان يُقرأ من لقطة الوسيط وحدها،
+        # فمركزٌ في الدفتر لم يظهر في هذه اللقطة يسقط من السقف — أي أنّ
+        # الجهل بمركزٍ قائم يُقرأ «لا مركز»، فيُفتَح فوقه. والدفتر يحمل آخر
+        # حقيقةٍ معروفة، فيُضمّ إليها: الاتحاد بالهويّة لا الجمع، كي لا
+        # يُحسَب المركز الواحد مرّتين.
+        book_ids: set[str] = set()
+        book_symbols: set[str] = set()
+        try:
+            from ..db.session import get_session
+            from ..portfolio.ledger import open_rows as _open_rows
+
+            with get_session() as _s:
+                for _row in _open_rows(_s):
+                    if _row.broker_deal_id:
+                        book_ids.add(_row.broker_deal_id)
+                    if _row.symbol:
+                        book_symbols.add(_row.symbol.upper())
+        except Exception:  # noqa: BLE001
+            # دفترٌ لا يُقرأ ليس «لا مراكز». يُفشَل مغلقاً.
+            state.last_result = _no_trade(
+                RECONCILIATION_NOT_READY,
+                "تعذّرت قراءة الدفتر الدائم — لا يُعرَف التعرّض القائم. لا فتحَ مركز.",
+                "runtime",
+            )
+            return
+
+        live_ids = {
+            (p.deal_id or "").strip()
+            for p in snapshot.open_positions
+            if (p.deal_id or "").strip()
+        }
+        unnamed = len(snapshot.open_positions) - len(live_ids)
         held = [s.upper() for s in snapshot.exposure_by_symbol()]
         session_state = replace(
             session_state,
-            open_positions=len(snapshot.open_positions) + len(reserved),
-            open_symbols=tuple(sorted(set(held) | set(reserved))),
+            open_positions=len(live_ids | book_ids) + unnamed + len(reserved),
+            open_symbols=tuple(sorted(set(held) | book_symbols | set(reserved))),
             unrealized_pnl=snapshot.total_unrealised() or D("0"),
         )
         state.session_state = session_state

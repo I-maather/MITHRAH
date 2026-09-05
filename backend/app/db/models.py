@@ -266,6 +266,17 @@ class PositionBookRow(Base):
     currency: Mapped[str] = mapped_column(String(8), default="")
     #: OPEN · CLOSED · ORPHANED
     state: Mapped[str] = mapped_column(String(16), default="OPEN", index=True)
+    #: CONFIRMED · STALE — **حالةُ المعرفة، لا حالةُ المركز.**
+    #:
+    #: `state` يقول ما نعتقده عن المركز؛ وهذا يقول متى تأكّدنا منه آخرَ مرّة.
+    #: وخلطُهما هو العطل: علمٌ ثنائيّ («رُئي بعد الإقلاع») يجعل «لم أقرأ بعد»
+    #: و«قرأتُ ولم أجده» شيئاً واحداً — وهما جهلٌ وعلم، لا درجتان من شيء.
+    reconciliation: Mapped[str] = mapped_column(String(16), default="STALE", index=True)
+    #: آخرُ لحظةٍ ظهر فيها المركز في لقطةٍ ناجحة. `None` يعني لم يُؤكَّد قط.
+    last_confirmed_utc: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    #: كم لقطةً **ناجحة** متتاليةً غاب فيها. الإغلاق يحتاج تأكيداً متكرّراً:
+    #: ردٌّ واحدٌ ناجحٌ وفارغ لا يمحو حقيقةَ خمسة مراكز.
+    absent_confirmations: Mapped[int] = mapped_column(Integer, default=0)
     #: STRATEGY · COMMISSIONING · UNATTRIBUTED
     kind: Mapped[str] = mapped_column(String(24), default="UNATTRIBUTED")
     #: LINKED إن وُجد أمرٌ يربطه بقرار، وإلا UNLINKED. لا تخمين بينهما.

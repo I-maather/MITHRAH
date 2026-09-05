@@ -546,6 +546,48 @@ _EMPTY_POSITION = {
 }
 
 
+def _book_positions() -> list[Any]:
+    """آخرُ حقيقةٍ معروفة عن المراكز — تُقرأ من الدفتر لا من اللقطة."""
+    try:
+        from ..db.session import get_session
+        from ..portfolio.ledger import open_rows
+
+        with get_session() as handle:
+            return list(open_rows(handle))
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _from_book(row: Any) -> dict[str, Any]:
+    """صفُّ دفترٍ بصيغة المركز — بما نعرفه، وبوسمٍ يقول إنّه غيرُ مؤكَّد."""
+    quantity = row.quantity
+    return {
+        "id": row.broker_deal_id or None,
+        "instrument": row.symbol or None,
+        "instrument_ar": row.symbol or None,
+        "direction_ar": "بيع" if (quantity is not None and quantity < 0) else "شراء",
+        "opened_utc": row.opened_at_utc.isoformat() if row.opened_at_utc else None,
+        "entry_price": _text(row.entry_price),
+        "current_price": None,
+        "stop_price": _text(row.stop_price),
+        "take_profit_price": _text(row.take_profit_price),
+        "size_display": _text(abs(quantity)) if quantity is not None else None,
+        "notional_display": None,
+        # **لا ربحَ غيرَ محقّقٍ بلا سعرٍ حيّ.** رقمٌ من لقطةٍ قديمة يُقرَأ
+        # على أنه الآن، وهو أسوأ من لا رقم.
+        "unrealised_pnl": None,
+        "unrealised_pnl_sign": None,
+        "risk_at_stop": None,
+        "protection_held_by_broker": row.stop_price is not None,
+        "strategy_ar": row.strategy_name or None,
+        "kind": row.kind,
+        "reconciliation": row.reconciliation or "STALE",
+        "last_confirmed_utc": (
+            row.last_confirmed_utc.isoformat() if row.last_confirmed_utc else None
+        ),
+    }
+
+
 def _position(sys: Any) -> dict[str, Any]:
     """
     المراكز المفتوحة **كما يقولها الوسيط**.
@@ -561,21 +603,56 @@ def _position(sys: Any) -> dict[str, Any]:
     snapshot = getattr(sys, "portfolio", None)
 
     if snapshot is None or not snapshot.ok:
+        # **قراءةٌ فاشلة لا تعني شاشةً فارغة.** كانت `positions` تُعاد `[]`،
+        # فيرى المستخدم لا شيء بينما في حسابه خمسةُ مراكز. الدفتر يحمل آخر
+        # حقيقةٍ معروفة، فتُعرَض موسومةً `STALE` — لا صفرٌ، ولا سكوت.
+        stale_rows = [_from_book(row) for row in _book_positions()]
+        primary = dict(stale_rows[0]) if stale_rows else dict(_EMPTY_POSITION)
+        primary.pop("id", None)
+        primary.pop("kind", None)
+        primary.pop("reconciliation", None)
+        primary.pop("last_confirmed_utc", None)
+        notes = [
+            sync["error_ar"] or "تعذّرت قراءة المحفظة من الوسيط.",
+            "هذه ليست «صفر مراكز» — هذه قراءةٌ لم تنجح.",
+        ]
+        if stale_rows:
+            notes.append(
+                f"يُعرَض آخرُ ما نعرفه: {len(stale_rows)} مركزاً من الدفتر، "
+                "غيرُ مؤكَّدةٍ حتى تنجح قراءةٌ جديدة."
+            )
         return {
-            **_EMPTY_POSITION,
+            **primary,
             "sync": sync,
-            "has_position": None,
-            "open_count": None,
-            "positions": [],
+            "reconciliation": "RECONNECTING",
+            "has_position": True if stale_rows else None,
+            "open_count": len(stale_rows) if stale_rows else None,
+            "positions": stale_rows,
+            "stale_count": len(stale_rows),
             "unprotected_count": None,
             "total_unrealised": None,
-            "notes_ar": [
-                sync["error_ar"] or "تعذّرت قراءة المحفظة من الوسيط.",
-                "هذه ليست «صفر مراكز» — هذه قراءةٌ لم تنجح.",
-            ],
+            "notes_ar": notes,
         }
 
-    rows = [_one_position(p) for p in snapshot.open_positions]
+    # **الاتحاد لا اللقطة وحدها.** مركزٌ في الدفتر لم يظهر في هذه اللقطة
+    # موجودٌ حتى يثبت العكس بلقطاتٍ متتالية؛ وإسقاطُه من الشاشة يقول
+    # «أُغلق» قبل أن يُعرَف ذلك.
+    rows = []
+    live_ids: set[str] = set()
+    for position in snapshot.open_positions:
+        row = _one_position(position)
+        row["reconciliation"] = "CONFIRMED"
+        row["last_confirmed_utc"] = snapshot.as_of_utc.isoformat() if snapshot.as_of_utc else None
+        deal_id = (position.deal_id or "").strip()
+        if deal_id:
+            live_ids.add(deal_id)
+        rows.append(row)
+    stale_rows = [
+        _from_book(book_row)
+        for book_row in _book_positions()
+        if (book_row.broker_deal_id or "") not in live_ids
+    ]
+    rows.extend(stale_rows)
     unprotected = snapshot.unprotected
     total = snapshot.total_unrealised()
 
@@ -583,7 +660,14 @@ def _position(sys: Any) -> dict[str, Any]:
     if not rows:
         notes.append("لا مركز مفتوح — قراءةٌ ناجحة من الوسيط، لا افتراض.")
     else:
-        notes.append(f"{len(rows)} مركزاً مفتوحاً، مقروءةً من حساب الوسيط.")
+        notes.append(
+            f"{len(rows) - len(stale_rows)} مركزاً مقروءةً من حساب الوسيط الآن."
+        )
+    if stale_rows:
+        notes.append(
+            f"و{len(stale_rows)} مركزاً في الدفتر لم يظهر في هذه القراءة — "
+            "يبقى معروضاً وغيرَ مؤكَّد حتى يتأكّد أو يُغلق بتأكيدٍ متكرّر."
+        )
     if unprotected:
         notes.append(
             "بلا وقفٍ عند الوسيط: "
@@ -593,15 +677,19 @@ def _position(sys: Any) -> dict[str, Any]:
     if sync["stale"]:
         notes.append("القراءة قديمة — قد تكون الأرقام متأخّرة عن السوق.")
 
-    primary = _one_position(snapshot.open_positions[0]) if rows else dict(_EMPTY_POSITION)
+    primary = dict(rows[0]) if rows else dict(_EMPTY_POSITION)
     primary.pop("id", None)
     primary.pop("kind", None)
+    primary.pop("reconciliation", None)
+    primary.pop("last_confirmed_utc", None)
     return {
         **primary,
         "sync": sync,
+        "reconciliation": "STALE" if stale_rows else "CONFIRMED",
         "has_position": len(rows) > 0,
         "open_count": len(rows),
         "positions": rows,
+        "stale_count": len(stale_rows),
         "unprotected_count": len(unprotected),
         "total_unrealised": _text(total),
         "notes_ar": notes,

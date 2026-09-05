@@ -62,3 +62,45 @@ def test_the_startup_gate_records_its_verdict():
     )
     assert "_LOG.info" in code, "البوابة تمرّ بلا أثرٍ في السجلّ"
     assert "verdict=" in code, "الحكم نفسه غير مسجَّل"
+
+
+def test_the_destination_is_born_with_its_shield():
+    """وجهةٌ بلا حاجبٍ ولو للحظةٍ وجهةٌ قد يمرّ فيها سرّ.
+
+    كان الحاجب يُركَّب داخل `build_system` أثناء دورة الحياة، والوجهة
+    تُنشأ عند الاستيراد. فبينهما نافذةٌ لا تُقاس بطولها بل بما قد يمرّ
+    فيها. فصار يُولَد معها.
+    """
+    from app.secretstore.redaction import RedactingFilter
+
+    stream = io.StringIO()
+    root = logging.getLogger()
+    before = list(root.handlers)
+    try:
+        root.handlers = []
+        assert logging_setup.configure(stream=stream) is True
+        assert len(root.handlers) == 1
+        handler = root.handlers[0]
+        assert any(isinstance(f, RedactingFilter) for f in handler.filters), (
+            "المعالج أُنشئ بلا حاجب"
+        )
+    finally:
+        root.handlers = before
+
+
+def test_a_registered_secret_never_reaches_the_stream():
+    from app.secretstore.redaction import REGISTRY
+
+    secret = "s3cr3t-value-not-a-real-token"
+    stream = io.StringIO()
+    root = logging.getLogger()
+    before = list(root.handlers)
+    try:
+        root.handlers = []
+        logging_setup.configure(stream=stream)
+        REGISTRY.register_many([secret])
+        logging.getLogger("app.brokers.capital.session").info("token=%s", secret)
+        assert secret not in stream.getvalue(), "سرٌّ مسجَّل بلغ الوجهة"
+    finally:
+        REGISTRY.forget(secret)
+        root.handlers = before

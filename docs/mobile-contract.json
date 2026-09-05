@@ -70,64 +70,79 @@
     "trades.trades",
     "trades.unavailable"
   ],
-  "status": {
-    "backend_commit": "string",
-    "broker": {
-      "account_masked": "string",
-      "connected": "boolean",
-      "execution_locked": "boolean",
-      "is_demo": "boolean",
-      "name": "string",
-      "note_ar": "string"
+  "audit": {
+    "entries": [
+      {
+        "action": "string",
+        "at_utc": "string",
+        "detail_ar": "string",
+        "device_id": "string",
+        "success": "boolean"
+      }
+    ]
+  },
+  "candles": {
+    "decision_resolution": "string",
+    "instruments": {
+      "EURUSD": {
+        "DAY": [
+          {
+            "c": "string",
+            "h": "string",
+            "l": "string",
+            "o": "string",
+            "t": "string"
+          }
+        ],
+        "HOUR_4": [
+          {
+            "c": "string",
+            "h": "string",
+            "l": "string",
+            "o": "string",
+            "t": "string"
+          }
+        ]
+      }
     },
-    "data_completeness": {
-      "complete": "boolean",
-      "missing": [
-        "string"
-      ],
-      "optional_missing": [
-        "string"
-      ],
-      "ratio": "number"
+    "levels": {
+      "entry": "nullable",
+      "stop": "nullable",
+      "symbol": "nullable",
+      "target": "nullable"
     },
-    "kill_switch": {
-      "active": "boolean",
-      "at_utc": "nullable",
-      "reason_ar": "nullable",
-      "trigger": "nullable"
+    "note_ar": "string",
+    "resolutions": [
+      "string"
+    ],
+    "symbols": [
+      "string"
+    ]
+  },
+  "decision": {
+    "authorises_execution": "boolean",
+    "blocking_reasons_ar": [
+      "string"
+    ],
+    "decided_at_utc": "string",
+    "decision": "string",
+    "decision_ar": "string",
+    "explanation_ar": "string",
+    "reason_code": "string",
+    "score": {
+      "max": "number",
+      "total": "number"
     },
-    "last_refresh_utc": "string",
-    "locally_paused": "boolean",
-    "market": {
-      "is_open": "boolean",
-      "next_close_utc": "nullable",
-      "next_open_utc": "string",
-      "reason_ar": "string",
-      "scope_ar": "string",
-      "per_instrument": [
-        {
-          "symbol": "string",
-          "status": "nullable",
-          "tradable": "nullable",
-          "reason_ar": "string"
-        }
-      ]
-    },
-    "no_trade_reason_ar": "string",
-    "strategy_state": {
-      "key": "string",
-      "live_eligible": "boolean",
-      "state": "string",
-      "title_ar": "string"
-    },
-    "system_state": "string",
-    "system_state_ar": "string",
-    "upcoming_event": {
-      "at_utc": "string",
-      "blocks_trading": "boolean",
-      "impact_ar": "string",
-      "title_ar": "string"
-    }
+    "snapshot_id": "string",
+    "stages": [
+      {
+        "detail_ar": "string",
+        "mandatory": "boolean",
+        "name_ar": "string",
+        "passed": "boolean",
+        "stage": "string"
+      }
+    ]
   },
   "intelligence": {
     "available": "boolean",
@@ -194,61 +209,157 @@
       "structural_trend": "string"
     }
   },
-  "decision": {
-    "authorises_execution": "boolean",
-    "blocking_reasons_ar": [
+  "management": {
+    "action_count": "number",
+    "actions": [
+      {
+        "at_utc": "string",
+        "deal_id": "string",
+        "kind": "string",
+        "kind_ar": "string",
+        "new_value": "string",
+        "old_value": "string",
+        "policy_version": "string",
+        "reason_ar": "string",
+        "strategy": "string",
+        "strategy_version": "string",
+        "symbol": "string"
+      }
+    ],
+    "available": "boolean",
+    "declared_policies": [
+      {
+        "capabilities": [
+          "string"
+        ],
+        "fixed_only": "boolean",
+        "policy_version": "string",
+        "strategy": "string",
+        "strategy_version": "string"
+      }
+    ],
+    "dynamic_enabled": "boolean",
+    "notes_ar": [
       "string"
     ],
-    "decided_at_utc": "string",
-    "decision": "string",
-    "decision_ar": "string",
-    "explanation_ar": "string",
-    "reason_code": "string",
-    "score": {
-      "max": "number",
-      "total": "number"
-    },
-    "snapshot_id": "string",
-    "stages": [
+    "plan_at_utc": "string",
+    "reason_ar": "string",
+    "skipped": [
       {
-        "detail_ar": "string",
-        "mandatory": "boolean",
-        "name_ar": "string",
-        "passed": "boolean",
-        "stage": "string"
+        "code": "string",
+        "code_ar": "string",
+        "deal_id": "string",
+        "reason_ar": "string",
+        "symbol": "string"
+      }
+    ],
+    "sync": {
+      "age_seconds": "number",
+      "error_ar": "string",
+      "last_sync_utc": "string",
+      "ok": "boolean",
+      "reason_code": "string",
+      "stale": "boolean"
+    }
+  },
+  "notifications": {
+    "notifications": [
+      {
+        "created_utc": "string",
+        "deep_link": "string",
+        "in_app_detail_ar": "string",
+        "read": "boolean",
+        "type": "string"
       }
     ]
   },
-  "risk": {
-    "absolute_loss_boundary": "string",
-    "consecutive_losses": "number",
-    "currency": "string",
-    "distance_to_kill_switch": "string",
-    "editable_from_device": "boolean",
-    "entry_orders_today": "number",
-    "equity_used": "string",
-    "max_daily_loss": "string",
-    "max_entry_orders_per_day": "number",
-    "max_open_positions": "number",
-    "max_risk_per_trade": "string",
-    "max_weekly_loss": "string",
-    "open_positions": "number",
-    "operational_drawdown_stop": "string",
-    "portfolio": {
-      "baseline_equity": "string",
-      "broker_equity": "string",
-      "current_equity": "string",
-      "diverged": "boolean",
-      "note_ar": "string"
+  "performance": {
+    "average_r": "nullable",
+    "calibration": [
+      {
+        "band_ar": "string",
+        "observed": "nullable",
+        "predicted": "number",
+        "sample_size": "number",
+        "sufficient": "boolean"
+      }
+    ],
+    "expectancy": "nullable",
+    "insufficient_sample_note_ar": "string",
+    "losses": "number",
+    "max_drawdown": "string",
+    "period_end_utc": "string",
+    "period_start_utc": "string",
+    "realised_pnl_total": "string",
+    "sample_size": "number",
+    "sufficient_sample": "boolean",
+    "sync": {
+      "age_seconds": "number",
+      "error_ar": "string",
+      "last_sync_utc": "string",
+      "ok": "boolean",
+      "reason_code": "string",
+      "stale": "boolean"
     },
-    "profile": "string",
-    "profile_name_ar": "string",
-    "profile_binding_ar": "string",
-    "risk_remaining_today": "string",
-    "risk_remaining_week": "string",
-    "risk_used_today": "string",
-    "risk_used_week": "string",
-    "two_loss_lock_active": "boolean"
+    "win_rate": "nullable",
+    "wins": "number"
+  },
+  "position": {
+    "current_price": "nullable",
+    "direction_ar": "nullable",
+    "entry_price": "nullable",
+    "has_position": "boolean",
+    "instrument": "nullable",
+    "instrument_ar": "nullable",
+    "notes_ar": [
+      "string"
+    ],
+    "notional_display": "nullable",
+    "open_count": "number",
+    "opened_utc": "nullable",
+    "positions": [
+      {
+        "current_price": "string",
+        "direction_ar": "string",
+        "entry_price": "string",
+        "id": "string",
+        "instrument": "string",
+        "instrument_ar": "string",
+        "kind": "string",
+        "last_confirmed_utc": "string",
+        "notional_display": "string",
+        "opened_utc": "string",
+        "protection_held_by_broker": "boolean",
+        "reconciliation": "string",
+        "risk_at_stop": "string",
+        "size_display": "string",
+        "stop_price": "string",
+        "strategy_ar": "string",
+        "take_profit_price": "string",
+        "unrealised_pnl": "string",
+        "unrealised_pnl_sign": "string"
+      }
+    ],
+    "protection_held_by_broker": "boolean",
+    "reconciliation": "string",
+    "risk_at_stop": "nullable",
+    "size_display": "nullable",
+    "stale_count": "number",
+    "stop_price": "nullable",
+    "strategy_ar": "nullable",
+    "sync": {
+      "age_seconds": "number",
+      "error_ar": "string",
+      "last_sync_utc": "string",
+      "ok": "boolean",
+      "reason_code": "string",
+      "stale": "boolean"
+    },
+    "take_profit_price": "nullable",
+    "total_unrealised": "nullable",
+    "unprotected_count": "number",
+    "unrealised_pnl": "nullable",
+    "unrealised_pnl_sign": "nullable"
   },
   "profiles": {
     "available_profiles": [
@@ -284,58 +395,152 @@
     "selected_profile": "string",
     "upgrade_requires_server": "boolean"
   },
-  "position": {
-    "current_price": "nullable",
-    "direction_ar": "nullable",
-    "entry_price": "nullable",
-    "has_position": "boolean",
-    "instrument": "nullable",
-    "instrument_ar": "nullable",
-    "notes_ar": [
+  "providers": {
+    "live_eligible_by_providers": "boolean",
+    "missing": [
       "string"
     ],
-    "notional_display": "nullable",
-    "open_count": "number",
-    "opened_utc": "nullable",
-    "positions": [
+    "missing_mandatory": [
+      "string"
+    ],
+    "providers": [
       {
-        "current_price": "string",
-        "direction_ar": "string",
-        "entry_price": "string",
-        "id": "string",
-        "instrument": "string",
-        "instrument_ar": "string",
+        "configured": "boolean",
+        "healthy": "nullable",
         "kind": "string",
-        "notional_display": "string",
-        "opened_utc": "string",
-        "protection_held_by_broker": "boolean",
-        "risk_at_stop": "string",
-        "size_display": "string",
-        "stop_price": "string",
-        "strategy_ar": "string",
-        "take_profit_price": "string",
-        "unrealised_pnl": "string",
-        "unrealised_pnl_sign": "string"
+        "last_success_utc": "nullable",
+        "mandatory": "boolean",
+        "name": "string",
+        "name_ar": "string",
+        "note_ar": "string"
+      }
+    ]
+  },
+  "risk": {
+    "absolute_loss_boundary": "string",
+    "consecutive_losses": "number",
+    "currency": "string",
+    "distance_to_kill_switch": "string",
+    "editable_from_device": "boolean",
+    "entry_orders_today": "number",
+    "equity_used": "string",
+    "max_daily_loss": "string",
+    "max_entry_orders_per_day": "number",
+    "max_open_positions": "number",
+    "max_risk_per_trade": "string",
+    "max_weekly_loss": "string",
+    "open_positions": "number",
+    "operational_drawdown_stop": "string",
+    "portfolio": {
+      "baseline_equity": "string",
+      "broker_equity": "string",
+      "current_equity": "string",
+      "diverged": "boolean",
+      "note_ar": "string"
+    },
+    "profile": "string",
+    "profile_binding_ar": "string",
+    "profile_name_ar": "string",
+    "risk_remaining_today": "string",
+    "risk_remaining_week": "string",
+    "risk_used_today": "string",
+    "risk_used_week": "string",
+    "two_loss_lock_active": "boolean"
+  },
+  "scan": {
+    "faults": "number",
+    "instruments": [
+      {
+        "decision": "string",
+        "needs_a_hand": "boolean",
+        "reason_ar": "string",
+        "reason_code": "string",
+        "stage": "string",
+        "strategies": [
+          {
+            "checks": [
+              {
+                "detail_ar": "string",
+                "name_ar": "string",
+                "passed": "boolean"
+              }
+            ],
+            "key": "string",
+            "summary_ar": "string"
+          }
+        ],
+        "symbol": "string"
       }
     ],
-    "protection_held_by_broker": "boolean",
-    "risk_at_stop": "nullable",
-    "size_display": "nullable",
-    "stop_price": "nullable",
-    "strategy_ar": "nullable",
-    "sync": {
-      "age_seconds": "number",
-      "error_ar": "string",
-      "last_sync_utc": "string",
-      "ok": "boolean",
-      "reason_code": "string",
-      "stale": "boolean"
+    "scanned": "number",
+    "summary_ar": "string"
+  },
+  "status": {
+    "backend_commit": "string",
+    "broker": {
+      "account_masked": "string",
+      "connected": "boolean",
+      "execution_locked": "boolean",
+      "is_demo": "boolean",
+      "name": "string",
+      "note_ar": "string"
     },
-    "take_profit_price": "nullable",
-    "total_unrealised": "nullable",
-    "unprotected_count": "number",
-    "unrealised_pnl": "nullable",
-    "unrealised_pnl_sign": "nullable"
+    "data_completeness": {
+      "complete": "boolean",
+      "missing": [
+        "string"
+      ],
+      "optional_missing": [
+        "string"
+      ],
+      "ratio": "number"
+    },
+    "kill_switch": {
+      "active": "boolean",
+      "at_utc": "nullable",
+      "reason_ar": "nullable",
+      "trigger": "nullable"
+    },
+    "last_refresh_utc": "string",
+    "locally_paused": "boolean",
+    "market": {
+      "is_open": "boolean",
+      "next_close_utc": "nullable",
+      "next_open_utc": "string",
+      "per_instrument": [
+        {
+          "reason_ar": "string",
+          "status": "nullable",
+          "symbol": "string",
+          "tradable": "nullable"
+        }
+      ],
+      "reason_ar": "string",
+      "scope_ar": "string"
+    },
+    "no_trade_reason_ar": "string",
+    "strategy_state": {
+      "key": "string",
+      "live_eligible": "boolean",
+      "state": "string",
+      "title_ar": "string"
+    },
+    "system_state": "string",
+    "system_state_ar": "string",
+    "upcoming_event": {
+      "at_utc": "string",
+      "blocks_trading": "boolean",
+      "impact_ar": "string",
+      "title_ar": "string"
+    }
+  },
+  "sync": {
+    "age_seconds": "number",
+    "error_ar": "string",
+    "last_sync_utc": "string",
+    "ok": "boolean",
+    "reason_code": "string",
+    "stale": "boolean"
   },
   "trades": {
     "realised_pnl_total": "string",
@@ -366,206 +571,5 @@
       }
     ],
     "unavailable": "boolean"
-  },
-  "performance": {
-    "average_r": "nullable",
-    "calibration": [
-      {
-        "band_ar": "string",
-        "observed": "nullable",
-        "predicted": "number",
-        "sample_size": "number",
-        "sufficient": "boolean"
-      }
-    ],
-    "expectancy": "nullable",
-    "insufficient_sample_note_ar": "string",
-    "losses": "number",
-    "max_drawdown": "string",
-    "period_end_utc": "string",
-    "period_start_utc": "string",
-    "realised_pnl_total": "string",
-    "sample_size": "number",
-    "sufficient_sample": "boolean",
-    "sync": {
-      "age_seconds": "number",
-      "error_ar": "string",
-      "last_sync_utc": "string",
-      "ok": "boolean",
-      "reason_code": "string",
-      "stale": "boolean"
-    },
-    "win_rate": "nullable",
-    "wins": "number"
-  },
-  "providers": {
-    "live_eligible_by_providers": "boolean",
-    "missing": [
-      "string"
-    ],
-    "missing_mandatory": [
-      "string"
-    ],
-    "providers": [
-      {
-        "configured": "boolean",
-        "healthy": "nullable",
-        "kind": "string",
-        "last_success_utc": "nullable",
-        "mandatory": "boolean",
-        "name": "string",
-        "name_ar": "string",
-        "note_ar": "string"
-      }
-    ]
-  },
-  "notifications": {
-    "notifications": [
-      {
-        "created_utc": "string",
-        "deep_link": "string",
-        "in_app_detail_ar": "string",
-        "read": "boolean",
-        "type": "string"
-      }
-    ]
-  },
-  "audit": {
-    "entries": [
-      {
-        "action": "string",
-        "at_utc": "string",
-        "detail_ar": "string",
-        "device_id": "string",
-        "success": "boolean"
-      }
-    ]
-  },
-  "scan": {
-    "instruments": [
-      {
-        "symbol": "string",
-        "decision": "string",
-        "reason_code": "string",
-        "reason_ar": "string",
-        "stage": "string",
-        "needs_a_hand": "boolean",
-        "strategies": [
-          {
-            "key": "string",
-            "summary_ar": "string",
-            "checks": [
-              {
-                "name_ar": "string",
-                "passed": "boolean",
-                "detail_ar": "string"
-              }
-            ]
-          }
-        ]
-      }
-    ],
-    "scanned": "number",
-    "faults": "number",
-    "summary_ar": "string"
-  },
-  "candles": {
-    "instruments": {
-      "EURUSD": {
-        "DAY": [
-          {
-            "t": "string",
-            "o": "string",
-            "h": "string",
-            "l": "string",
-            "c": "string"
-          }
-        ],
-        "HOUR_4": [
-          {
-            "t": "string",
-            "o": "string",
-            "h": "string",
-            "l": "string",
-            "c": "string"
-          }
-        ]
-      }
-    },
-    "symbols": [
-      "string"
-    ],
-    "resolutions": [
-      "string"
-    ],
-    "decision_resolution": "string",
-    "levels": {
-      "symbol": "nullable",
-      "entry": "nullable",
-      "stop": "nullable",
-      "target": "nullable"
-    },
-    "note_ar": "string"
-  },
-  "sync": {
-    "age_seconds": "number",
-    "error_ar": "string",
-    "last_sync_utc": "string",
-    "ok": "boolean",
-    "reason_code": "string",
-    "stale": "boolean"
-  },
-  "management": {
-    "sync": {
-      "age_seconds": "number",
-      "error_ar": "string",
-      "last_sync_utc": "string",
-      "ok": "boolean",
-      "reason_code": "string",
-      "stale": "boolean"
-    },
-    "available": "boolean",
-    "reason_ar": "string",
-    "plan_at_utc": "string",
-    "action_count": "number",
-    "actions": [
-      {
-        "deal_id": "string",
-        "symbol": "string",
-        "kind": "string",
-        "kind_ar": "string",
-        "reason_ar": "string",
-        "policy_version": "string",
-        "strategy": "string",
-        "strategy_version": "string",
-        "old_value": "string",
-        "new_value": "string",
-        "at_utc": "string"
-      }
-    ],
-    "skipped": [
-      {
-        "deal_id": "string",
-        "symbol": "string",
-        "code": "string",
-        "code_ar": "string",
-        "reason_ar": "string"
-      }
-    ],
-    "declared_policies": [
-      {
-        "strategy": "string",
-        "strategy_version": "string",
-        "policy_version": "string",
-        "capabilities": [
-          "string"
-        ],
-        "fixed_only": "boolean"
-      }
-    ],
-    "dynamic_enabled": "boolean",
-    "notes_ar": [
-      "string"
-    ]
   }
 }

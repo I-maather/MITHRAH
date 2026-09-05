@@ -345,11 +345,26 @@ export interface OpenPositionView {
   strategy_ar: string | null;
   /** `STRATEGY` أو `COMMISSIONING` أو `UNATTRIBUTED` — لا يُخمَّن. */
   kind: string;
+  /**
+   * `CONFIRMED` رآه الوسيط في هذه القراءة · `STALE` آخرُ ما نعرفه ولم يُؤكَّد.
+   *
+   * حالةُ **المعرفة** لا حالةُ المركز. ومركزٌ `STALE` موجودٌ حتى يثبت العكس:
+   * يُعرَض، ويُعَدّ في التعرّض، ولا يُسقَط من الشاشة.
+   */
+  reconciliation: 'CONFIRMED' | 'STALE';
+  last_confirmed_utc: string | null;
 }
 
 export interface PositionData {
   sync: SyncView;
-  /** `null` = تعذّرت القراءة. ليست `false`، لأن «لا أعرف» ليست «لا». */
+  /**
+   * `CONFIRMED` كلُّ ما يُعرَض مؤكَّدٌ الآن · `STALE` بعضُه من الدفتر ولم
+   * يظهر في القراءة · `RECONNECTING` القراءة لم تنجح ويُعرَض آخرُ المعروف.
+   */
+  reconciliation: 'CONFIRMED' | 'STALE' | 'RECONNECTING';
+  /** كم مركزاً معروضاً مصدرُه الدفتر لا القراءة الحالية. */
+  stale_count: number;
+  /** `null` = تعذّرت القراءة **ولا شيء في الدفتر**. «لا أعرف» ليست «لا». */
   has_position: boolean | null;
   open_count: number | null;
   positions: OpenPositionView[];

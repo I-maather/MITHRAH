@@ -104,6 +104,28 @@ export default function PositionScreen(): React.JSX.Element {
         />
       ) : null}
 
+      {/*
+        **الجهل يُعرَض، لا يُخفى.** حين تفشل القراءة يبقى الدفتر يحمل آخر
+        حقيقةٍ معروفة، فتُعرَض موسومةً — لا شاشةٌ فارغة، ولا أرقامٌ تتظاهر
+        بأنها الآن. ومركزٌ لم يظهر في قراءةٍ ناجحة يبقى معروضاً أيضاً: غيابٌ
+        واحد ليس إغلاقاً.
+      */}
+      {data.reconciliation === 'RECONNECTING' && data.stale_count > 0 ? (
+        <Banner
+          testID="position-reconnecting"
+          tone="caution"
+          title="إعادة اتصال — يُعرَض آخرُ المعروف"
+          body={`${data.stale_count} مركزاً من الدفتر، غيرُ مؤكَّدةٍ حتى تنجح قراءةٌ جديدة. ليست «صفر مراكز».`}
+        />
+      ) : data.reconciliation === 'STALE' && data.stale_count > 0 ? (
+        <Banner
+          testID="position-stale-rows"
+          tone="caution"
+          title="مركزٌ غيرُ مؤكَّد"
+          body={`${data.stale_count} مركزاً في الدفتر لم يظهر في هذه القراءة — يبقى محسوباً حتى يتأكّد أو يُغلق بتأكيدٍ متكرّر.`}
+        />
+      ) : null}
+
       {data.unprotected_count !== null && data.unprotected_count > 0 ? (
         <Banner
           testID="position-unprotected"
@@ -113,7 +135,7 @@ export default function PositionScreen(): React.JSX.Element {
         />
       ) : null}
 
-      {data.open_count !== null && data.open_count > 1 ? (
+      {data.open_count !== null && data.open_count >= 1 && data.positions.length > 0 ? (
         <Card testID="position-all-card" title={`المراكز المفتوحة (${data.open_count})`}>
           {data.positions.map((position) => (
             <View key={position.id ?? `${position.instrument}-${position.opened_utc}`}>
@@ -129,7 +151,7 @@ export default function PositionScreen(): React.JSX.Element {
                   position.stop_price ?? '—'
                 } · هدف ${position.take_profit_price ?? '—'}${
                   position.protection_held_by_broker ? '' : ' · بلا حماية'
-                }`}
+                }${position.reconciliation === 'STALE' ? ' · غيرُ مؤكَّد' : ''}`}
               </Text>
               <Divider />
             </View>

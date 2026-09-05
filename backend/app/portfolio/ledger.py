@@ -41,6 +41,18 @@ STATE_ORPHANED = "ORPHANED"
 ATTRIBUTION_LINKED = "LINKED"
 ATTRIBUTION_UNLINKED = "UNLINKED"
 
+#: حالةُ المعرفة — لا حالةُ المركز.
+RECON_CONFIRMED = "CONFIRMED"
+RECON_STALE = "STALE"
+
+#: كم لقطةً **ناجحة** متتاليةً يجب أن يغيب فيها المركز قبل أن يُكتَب مغلقاً.
+#:
+#: الواحدة لا تكفي. ردُّ وسيطٍ بحالة 200 وقائمةٍ فارغة يبدو ناجحاً تماماً،
+#: وقد يقع لأسبابٍ لا علاقة لها بإغلاق المراكز: حسابٌ خطأ في الطلب، ترحيلٌ
+#: عند الوسيط، نافذةٌ بين إغلاق جلسةٍ وفتح أخرى. وكتابةُ الإغلاق فعلٌ لا
+#: يُستعاد: يُمحى بها ما نعرفه عن خمسة مراكز حيّة. فيُشترط تكرارٌ.
+CLOSE_CONFIRMATIONS = 2
+
 
 @dataclass(frozen=True)
 class LedgerSync:
@@ -55,6 +67,10 @@ class LedgerSync:
     changed: tuple[str, ...] = ()
     #: مراكز لم يُعرَف أيُّ قرارٍ فتحها.
     unattributed: tuple[str, ...] = ()
+    #: مراكز في الدفتر لم تظهر في هذه اللقطة — **تبقى مفتوحةً وتُعدّ**.
+    stale: tuple[str, ...] = ()
+    #: مراكز غابت ولم تبلغ عتبةَ التأكيد بعد — إغلاقٌ مؤجَّلٌ لا صامت.
+    pending_close: tuple[str, ...] = ()
     notes_ar: tuple[str, ...] = ()
 
     @property
@@ -188,6 +204,9 @@ def sync(session: Session, snapshot: PortfolioSnapshot) -> Optional[LedgerSync]:
                 first_seen_utc=now,
                 last_seen_utc=now,
                 seen_after_restart=True,
+                reconciliation=RECON_CONFIRMED,
+                last_confirmed_utc=now,
+                absent_confirmations=0,
             )
             session.add(row)
             opened.append(deal_id)
@@ -205,6 +224,9 @@ def sync(session: Session, snapshot: PortfolioSnapshot) -> Optional[LedgerSync]:
         row.take_profit_price = position.take_profit_price
         row.last_seen_utc = now
         row.seen_after_restart = True
+        row.reconciliation = RECON_CONFIRMED
+        row.last_confirmed_utc = now
+        row.absent_confirmations = 0
         if row.state != STATE_OPEN:
             # عاد بعد أن ظننّاه مغلقاً: الوسيط هو الحقيقة، والدفتر يتبعه.
             row.state = STATE_OPEN
@@ -216,13 +238,38 @@ def sync(session: Session, snapshot: PortfolioSnapshot) -> Optional[LedgerSync]:
         if row.attribution != ATTRIBUTION_LINKED:
             unattributed.append(deal_id)
 
+    # **الغياب ليس إغلاقاً — لا في اللقطة الأولى.**
+    #
+    # كان كلُّ صفٍّ لم يظهر يُكتَب `CLOSED` فوراً وبلا ملاحظة. فلقطةٌ واحدة
+    # ناجحةٌ وفارغة — وهي حالةٌ ممكنةٌ لأسبابٍ لا تعني إغلاقاً — تمحو حقيقةَ
+    # الدفتر كلِّه بصمت. صار الغياب يُعَدّ: يبقى المركز مفتوحاً ويُعلَّم
+    # `STALE` ويستمرّ في التعرّض والمخاطر، ولا يُكتَب مغلقاً إلا بعد
+    # `CLOSE_CONFIRMATIONS` لقطةً ناجحةً متتاليةً غاب فيها — ومع ملاحظةٍ
+    # تقول لماذا.
     closed: list[str] = []
+    stale: list[str] = []
+    pending: list[str] = []
     for row in open_rows(session):
         if row.broker_deal_id in seen:
             continue
-        row.state = STATE_CLOSED
-        row.closed_at_utc = now
-        closed.append(row.broker_deal_id)
+        row.absent_confirmations = int(row.absent_confirmations or 0) + 1
+        row.reconciliation = RECON_STALE
+        if row.absent_confirmations >= CLOSE_CONFIRMATIONS:
+            row.state = STATE_CLOSED
+            row.closed_at_utc = now
+            closed.append(row.broker_deal_id)
+            notes.append(
+                f"مركز {row.broker_deal_id} غاب عن {row.absent_confirmations} "
+                "لقطةً ناجحةً متتالية — كُتب مغلقاً."
+            )
+        else:
+            stale.append(row.broker_deal_id)
+            pending.append(row.broker_deal_id)
+            notes.append(
+                f"مركز {row.broker_deal_id} لم يظهر في هذه اللقطة "
+                f"({row.absent_confirmations}/{CLOSE_CONFIRMATIONS}) — يبقى "
+                "مفتوحاً ويُعدّ في التعرّض حتى يتأكّد."
+            )
 
     session.commit()
 
@@ -232,23 +279,35 @@ def sync(session: Session, snapshot: PortfolioSnapshot) -> Optional[LedgerSync]:
         closed=tuple(closed),
         changed=tuple(changed),
         unattributed=tuple(dict.fromkeys(unattributed)),
+        stale=tuple(stale),
+        pending_close=tuple(pending),
         notes_ar=tuple(notes),
     )
 
 
 def mark_restart(session: Session) -> int:
     """
-    يُطفئ علمَ «رأيتُه بعد الإقلاع» لكل مركزٍ مفتوح.
+    يُعلِّم كلَّ مركزٍ مفتوح `STALE` عند الإقلاع — **ولا يمحو شيئاً**.
 
-    يُستدعى عند الإقلاع قبل أوّل قراءة. فمركزٌ يبقى مطفأً بعد مزامنةٍ ناجحة
-    مركزٌ **لم يعد لدى الوسيط** — والفرق بينه وبين مركزٍ لم يُقرأ بعدُ هو
-    الفرق بين علمٍ وجهل.
+    ما نعرفه عن المركز يبقى كما هو: الكمية والوقف والنسبة وآخر تأكيد. الذي
+    يتغيّر هو **ثقتُنا** فيه: من «مؤكَّد» إلى «آخرُ حقيقةٍ معروفة». فالإقلاع
+    لا يُنقص علماً، إنما يُعلن أنّ العلم لم يُجدَّد بعد.
+
+    ولذلك لا يُنشئ هذا نافذةً يبدو فيها الدفتر فارغاً: الصفوف تبقى `OPEN`،
+    فتُعَدّ في التعرّض والمخاطر، ويُعرَض للمستخدم آخرُ ما نعرفه موسوماً بأنه
+    غيرُ مؤكَّد — لا صفرٌ، ولا سكوت.
     """
     rows = open_rows(session)
     for row in rows:
         row.seen_after_restart = False
+        row.reconciliation = RECON_STALE
     session.commit()
     return len(rows)
+
+
+def stale_rows(session: Session) -> list[PositionBookRow]:
+    """المراكز المفتوحة التي لم تُؤكَّد بعد — يُحجب الدخول ما دامت."""
+    return [r for r in open_rows(session) if r.reconciliation != RECON_CONFIRMED]
 
 
 def as_positions(rows: list[PositionBookRow]) -> list[dict]:
@@ -263,6 +322,11 @@ def as_positions(rows: list[PositionBookRow]) -> list[dict]:
             "kind": row.kind,
             "attribution": row.attribution,
             "state": row.state,
+            "reconciliation": row.reconciliation or RECON_STALE,
+            "last_confirmed_utc": (
+                row.last_confirmed_utc.isoformat() if row.last_confirmed_utc else None
+            ),
+            "absent_confirmations": int(row.absent_confirmations or 0),
         }
         for row in rows
     ]

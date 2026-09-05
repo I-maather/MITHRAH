@@ -143,14 +143,50 @@ def test_a_failed_read_never_closes_the_book(session):
 # --- ٣ · الإغلاق يُكتَب حين يُرى فعلاً ------------------------------------
 
 
-def test_a_position_that_left_the_broker_is_marked_closed(session):
+def test_a_position_that_left_the_broker_is_not_closed_on_one_snapshot(session):
+    """غيابٌ واحدٌ ليس إغلاقاً.
+
+    كان صفٌّ لم يظهر في اللقطة يُكتَب `CLOSED` فوراً. فلقطةٌ واحدةٌ ناجحةٌ
+    وفارغة — وهي واقعةٌ ممكنةٌ لأسبابٍ لا تعني إغلاقاً — تمحو حقيقةَ الدفتر
+    كلِّه بصمت. صار الغياب يُعَدّ، ويبقى المركز مفتوحاً يُعدّ في التعرّض.
+    """
     sync(session, _snapshot(_position("d-1", "GBPUSD", "-200")))
+    result = sync(session, _snapshot(at=LATER))
+
+    assert result is not None
+    assert result.closed == (), "أُغلق من لقطةٍ واحدة"
+    assert result.stale == ("d-1",)
+    assert result.pending_close == ("d-1",)
+    assert [r.broker_deal_id for r in open_rows(session)] == ["d-1"]
+    row = session.query(PositionBookRow).one()
+    assert row.state == STATE_OPEN
+    assert row.reconciliation == "STALE"
+    assert row.absent_confirmations == 1
+    assert any("يبقى" in note for note in result.notes_ar), "غابَ بلا ملاحظة"
+
+
+def test_the_close_needs_repeated_confirmation(session):
+    sync(session, _snapshot(_position("d-1", "GBPUSD", "-200")))
+    sync(session, _snapshot(at=LATER))
     result = sync(session, _snapshot(at=LATER))
 
     assert result is not None and result.closed == ("d-1",)
     assert open_rows(session) == []
     row = session.query(PositionBookRow).one()
     assert row.state == STATE_CLOSED and _utc(row.closed_at_utc) == LATER
+    assert any("مغلقاً" in note for note in result.notes_ar), "أُغلق بصمت"
+
+
+def test_a_return_before_the_threshold_clears_the_count(session):
+    sync(session, _snapshot(_position("d-1", "GBPUSD", "-200")))
+    sync(session, _snapshot(at=LATER))
+    result = sync(session, _snapshot(_position("d-1", "GBPUSD", "-200"), at=LATER))
+
+    assert result is not None and result.closed == ()
+    row = session.query(PositionBookRow).one()
+    assert row.state == STATE_OPEN
+    assert row.reconciliation == "CONFIRMED"
+    assert row.absent_confirmations == 0
 
 
 def test_a_position_that_returns_is_reopened_not_duplicated(session):

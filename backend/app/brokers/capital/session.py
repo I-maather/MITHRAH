@@ -46,6 +46,9 @@ from .transport import ApiResponse, Transport
 
 logger = logging.getLogger(__name__)
 
+# ما يُذكَر من ترويسات ردّ الوسيط: ما يفيد التشخيص وحده.
+_LOGGED_HEADERS = frozenset({"date", "content-type", "cache-control"})
+
 SESSION_TTL = timedelta(minutes=10)
 #: هامش أمان: نجدّد قبل انتهاء المهلة الرسمية بدقيقتين.
 SESSION_RENEW_MARGIN = timedelta(minutes=2)
@@ -229,10 +232,19 @@ class CapitalSession:
 
         body = response.body if isinstance(response.body, dict) else {}
         self.account_id = body.get("currentAccountId") or self.account_id
+        # **تُذكَر ترويساتٌ مسمّاة لا كلُّ ما ردّ به الوسيط.** الحجب يعمل
+        # بالاسم وبالقيمة معاً، لكنّه يحمي ما نعرفه. وترويسةٌ جديدة يضيفها
+        # الوسيط غداً تُطبَع كاملةً قبل أن يعرفها أحد. فالقائمة بيضاء:
+        # يُذكَر ما يفيد التشخيص، ويُعدّ الباقي عدّاً.
+        _headers = redact_headers(response.headers)
+        _named = {
+            k: v for k, v in _headers.items() if k.lower() in _LOGGED_HEADERS
+        }
         logger.info(
-            "capital session established env=%s headers=%s",
+            "capital session established env=%s headers=%s (+%d أخرى)",
             self.environment.value,
-            redact_headers(response.headers),
+            _named,
+            len(_headers) - len(_named),
         )
         return self.tokens
 

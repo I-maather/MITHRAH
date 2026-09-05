@@ -25,6 +25,12 @@ def configure(*, stream=None, force: bool = False) -> bool:
         return False
     handler = logging.StreamHandler(stream if stream is not None else sys.stderr)
     handler.setFormatter(logging.Formatter(_FORMAT))
+    # **الحجب يُولَد مع الوجهة.** كان يُركَّب لاحقاً داخل `build_system`
+    # أثناء دورة الحياة، فبين استيراد التطبيق وبدئه نافذةٌ تكتب فيها وجهةٌ
+    # بلا حاجب. ونافذةٌ كهذه لا تُقاس بطولها بل بما قد يمرّ فيها.
+    from .secretstore.redaction import RedactingFilter
+
+    handler.addFilter(RedactingFilter())
     root.addHandler(handler)
     level = os.environ.get("MATHRAH_LOG_LEVEL", "INFO").upper()
     root.setLevel(getattr(logging, level, logging.INFO))

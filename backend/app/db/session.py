@@ -39,7 +39,14 @@ _INIT_LOCK = Lock()
 
 def init_db(engine=None) -> None:
     with _INIT_LOCK:
-        Base.metadata.create_all(engine or ENGINE)
+        target = engine or ENGINE
+        Base.metadata.create_all(target)
+        # **ثم ما لا يفعله `create_all`.** هو يُنشئ الجدول الغائب ويتخطّى
+        # القائم كلَّه — فعمودٌ جديد على جدولٍ في الإنتاج لا يُنشأ، ويظهر
+        # العطل بعد النشر لا قبله.
+        from .migrate import apply as _apply_migrations
+
+        _apply_migrations(target)
 
 
 def get_session() -> Session:
