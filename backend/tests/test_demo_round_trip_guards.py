@@ -181,3 +181,36 @@ def test_the_signal_is_hand_written_and_says_so():
     # لعاد المركز `STRATEGY` بصمت ودخل حسابَ الأداء.
     ledger = (BACKEND / "app" / "portfolio" / "ledger.py").read_text(encoding="utf-8")
     assert 'strategy_name == "COMMISSIONING"' in ledger
+
+
+def test_a_refusal_before_sending_is_never_reported_as_a_possible_position():
+    """
+    **الإنذار الكاذب الذي وقع فعلاً.**
+
+    السوق كان مغلقاً يوم السبت، فرفضت خدمةُ التنفيذ عند المعاينة ولم يخرج
+    أمرٌ قط. وطبع التشخيص:
+
+        ⚠️ أُرسل الأمر ولم أتمكّن من تحديد مركزه — افحصي الحساب بنفسك
+
+    لأنّ `sent` كانت تُرفَع ببلوغ السطر لا بوقوع الإرسال. وإنذارٌ يبعث
+    المالكة تفتّش حسابها بلا سبب أسوأ من الصمت: يُستهلك مرّةً ثم يُتجاهَل.
+
+    والمآلات الثلاثة التي تعني يقيناً «لا مركز» يجب أن تُطفئ العلم.
+    """
+    assert "SubmissionOutcome.PREVIEW_REJECTED," in SOURCE
+    assert "SubmissionOutcome.DUPLICATE_BLOCKED," in SOURCE
+    assert "SubmissionOutcome.REJECTED," in SOURCE
+    # ويبقى مرفوعاً قبل النداء: إن انفجر، الجهل هو الافتراض الآمن.
+    assert SOURCE.index("sent = True") < SOURCE.index("result = service.submit(intent)")
+
+
+def test_the_diagnostic_sends_through_the_execution_service_not_the_adapter():
+    """
+    كان `adapter.place_order(intent)` — يتخطّى حارس التكرار والمعاينة وخط
+    التدقيق ودفتر الأوامر. فيُثبت أنّ المحوّل يعمل لا أنّ النظام يعمل.
+    """
+    assert "service.submit(intent)" in SOURCE
+    assert "adapter.place_order(" not in SOURCE
+    # والكائن هو الذي يعمل، لا نسخةٌ تُبنى في التشخيص.
+    assert "from app.main import system" in SOURCE
+    assert "build_system" not in SOURCE

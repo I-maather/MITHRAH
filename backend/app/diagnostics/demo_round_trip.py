@@ -228,9 +228,31 @@ def main() -> int:
         from app.main import system as _system
 
         service = _system().execution
+
+        # **`sent` تعني «قد يوجد مركز»، لا «بلغتُ هذا السطر».**
+        #
+        # كانت تُرفَع هنا ثم يُرسَل مباشرةً، فكانت صادقة. ولمّا صار الإرسال
+        # عبر `ExecutionService` صارت تكذب: الخدمة ترفض عند المعاينة — أو
+        # عند حارس التكرار، أو حين يتعذّر كتابة الأثر — **قبل أن يخرج
+        # شيء**. فطبع `finally` أوّل مرة:
+        #
+        #     ⚠️ أُرسل الأمر ولم أتمكّن من تحديد مركزه
+        #     افحصي الحساب بنفسك
+        #
+        # والسوق كان مغلقاً ولم يخرج أمرٌ قط. إنذارٌ يبعث المالكة تفتّش
+        # حسابها في السبت — وهو أسوأ من الصمت، لأنه يُستهلك مرّةً ثم يُتجاهَل.
+        #
+        # فتُرفَع قبل النداء (إن انفجر، الجهلُ هو الافتراض الآمن) ثمّ تُصحَّح
+        # بالمآل: ثلاثةُ مآلاتٍ تعني يقيناً أنّ لا مركز.
         sent = True
         try:
             result = service.submit(intent)
+            if result.outcome in (
+                SubmissionOutcome.PREVIEW_REJECTED,
+                SubmissionOutcome.DUPLICATE_BLOCKED,
+                SubmissionOutcome.REJECTED,
+            ):
+                sent = False
         except CapitalExecutionUncertain as exc:
             deal_ids = exc.deal_ids
             print(f"{BAD}⛔ غموضٌ في التنفيذ: {exc}{END}", file=sys.stderr)
