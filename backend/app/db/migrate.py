@@ -20,6 +20,14 @@ ADDITIONS: tuple[tuple[str, str, str], ...] = (
     ("position_book", "reconciliation", "VARCHAR(16) DEFAULT 'STALE'"),
     ("position_book", "last_confirmed_utc", "DATETIME"),
     ("position_book", "absent_confirmations", "INTEGER DEFAULT 0"),
+    # E3 — كلّها بلا `DEFAULT`: الصفقات السابقة لهذه الأعمدة تبقى `NULL`
+    # صراحةً. وقيمةٌ افتراضية هنا تكذب: تجعل «لم يُقيَّم» تبدو تقييماً.
+    ("position_book", "initial_stop_price", "NUMERIC(20, 8)"),
+    ("position_book", "decision_quality", "VARCHAR(16)"),
+    ("position_book", "execution_quality", "VARCHAR(16)"),
+    ("position_book", "assessment_source", "VARCHAR(32)"),
+    ("position_book", "assessment_version", "VARCHAR(32)"),
+    ("position_book", "assessed_at_utc", "DATETIME"),
 )
 
 

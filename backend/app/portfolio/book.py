@@ -54,6 +54,9 @@ PORTFOLIO_NOT_ATTEMPTED = "NOT_ATTEMPTED"
 #: يقول إنه غير منسوب.
 KIND_STRATEGY = "STRATEGY"
 KIND_COMMISSIONING = "COMMISSIONING"
+#: حركةٌ إداريّة لا قرارُ استراتيجية: تصفيةٌ يدوية، تصحيحُ خطأ، إغلاقٌ من
+#: الوسيط. تُفصَل كي لا تُنسَب نتيجتُها إلى استراتيجيةٍ لم تتّخذها.
+KIND_ADMINISTRATIVE = "ADMINISTRATIVE"
 KIND_UNATTRIBUTED = "UNATTRIBUTED"
 
 
@@ -260,5 +263,6 @@ __all__ = [
     "read_portfolio", "unavailable",
     "DEFAULT_MAX_AGE", "PORTFOLIO_OK", "PORTFOLIO_BROKER_UNREACHABLE",
     "PORTFOLIO_READ_FAILED", "PORTFOLIO_NOT_ATTEMPTED",
-    "KIND_STRATEGY", "KIND_COMMISSIONING", "KIND_UNATTRIBUTED",
+    "KIND_STRATEGY", "KIND_COMMISSIONING", "KIND_ADMINISTRATIVE",
+    "KIND_UNATTRIBUTED",
 ]

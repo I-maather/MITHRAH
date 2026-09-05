@@ -277,7 +277,11 @@ class PositionBookRow(Base):
     #: كم لقطةً **ناجحة** متتاليةً غاب فيها. الإغلاق يحتاج تأكيداً متكرّراً:
     #: ردٌّ واحدٌ ناجحٌ وفارغ لا يمحو حقيقةَ خمسة مراكز.
     absent_confirmations: Mapped[int] = mapped_column(Integer, default=0)
-    #: STRATEGY · COMMISSIONING · UNATTRIBUTED
+    #: STRATEGY · COMMISSIONING · ADMINISTRATIVE · UNATTRIBUTED
+    #:
+    #: `ADMINISTRATIVE` مركزٌ حركتُه إداريّة لا استراتيجية: تصفيةٌ يدوية،
+    #: تصحيحُ خطأ، إغلاقٌ من الوسيط. يُفصَل كي لا تُقاس به استراتيجية لم
+    #: تتّخذ قراره — وخلطُه بالصفقات يفسد كل نسبة ربحٍ تُحسب بعده.
     kind: Mapped[str] = mapped_column(String(24), default="UNATTRIBUTED")
     #: LINKED إن وُجد أمرٌ يربطه بقرار، وإلا UNLINKED. لا تخمين بينهما.
     attribution: Mapped[str] = mapped_column(String(16), default="UNLINKED")
@@ -295,8 +299,52 @@ class PositionBookRow(Base):
     #: آخر إقلاعٍ رآه مفتوحاً — يجيب «هل نجا المركز إعادة التشغيل؟».
     seen_after_restart: Mapped[bool] = mapped_column(default=False)
 
+    # ---------------------------------------------------------------- E3
+    #: الوقف **كما كان لحظة الدخول**. `stop_price` يتحرّك مع الإدارة، فإذا
+    #: لوحِق الوقفُ ضاعت نقطةُ الإبطال الأصلية — ومعها المخاطرة التي قِيست
+    #: عليها الصفقة، فلا يبقى مقامٌ تُقسم عليه النتيجة. `None` يعني **لم
+    #: نسجّله**، لا أنه يساوي الحالي.
+    initial_stop_price: Mapped[Decimal | None] = mapped_column(MONEY)
+
+    #: تقييمُ جودة **القرار** مستقلًّا عن نتيجته. `None` يعني **لم يُقيَّم** —
+    #: وهي حالةٌ ثالثة لا تُقرأ «مقبولاً» ولا «سيّئاً». الصفقات التي سبقت هذا
+    #: العمود تبقى `None` أبداً، ولا يُستنتج لها تقييمٌ من نتيجتها: الربح لا
+    #: يُصحّح قراراً رديئاً، والخسارة لا تُبطل قراراً سليماً.
+    decision_quality: Mapped[str | None] = mapped_column(String(16))
+    #: تقييمُ جودة **التنفيذ**: الانزلاق، وزمن الإرسال، وثبات الحماية.
+    execution_quality: Mapped[str | None] = mapped_column(String(16))
+
+    #: **من قيّم، وبأيّ نسخة، ومتى.** تقييمٌ بلا مصدرٍ رأيٌ لا سجلّ: لا يُعاد
+    #: إنتاجه ولا يُراجَع ولا يُعرف أهو حكمُ قواعدَ أم حكمُ نموذجٍ أم حكمُ
+    #: إنسان. والثلاثة تُكتب معاً أو لا يُكتب التقييم.
+    assessment_source: Mapped[str | None] = mapped_column(String(32))
+    assessment_version: Mapped[str | None] = mapped_column(String(32))
+    assessed_at_utc: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
 
 class TradeRow(Base):
+    """
+    **مهجور — لا يُكتَب فيه، فلا يُقرأ منه.**
+
+    كُتب هذا الجدول ليحمل الصفقات المكتملة، ثم لم يُوصَل به كاتب قط: لا في
+    التطبيق ولا في الاختبارات يُنشأ `TradeRow` واحد، ولا `INSERT INTO trades`.
+    وعلى الخادم الحيّ يوم 2026-09-05 كان فيه **صفر صف** بينما `position_book`
+    يحمل خمسة.
+
+    ولم يكن ذلك ليضرّ لولا من كان يقرأه: `load_session_state` كانت تبني منه
+    `realized_pnl_today` و`realized_pnl_week` و`consecutive_losses` و
+    `entry_orders_today`. فكانت أربعتُها **صفراً دائماً**، وكان حدُّ الخسارة
+    اليومي والأسبوعي وتهدئةُ الخسارتين المتتاليتين وسقفُ الدخول اليومي
+    **عاجزةً عن العمل بنيوياً** — لا معطّلةً بقرار، بل تقرأ من فراغ.
+
+    وقد أُعيد توصيلها إلى `position_book`، حيث تُكتب الصفقة فعلاً وتُغلق
+    بدليلٍ مستقل من دفتر معاملات الوسيط.
+
+    يبقى الجدول ولا يُحذف — الحذفُ قرارٌ لا هجرةٌ تلقائية، وصفوفُه (إن ظهرت
+    يوماً) شهادةٌ لا تُمحى. ويحرس `test_the_risk_engine_reads_what_we_write`
+    ألّا يعود أحدٌ إلى القراءة منه صامتاً.
+    """
+
     __tablename__ = "trades"
     id: Mapped[int] = mapped_column(primary_key=True)
     symbol: Mapped[str] = mapped_column(String(24))

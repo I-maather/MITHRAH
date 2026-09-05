@@ -53,6 +53,10 @@ PORTFOLIO_LIMIT_EXCEEDED = "PORTFOLIO_LIMIT_EXCEEDED"
 #: لم تُقرأ حقيقةُ المحفظة من الوسيط — فلا تُعرَف حدود التعرّض.
 #: حارسٌ أعمى ليس حارساً: يُفشَل مغلقاً ولا يُفتَح مركز.
 RECONCILIATION_NOT_READY = "RECONCILIATION_NOT_READY"
+
+#: صفقةٌ مغلقةٌ بلا نتيجةٍ معروفة. لا يُفتَح مركزٌ جديد فوق حسابٍ لا نعرف
+#: كم خسر فيه اليوم — والجهلُ هنا يُحجَب به ولا يُحسَب صفراً.
+REALISED_PNL_INCOMPLETE = "REALISED_PNL_INCOMPLETE"
 #: للأداة تعرّضٌ قائم ولا تُجيز الاستراتيجية الإضافة عليه.
 DUPLICATE_INSTRUMENT_EXPOSURE = "DUPLICATE_INSTRUMENT_EXPOSURE"
 #: عددُ المراكز بلغ السقف المعلن في الدستور.

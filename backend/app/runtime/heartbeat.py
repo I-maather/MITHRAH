@@ -40,7 +40,10 @@ from ..clock import now_utc
 from ..contracts import Bar, DataSource, Decision
 from ..money import D
 from ..portfolio.book import read_portfolio, unavailable, PORTFOLIO_NOT_ATTEMPTED
-from ..risk.size_ladder import RECONCILIATION_NOT_READY
+from ..risk.size_ladder import (
+    REALISED_PNL_INCOMPLETE,
+    RECONCILIATION_NOT_READY,
+)
 from ..pipeline.runner import MacroAssessment, NewsBlackout, PipelineResult
 from ..risk.session_state import load_session_state
 from ..scheduling import JobKind
@@ -377,6 +380,26 @@ def register_runtime_jobs(state, *, interval_seconds: int = DEFAULT_INTERVAL_SEC
         session_state = load_session_state(
             state.db_session, baseline_equity=state.limits.baseline_equity
         )
+
+        # **حسابٌ لا نعرف كم خسر فيه اليوم لا يُخاطَر فوقه.**
+        #
+        # `realized_pnl_today` تجمع ما عُرف وحده. فصفقةٌ مغلقةٌ بلا
+        # `realised_pnl` تجعل `day_loss` أقلَّ من الحقيقة، ويصير حدُّ الخسارة
+        # اليومي يقيس إلى سقفٍ أبعد ممّا هو. والفرقُ بين «لم يخسر» و«لا أعرف
+        # كم خسر» هو الفرقُ الذي بُني عليه هذا النظام كلّه.
+        #
+        # ولا يُبطَل الإقلاع ولا تُوقَف القراءة: الممنوعُ **مخاطرةٌ جديدة**.
+        if getattr(session_state, "unknown_realised_closes", 0) > 0:
+            state.last_result = _no_trade(
+                REALISED_PNL_INCOMPLETE,
+                (
+                    f"{session_state.unknown_realised_closes} صفقةً مغلقةً بلا "
+                    "نتيجةٍ معروفة. حدُّ الخسارة اليومي يُحسب على ما عُرف وحده، "
+                    "فلا يُفتَح مركزٌ جديد حتى تُطابَق نتائجُها مع الوسيط."
+                ),
+                "runtime",
+            )
+            return
 
         # ---------------------------------------------------------------
         # **حالةُ التعرّض تُصحَّح من الوسيط قبل أن يُسأل محرّك المخاطر.**
