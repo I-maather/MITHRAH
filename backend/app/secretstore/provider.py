@@ -150,6 +150,8 @@ class EnvFileSecretProvider(SecretProvider):
         self.path = Path(path)
         self.enforce_permissions = enforce_permissions
         self._cache: dict[str, str] | None = None
+        #: بصمةُ الملف وقت التحميل — (mtime_ns, size). انظر `_load`.
+        self._stamp: tuple[int, int] | None = None
 
     def _check_permissions(self) -> None:
         if not self.enforce_permissions:
@@ -161,9 +163,34 @@ class EnvFileSecretProvider(SecretProvider):
                 f"نفّذي: chmod 600 {self.path}"
             )
 
+    def _stamp_now(self) -> tuple[int, int] | None:
+        try:
+            st = self.path.stat()
+        except OSError:
+            return None
+        return (st.st_mtime_ns, st.st_size)
+
     def _load(self) -> dict[str, str]:
-        if self._cache is not None:
+        """
+        يُحمَّل مرّةً، **ويُعاد تحميله إذا تغيّر الملف**.
+
+        ## العطل الذي أُصلح
+
+        كان التحميل مرّةً واحدة إلى الأبد. فسرٌّ يُكتَب بعد إقلاع الخدمة يبقى
+        غيرَ مرئيّ حتى إعادة التشغيل — والسكربت يقول «✅ خُزّن» صادقاً،
+        والخدمة تقول «غائب» صادقةً، ولا رسالةَ تدلّ على أنّ الفارق ثوانٍ في
+        الترتيب.
+
+        ووقع ذلك حرفياً عند تركيب حارس مجال `/api`: كُتب الرمز بعد إقلاع
+        الخدمة بثلاث ثوانٍ، فبقي المجال يعيد 503 ورمزُه موجودٌ على القرص.
+
+        والمقارنة بـ(mtime, size) لا بقراءة الملف كل مرّة: كلفةُ `stat`
+        لا شيء، وكلفةُ القراءة ليست كذلك على مسارٍ يُستدعى في كل طلب.
+        """
+        stamp = self._stamp_now()
+        if self._cache is not None and stamp == self._stamp:
             return self._cache
+        self._stamp = stamp
         if not self.path.exists():
             self._cache = {}
             return self._cache
@@ -185,6 +212,7 @@ class EnvFileSecretProvider(SecretProvider):
 
     def invalidate(self) -> None:
         self._cache = None
+        self._stamp = None
 
 
 class EnvironmentSecretProvider(SecretProvider):

@@ -208,6 +208,24 @@ systemctl enable mathrah >/dev/null 2>&1 || die "تعذّر تمكين الخد�
 # على أن الكود الجديد هو الذي يعمل الآن.
 # ---------------------------------------------------------------------------
 pid_before="$(systemctl show -p MainPID --value mathrah 2>/dev/null || echo 0)"
+# **الرمز يُولَّد قبل تشغيل الخدمة.**
+#
+# كان يُولَّد بعدها، فكُتب بعد الإقلاع بثلاث ثوانٍ وبقي المجال يعيد 503
+# ورمزُه على القرص. (وذاكرةُ مزوّد الملف صارت تُبطَل بتغيّر الملف أيضاً —
+# حزامان لا واحد.)
+# **رمزُ مجال `/api`** — يُولَّد إن غاب، ولا يُطبع أبداً.
+#
+# المجال يفشل مغلقاً بلا رمز (503)، وهو الصواب. لكن نشرةً تترك الخدمة
+# مغلقةً على نفسها ليست نشرةً ناجحة، فيُولَّد رمزٌ عشوائيّ قويّ عند أول
+# نشرةٍ بعد إضافة الحارس. التوليد لا **يفتح** شيئاً: من لا يملك الرمز
+# يبقى خارجاً؛ إنما يُنشئ الاعتماد الذي بلا وجودِه لا أحد يدخل، نحن أولاً.
+sudo -u mathrah bash /opt/mathrah/scripts/configure_api_token.sh --generate >/dev/null 2>&1 || true
+API_TOKEN="$(sudo -u mathrah bash /opt/mathrah/scripts/configure_api_token.sh --show 2>/dev/null || true)"
+if [ -z "$API_TOKEN" ]; then
+  red "⛔ لا رمزَ لمجال /api — المجال مغلق ولا يمكن التحقق من الكوميت."
+  exit 1
+fi
+
 systemctl restart mathrah || die "تعذّر إعادة تشغيل الخدمة."
 
 ready=0
@@ -233,19 +251,6 @@ if [ "$pid_after" = "$pid_before" ] || [ -z "$pid_after" ] || [ "$pid_after" = "
   exit 1
 fi
 green "✅ أُعيد تشغيل الخدمة — العملية $pid_before ⇐ $pid_after"
-
-# **رمزُ مجال `/api`** — يُولَّد إن غاب، ولا يُطبع أبداً.
-#
-# المجال يفشل مغلقاً بلا رمز (503)، وهو الصواب. لكن نشرةً تترك الخدمة
-# مغلقةً على نفسها ليست نشرةً ناجحة، فيُولَّد رمزٌ عشوائيّ قويّ عند أول
-# نشرةٍ بعد إضافة الحارس. التوليد لا **يفتح** شيئاً: من لا يملك الرمز
-# يبقى خارجاً؛ إنما يُنشئ الاعتماد الذي بلا وجودِه لا أحد يدخل، نحن أولاً.
-sudo -u mathrah bash /opt/mathrah/scripts/configure_api_token.sh --generate >/dev/null 2>&1 || true
-API_TOKEN="$(sudo -u mathrah bash /opt/mathrah/scripts/configure_api_token.sh --show 2>/dev/null || true)"
-if [ -z "$API_TOKEN" ]; then
-  red "⛔ لا رمزَ لمجال /api — المجال مغلق ولا يمكن التحقق من الكوميت."
-  exit 1
-fi
 
 # ويُقرأ الكوميت من داخل الخدمة نفسها: القرص قد يحمل شيئاً والذاكرة غيره.
 running_sha="$(curl -s --max-time 3 -H "Authorization: Bearer $API_TOKEN" \

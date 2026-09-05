@@ -321,3 +321,56 @@ def test_the_api_token_script_refuses_a_value_on_the_command_line():
     assert "لا يُقبل تمرير الرمز في سطر الأوامر" in script
     assert "read -r -s" in script
     assert "set +o history" in script
+
+
+def test_a_secret_written_after_boot_becomes_visible_without_a_restart(tmp_path):
+    """
+    **العطل الذي كلّف نشرةً كاملة.**
+
+    مزوّدُ الملف كان يحمّل مرّةً إلى الأبد. فرمزُ مجال `/api` كُتب بعد إقلاع
+    الخدمة بثلاث ثوانٍ، وبقي المجال يعيد 503 والرمزُ على القرص. والسكربت
+    يقول «✅ خُزّن» صادقاً، والخدمة تقول «غائب» صادقةً — ولا رسالةَ تشير إلى
+    أنّ الفارق ترتيبٌ لا إعداد.
+    """
+    import os
+
+    path = tmp_path / "runtime.env"
+    path.write_text("OTHER=value\n", encoding="utf-8")
+    os.chmod(path, 0o600)
+
+    provider = EnvFileSecretProvider(path)
+    assert provider.has("MATHRAH_API_TOKEN") is False      # يُحمَّل ويُخزَّن
+
+    # يُكتَب السرّ بعد أن قرأ المزوّد الملف — كما يقع على الخادم تماماً.
+    path.write_text("OTHER=value\nMATHRAH_API_TOKEN=written-after-boot\n", encoding="utf-8")
+    os.chmod(path, 0o600)
+    os.utime(path, (0, 0))                                  # يضمن اختلاف mtime
+
+    assert provider.get("MATHRAH_API_TOKEN") == "written-after-boot"
+
+
+def test_an_unchanged_file_is_not_read_again(tmp_path, monkeypatch):
+    """
+    وإبطالُ الذاكرة بالبصمة لا بالقراءة: `stat` رخيصة، والقراءة ليست كذلك
+    على مسارٍ يُستدعى في كل طلب.
+    """
+    import os
+
+    path = tmp_path / "runtime.env"
+    path.write_text("K=v\n", encoding="utf-8")
+    os.chmod(path, 0o600)
+
+    provider = EnvFileSecretProvider(path)
+    provider.get("K")
+
+    reads = {"n": 0}
+    original = type(path).read_text
+
+    def counting(self, *a, **k):
+        reads["n"] += 1
+        return original(self, *a, **k)
+
+    monkeypatch.setattr(type(path), "read_text", counting)
+    for _ in range(5):
+        provider.get("K")
+    assert reads["n"] == 0, "أُعيدت القراءة والملف لم يتغيّر"
