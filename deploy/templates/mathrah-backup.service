@@ -1,0 +1,9 @@
+[Unit]
+Description=Mathrah — نسخة احتياطية متّسقة
+After=mathrah.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/mathrah/deploy/backup.sh
+User=mathrah
+Group=mathrah

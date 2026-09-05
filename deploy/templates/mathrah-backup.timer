@@ -1,0 +1,10 @@
+[Unit]
+Description=Mathrah — نسخة احتياطية كل ساعة
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+RandomizedDelaySec=120
+
+[Install]
+WantedBy=timers.target
