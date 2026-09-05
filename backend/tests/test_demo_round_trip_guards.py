@@ -163,6 +163,21 @@ def test_the_signal_is_hand_written_and_says_so():
     """
     الصفقة تُثبت الأنبوب لا القرار. واسمُ استراتيجيةٍ حقيقيّ على صفقةٍ
     يدوية يلوّث سجلّ الأداء لاحقاً بصفقةٍ لم تصدر عن حافّة.
+
+    والاسم صار `COMMISSIONING` بدل `MANUAL_PIPELINE_PROOF`: الغرضُ واحد،
+    لكنّ هذا الاسم **يُقرأ** — `portfolio/ledger.py` ينسب به المركزَ
+    تشغيلاً لا استراتيجيةً، وشاشةُ الصفقات تعرضه شارةً منفصلة. والأوّل كان
+    نصّاً لا يقرؤه أحد.
+
+    فالحارس هنا: اسمٌ **من قائمةٍ لا تُحسَب أداءً**، لا أيُّ اسمٍ حرفيّ.
     """
-    assert 'strategy_name="MANUAL_PIPELINE_PROOF"' in SOURCE
+    from app.portfolio.book import KIND_COMMISSIONING
+
+    assert f'strategy_name="{KIND_COMMISSIONING}"' in SOURCE
     assert "ليست قراراً تداولياً" in SOURCE
+
+    # والنسب يقرؤه الدفتر فعلاً: هذا الاسم بعينه هو ما يحوّل المركز إلى
+    # `KIND_COMMISSIONING` في `_attribute`. فلو غُيّر أحدهما دون الآخر
+    # لعاد المركز `STRATEGY` بصمت ودخل حسابَ الأداء.
+    ledger = (BACKEND / "app" / "portfolio" / "ledger.py").read_text(encoding="utf-8")
+    assert 'strategy_name == "COMMISSIONING"' in ledger
