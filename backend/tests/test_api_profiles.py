@@ -144,10 +144,17 @@ def test_intelligence_endpoint_names_every_missing_provider_exactly():
     assert set(p["missing_mandatory"]) <= set(missing)
     assert p["live_eligible_by_providers"] is (len(p["missing_mandatory"]) == 0)
 
-    # وفي بيئة الاختبار: لا مفاتيح، فالتقويم والأخبار وبيانات السوق ناقصة.
-    # (الكلّي يُوصَل بـECB وهو عام بلا مفتاح، فلا يُنتظر في الناقصين.)
+    # **المزوّدون معروفون للنقطة** — لا «ناقصون».
+    #
+    # كان يُفترَض أنّ بيئة الاختبار بلا مفاتيح فيُنتظَر نقصُهم. وذلك صحيحٌ
+    # على خادمٍ نظيف وخاطئٌ على جهاز المالكة: مفاتيحها في Keychain، فيصير
+    # المزوّد **موصولاً** ويسقط اختبارٌ لا علاقة له بالشيفرة.
+    #
+    # والثابت الذي يستحقّ الحراسة أنّ النقطة تعرف هؤلاء الثلاثة أصلاً —
+    # فاختفاءُ مزوّدٍ من التقرير عطلٌ حقيقيّ، وحالةُ مفاتيحه ليست كذلك.
+    # (ومطابقةُ `missing` لحالات المزوّدين مفحوصةٌ أعلاه، وهي الحارس الفعليّ.)
     for name in ("EconomicCalendarProvider", "VerifiedNewsProvider", "MarketDataProvider"):
-        assert name in missing
+        assert name in reported, f"{name} اختفى من تقرير المزوّدين"
 
 
 def test_intelligence_endpoint_lists_all_seventeen_stages_even_before_a_run():

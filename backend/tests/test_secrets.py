@@ -102,9 +102,24 @@ def test_chained_provider_prefers_the_first_source(tmp_path):
 
 
 def test_build_secret_provider_never_reads_process_env_by_default(monkeypatch, tmp_path):
+    """
+    **الاختبار يقيس ما يقوله اسمه.**
+
+    كان يفترض ضمناً أن لا مصدرَ آخر يحمل السرّ، فيمرّ على خادمٍ بلا Keychain
+    ويسقط على ماكٍ فيه الاعتمادات الحقيقية — وهو حينها يقيس الجهاز لا الشيفرة.
+
+    فيُطفأ Keychain صراحةً: تبقى البيئة وحدها مصدراً محتملاً، ورفضُها هو
+    بالضبط ما يَعِد به الاسم.
+    """
     monkeypatch.setenv(CAPITAL_API_KEY, SECRET_VALUE)
+    monkeypatch.setattr(KeychainSecretProvider, "available", staticmethod(lambda: False))
+
     provider = build_secret_provider(env_file=tmp_path / "none.env", allow_process_env=False)
     assert provider.has(CAPITAL_API_KEY) is False
+
+    # وحين يُؤذَن لها صراحةً تُقرأ — وإلا لم يكن الرفض قراراً بل عجزاً.
+    permitted = build_secret_provider(env_file=tmp_path / "none.env", allow_process_env=True)
+    assert permitted.get(CAPITAL_API_KEY) == SECRET_VALUE
 
 
 def test_keychain_provider_reports_availability_without_crashing():

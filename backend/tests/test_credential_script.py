@@ -28,6 +28,7 @@ import select
 import shutil
 import subprocess
 import sys
+import termios
 import tempfile
 import time
 from pathlib import Path
@@ -69,6 +70,14 @@ class Harness:
     """بيئة معزولة تماماً: HOME مؤقت و`security` و`uname` مُقلَّدان."""
 
     def __init__(self, *, fake_darwin: bool) -> None:
+        # **`uname` يُقلَّد في الحالتين.**
+        #
+        # كان يُقلَّد لـ`Darwin` وحدها، ويُترَك الحقيقيّ لحالة «لينكس». وذلك
+        # يعمل على خادم لينكس ويفشل على ماك: `uname` الحقيقيّ يقول `Darwin`
+        # فيسلك السكربتُ مسارَ Keychain في المِران الذي وُضع ليختبر **غيابه**.
+        #
+        # فكان اختباران يقيسان نظامَ المضيف لا الشيفرة — يمرّان في مكانٍ
+        # ويسقطان في آخر، والشيفرة واحدة. والمِران الذي لا يعزل ليس مِراناً.
         self.tmp = Path(tempfile.mkdtemp(prefix="credtest-"))
         self.bin = self.tmp / "bin"
         self.bin.mkdir()
@@ -80,8 +89,7 @@ class Harness:
         shutil.copy2(SCRIPT, target)
         target.chmod(0o755)
         self._fake_security()
-        if fake_darwin:
-            self._fake_uname()
+        self._fake_uname("Darwin" if fake_darwin else "Linux")
 
     def _fake_security(self) -> None:
         p = self.bin / "security"
@@ -108,9 +116,9 @@ class Harness:
         )
         p.chmod(0o755)
 
-    def _fake_uname(self) -> None:
+    def _fake_uname(self, value: str) -> None:
         p = self.bin / "uname"
-        p.write_text('#!/usr/bin/env bash\necho Darwin\n')
+        p.write_text(f'#!/usr/bin/env bash\necho {value}\n')
         p.chmod(0o755)
 
     @property
@@ -146,6 +154,22 @@ def _run_pty(h: Harness, args, answers, timeout) -> tuple[str, int]:
         os.chdir(h.repo)
         os.execve("/bin/bash", ["bash", str(h.script), *args], h.env())
         os._exit(127)
+
+    # **صدى الطرفية يُطفأ هنا، لا في السكربت.**
+    #
+    # سائق الـpty يُعيد ما يُكتَب إليه ما لم يُطفئه البرنامج. و`read -r -s`
+    # يُطفئه، لكن بين ظهور السؤال وكتابتنا الجواب سباقٌ: من يسبق، الكتابةُ أم
+    # الإطفاء؟ يُحسَم بحسب سرعة الجهاز — فكان اختبار «لا تُطبَع قيمة» يمرّ
+    # على الخادم ويسقط على الماك، والسكربت واحد.
+    #
+    # وبإطفائه من هنا يصير ظهورُ أيّ قيمةٍ في المخرَج **فعلَ السكربت وحده**.
+    # أي أن الاختبار صار أقوى لا أضعف: كان يقيس سباقاً، وصار يقيس السلوك.
+    try:
+        attrs = termios.tcgetattr(fd)
+        attrs[3] &= ~termios.ECHO          # lflag
+        termios.tcsetattr(fd, termios.TCSANOW, attrs)
+    except termios.error:
+        pass                               # لا pty حقيقيّ — يُترَك كما هو
 
     out = ""
     pending = list(answers)
