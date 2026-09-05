@@ -4,10 +4,12 @@ import { View } from 'react-native';
 import { useEndpoint } from '@/api/useEndpoint';
 import { ApiError } from '@/api/client';
 import {
+  AgentCard,
   AnimatedNumber,
   Banner,
   CandleChart,
   Card,
+  DayPath,
   Divider,
   ErrorState,
   Field,
@@ -19,8 +21,10 @@ import {
   RiskMeter,
   Screen,
   StaleBanner,
+  SectionTitle,
   StatusPill,
   Text,
+  Welcome,
   Vacancy,
   prepareChart,
   spanLabel,
@@ -29,6 +33,7 @@ import {
 import { fixtures, isPreviewMode, previewOr } from '@/fixtures';
 import { formatCooling, formatInstant, formatRatio, formatSince, formatToday, t } from '@/i18n';
 import { useTheme } from '@/theme';
+import { dayVerdict } from '@/utils/verdict';
 import {
   presentCompleteness,
   presentConnection,
@@ -68,6 +73,10 @@ export default function HomeScreen(): React.JSX.Element {
     previewData: previewOr(fixtures.decision),
   });
   const risk = useEndpoint((c) => c.getRisk(), { previewData: previewOr(fixtures.risk) });
+  // **مسار اليوم.** كان محسوباً في الخادم ولا يصل إلى أيّ شاشة.
+  const participation = useEndpoint((c) => c.getParticipation(), {
+    previewData: previewOr(fixtures.participation),
+  });
   const profiles = useEndpoint((c) => c.getProfiles(), {
     previewData: previewOr(fixtures.profiles),
   });
@@ -191,6 +200,16 @@ export default function HomeScreen(): React.JSX.Element {
     return total > 0 ? used / total : null;
   })();
 
+  // **الجهل يُعلن جهلاً.** `unknown` تجمع ثلاثة: انقطاعٌ، أو بياناتٌ
+  // قديمة، أو محفظةٌ لم تُقرأ. وأيٌّ منها يجعل «لا شيء يحتاجكِ» كذبةً.
+  const verdict = dayVerdict({
+    // `kill_switch` نفسها قد تغيب في حمولةٍ ناقصة — لا حقلُها وحده.
+    killSwitchActive: s?.kill_switch?.active ?? false,
+    unknown: offline || status.stale || pos === null,
+    locallyPaused: s?.locally_paused ?? false,
+    openPositions: pos?.open_count ?? null,
+  });
+
   return (
     <Screen
       root
@@ -214,17 +233,23 @@ export default function HomeScreen(): React.JSX.Element {
         <ErrorState error={status.error} onRetry={refreshAll} />
       ) : null}
 
-      {/* ---- الحكم: أول ما تقع عليه العين ---- */}
+      {/* ----------------------------------------------------------------
+          **الحكم قبل الرقم.**
+
+          كان هنا كلمةٌ واحدة («لم أتداول») تعلوها كلمةٌ أصغر («اليوم»).
+          وسؤال المالكة الفعليّ «هل أتدخّل؟» لا يُجاب بكلمة: «لا شيء يحتاجكِ
+          اليوم.» جوابٌ، و«لم أتداول» تقريرُ حالة.
+
+          والجملة تُشتقّ من الحالة في `utils/verdict.ts` — والجهلُ فيها يعلو
+          الصمت، فشاشةٌ تقول «لا شيء يحتاجكِ» والاتصال منقطعٌ تكذب.
+      ---------------------------------------------------------------- */}
       {s !== null || d !== null ? (
         <View style={{ gap: theme.spacing.sm, paddingBottom: theme.spacing.xs }}>
-          <Text variant="micro" tone="tertiary">
-            اليوم
-          </Text>
-          <Text variant="display" testID="home-verdict">
-            {d !== null && d.decision !== 'NO_TRADE'
-              ? presentDecision(d.decision, d.decision_ar).labelAr
-              : 'لم أتداول'}
-          </Text>
+          <Welcome
+            testID="home-verdict"
+            greeting={verdict.greeting}
+            verdict={verdict.verdict}
+          />
           {s !== null && s.no_trade_reason_ar !== null ? (
             <Text variant="body" tone="secondary" testID="no-trade-reason">
               {s.no_trade_reason_ar}
@@ -320,6 +345,64 @@ export default function HomeScreen(): React.JSX.Element {
       {/* ---- كم بقي لي ---- */}
       {r !== null ? (
         <>
+        {/* ----------------------------------------------------------------
+            **ما يفكر فيه الوكيل، ثمّ أين توقّف المسار.**
+
+            موضعُهما فوق المخاطرة والحدود عمداً: السؤال «هل أتدخّل؟» يسبق
+            «كم عندي؟». وبطاقةٌ تشرح صمت النظام هي الفراغ الذي وجده بحث
+            المنافسين — لا تطبيق من ثمانية عشر يعرض «لماذا لم أتداول».
+        ---------------------------------------------------------------- */}
+        {s !== null ? (
+          <AgentCard
+            testID="agent-card"
+            tone={verdict.tone}
+            title={verdict.verdict}
+            body={
+              s.no_trade_reason_ar ??
+              d?.explanation_ar ??
+              'لا سببَ مكتوبٌ لهذه الدورة بعد.'
+            }
+            chips={
+              participation.data?.available === true &&
+              Array.isArray(participation.data.steps)
+                ? participation.data.steps
+                    .filter((step) => step.count !== '—')
+                    .map((step) => ({ label: `${step.label_ar} ${step.count}` }))
+                : []
+            }
+          />
+        ) : null}
+
+        {/* قسمٌ موجودٌ بلا خطوات ليس مساراً — ولا يُعرض هيكلاً فارغاً. */}
+        {participation.data !== null &&
+        Array.isArray(participation.data.steps) &&
+        participation.data.steps.length > 0 ? (
+          <>
+            <SectionTitle
+              testID="day-path-title"
+              title="مسار اليوم"
+              note={participation.data.available ? 'أين توقّف' : 'غير معروف'}
+              noteTone={participation.data.available ? 'tertiary' : 'caution'}
+            />
+            <DayPath
+              testID="day-path"
+              steps={participation.data.steps.map((step) => ({
+                label: step.label_ar,
+                count: step.count,
+                reached: step.reached,
+              }))}
+              stopAt={
+                participation.data.available && participation.data.collapse_in_headline
+                  ? participation.data.steps.findIndex(
+                      (step) => step.key === participation.data?.collapse_stage,
+                    )
+                  : null
+              }
+              note={participation.data.note_ar}
+            />
+          </>
+        ) : null}
+
         <Card testID="risk-card" title={t.home.risk}>
           {/*
             **أيّ الحدّين يعمل — بنصّ الخادم لا بتفسير العميل.**
