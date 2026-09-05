@@ -1,6 +1,13 @@
 export { Banner, OfflineBanner, PreviewBanner, StaleBanner } from './Banner';
 export { Button, ConfirmButton } from './Button';
 export { Card, Divider } from './Card';
+export { AgentCard, type AgentCardProps, type AgentChip } from './AgentCard';
+export { DayPath, type DayPathProps, type PathStep } from './DayPath';
+export { GapNote, type GapNoteProps } from './GapNote';
+export { SectionTitle, type SectionTitleProps } from './SectionTitle';
+export { Tag, countsTowardStrategy, tagLabel, type TagProps, type TradeKind } from './Tag';
+export { Trio, type Tile, type TrioProps } from './Trio';
+export { Welcome, type WelcomeProps } from './Welcome';
 export {
   CandleChart,
   CHART_HEIGHT,
