@@ -704,7 +704,15 @@ class Pipeline:
             reason_ar=decision.reason_ar, source="RiskEngine",
             after=decision.model_dump(mode="json"), at=now,
         )
+        # **الرفضُ يُكتَب صفّاً، لا جملةً في سجلٍّ فقط.**
+        #
+        # تشخيصُ «لماذا لا يتداول النظام» يحتاج عدَّ الرفض بأسبابه ومراحله.
+        # وجدول `risk_decisions` كان مصمَّماً وهدفاً لمفتاحين أجنبيّين، ولا
+        # يكتبه أحد — فكان كلُّ سؤالٍ عن الرفض يُجاب بالنصّ لا بالعدد.
+        _journal = getattr(self.execution, "journal", None)
         if not decision.approved:
+            if _journal is not None:
+                _journal.decided(decision, symbol=symbol)
             return PipelineResult(
                 Decision.NO_TRADE, decision.reason_code, decision.reason_ar, "risk",
                 signal=signal, risk_decision=decision, at_utc=now,
@@ -732,6 +740,11 @@ class Pipeline:
             instrument_snapshot=details.model_dump(mode="json"),
             max_slippage_abs=(quote.spread * D("2")), now=now,
         )
+        # القرارُ الموافِق يُكتَب **بعد** بناء النيّة كي يحمل مفتاحها، فيربط
+        # `order_intents.risk_decision_id` بقرارٍ بعينه لا بأقربِ قرارٍ زمنياً.
+        if _journal is not None:
+            _journal.decided(decision, symbol=symbol, intent_key=intent.idempotency_key)
+
         self.audit.record(
             actor=Actor.PIPELINE, action=AuditAction.ORDER_INTENT_CREATED, decision="CREATED",
             reason_ar=intent.exit_plan_ar, source="Pipeline",

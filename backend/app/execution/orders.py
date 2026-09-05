@@ -10,11 +10,12 @@ from __future__ import annotations
 
 import hashlib
 import uuid
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum
-from typing import Optional
+from typing import Callable, Optional
 
 from .journal import ExecutionJournal, JournalUnavailable
 from ..audit.log import Actor, AuditAction, AuditLog, canonical_json
@@ -130,14 +131,64 @@ def build_order_intent(
     )
 
 
-class IdempotencyGuard:
-    """يمنع إرسال نفس النية مرتين، حتى بعد إعادة تشغيل العملية (يُدعم بجدول DB)."""
+_GUARD_LOG = logging.getLogger(__name__)
 
-    def __init__(self, seen: Optional[set[str]] = None) -> None:
+
+class IdempotencyGuard:
+    """
+    يمنع إرسال نفس النيّة مرّتين — **وعبر إعادة التشغيل**.
+
+    كان التعليق يقول «يُدعم بجدول DB» والذاكرةُ وحدها هي الحارس. فكان
+    المنعُ يضيع مع كلّ إقلاع: عمليةٌ سقطت بعد `place_order` وقبل التأكيد،
+    ثمّ أُقلعت، تجد المفتاح غائباً من الذاكرة فترسل ثانيةً. وهذا هو
+    السيناريو الوحيد الذي يضيع فيه المال صامتاً.
+
+    فصار يسأل القاعدة: `order_intents.idempotency_key` (فريد) ثمّ
+    `execution_attempts` — والاثنان يُكتبان **قبل** الإرسال.
+
+    ## والجهل يمنع
+
+    تعذّرت القراءة ⇒ `True`، أي «لا تُرسِل». حارسٌ أعمى ليس حارساً، وإرسالٌ
+    مكرَّرٌ لا يُستدرَك بينما امتناعٌ في دقيقةٍ يُستدرَك في التي تليها.
+    """
+
+    def __init__(
+        self,
+        seen: Optional[set[str]] = None,
+        session_factory: Optional[Callable[[], object]] = None,
+    ) -> None:
         self._seen: set[str] = set(seen or ())
+        self.session_factory = session_factory
 
     def seen(self, key: str) -> bool:
-        return key in self._seen
+        if key in self._seen:
+            return True
+        if self.session_factory is None:
+            return False
+        try:
+            from sqlalchemy import select  # noqa: PLC0415
+
+            from ..db.models import ExecutionAttempt, OrderIntentRow  # noqa: PLC0415
+
+            with self.session_factory() as session:  # type: ignore[misc]
+                found = session.execute(
+                    select(OrderIntentRow.id).where(
+                        OrderIntentRow.idempotency_key == key
+                    )
+                ).first()
+                if found is not None:
+                    return True
+                found = session.execute(
+                    select(ExecutionAttempt.id).where(
+                        ExecutionAttempt.idempotency_key == key
+                    )
+                ).first()
+                return found is not None
+        except Exception as exc:  # noqa: BLE001
+            _GUARD_LOG.error(
+                "تعذّرت قراءة حارس التكرار (%s) — يُمنع الإرسال.", type(exc).__name__
+            )
+            return True
 
     def remember(self, key: str) -> None:
         self._seen.add(key)
@@ -161,6 +212,13 @@ class ExecutionService:
         """
         result = self._submit(intent)
         self.journal.settled(intent, result)
+        # **ما وقع فعلاً** — السعر المنفَّذ والرسوم لكلّ تعبئة. وبها وحدها
+        # يُقاس الانزلاق، وهي نصفُ تقييم جودة التنفيذ في `E3`.
+        self.journal.executed(
+            result,
+            broker=self.broker,
+            account_id=str(getattr(self.broker, "account_id", "") or ""),
+        )
         return result
 
     def _submit(self, intent: OrderIntent) -> SubmissionResult:

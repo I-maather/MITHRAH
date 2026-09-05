@@ -126,9 +126,20 @@ class SignalRow(Base):
 
 
 class RiskDecisionRow(Base):
+    """
+    قرارُ محرّك المخاطر — **موافقاً كان أو رافضاً**.
+
+    كان هذا الجدول مصمَّماً ومقصوداً هدفاً لمفتاحين أجنبيّين (`order_intents`
+    و`position_book`) **ولا يكتبه أحد**. فكان المركز لا يُنسَب إلى قرارٍ
+    مكتوب، وكان الرفضُ يمرّ في سجلّ التدقيق نصّاً ولا يبقى صفّاً يُعَدّ
+    ويُصنَّف. وتشخيصُ «لماذا لا تتداول» يحتاج عدَّ الرفض بأسبابه، لا قراءته.
+    """
+
     __tablename__ = "risk_decisions"
     id: Mapped[int] = mapped_column(primary_key=True)
     signal_id: Mapped[int | None] = mapped_column(ForeignKey("signals.id"))
+    #: الأداة. قرارٌ بلا أداةٍ لا يُقرأ — وكان الجدول بلا هذا العمود.
+    symbol: Mapped[str] = mapped_column(String(24), default="", index=True)
     approved: Mapped[bool] = mapped_column(Boolean)
     reason_code: Mapped[str] = mapped_column(String(64), default="")
     reason_ar: Mapped[str] = mapped_column(Text)

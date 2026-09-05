@@ -236,7 +236,9 @@ def build_system(settings: Settings | None = None) -> SystemState:
     execution = ExecutionService(
         broker=broker,
         audit=audit,
-        guard=IdempotencyGuard(),
+        # **الحارس يقرأ القاعدة** لا الذاكرة وحدها — وإلا ضاع المنع مع
+        # كلّ إقلاع، وهو السيناريو الذي يضيع فيه المال صامتاً.
+        guard=IdempotencyGuard(session_factory=get_session),
         journal=ExecutionJournal(session_factory=get_session),
     )
 

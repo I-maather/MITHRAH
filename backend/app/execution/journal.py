@@ -28,14 +28,21 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+import json
+from dataclasses import dataclass, field
 from typing import Callable, Optional
 
 from sqlalchemy import select
 
 from ..clock import now_utc
 from ..contracts import ExecutionUncertainty, OrderIntent, OrderStatus
-from ..db.models import BrokerOrderRow, ExecutionAttempt, OrderIntentRow
+from ..db.models import (
+    BrokerOrderRow,
+    ExecutionAttempt,
+    ExecutionRow,
+    OrderIntentRow,
+    RiskDecisionRow,
+)
 from ..db.recovery import record_attempt, resolve_attempt
 
 _LOG = logging.getLogger(__name__)
@@ -70,6 +77,22 @@ _RESOLUTION = {
 }
 
 
+def _checks_json(decision) -> str:
+    """فحوصُ القرار نصّاً — وبها يُعرَف **أيُّ شرطٍ سقط**، لا أنّ شرطاً سقط."""
+    checks = getattr(decision, "checks", ()) or ()
+    try:
+        return json.dumps(
+            [
+                {"name": c[0], "passed": bool(c[1]), "detail_ar": c[2]}
+                for c in checks
+                if len(c) >= 3
+            ],
+            ensure_ascii=False,
+        )
+    except Exception:  # noqa: BLE001
+        return "[]"
+
+
 @dataclass
 class ExecutionJournal:
     """
@@ -81,10 +104,126 @@ class ExecutionJournal:
     """
 
     session_factory: Optional[Callable[[], object]] = None
+    #: ربطُ النيّة بقرارها — يعيش لحظاتٍ بين `decided()` و`opened()` في
+    #: العملية نفسها. وغيابُه يترك `risk_decision_id` فارغاً **ولا يُخمَّن**:
+    #: رابطٌ خاطئ أسوأ من رابطٍ غائب، لأنه يُقرأ على أنه معرفة.
+    _decisions: dict = field(default_factory=dict)
 
     @property
     def enabled(self) -> bool:
         return self.session_factory is not None
+
+    # -- قرارُ المخاطر ------------------------------------------------------
+
+    def decided(
+        self,
+        decision,
+        *,
+        symbol: str,
+        intent_key: Optional[str] = None,
+    ) -> Optional[int]:
+        """
+        يكتب قرارَ المخاطر صفّاً — **الموافقةَ والرفضَ معاً**.
+
+        الرفضُ ليس عدماً: تشخيصُ «لماذا لا يتداول النظام» يحتاج عدَّ الرفض
+        بأسبابه ومراحله، لا قراءتَه جملةً في سجلّ التدقيق. وقد كان هذا
+        الجدول فارغاً منذ بُني، فكان كلُّ سؤالٍ عن الرفض يُجاب بالنصّ لا
+        بالعدد.
+
+        ولا يرفع شيئاً: قرارٌ لم يُسجَّل لا يمنع تسجيلَ ما بعده، والإرسالُ
+        نفسه محروسٌ بـ`opened()` التي **تمنع** عند فشلها.
+        """
+        if not self.enabled:
+            return None
+        try:
+            with self.session_factory() as session:  # type: ignore[misc]
+                row = RiskDecisionRow(
+                    symbol=symbol or "",
+                    approved=bool(getattr(decision, "approved", False)),
+                    reason_code=(getattr(decision, "reason_code", None) or "")[:64],
+                    reason_ar=getattr(decision, "reason_ar", "") or "",
+                    checks_json=_checks_json(decision),
+                    quantity=getattr(decision, "quantity", 0) or 0,
+                    expected_risk_usd=getattr(decision, "expected_risk_usd", 0) or 0,
+                    expected_costs_usd=getattr(decision, "expected_costs_usd", 0) or 0,
+                    risk_budget_usd=getattr(decision, "risk_budget_usd", 0) or 0,
+                    constitution_fingerprint=(
+                        getattr(decision, "constitution_fingerprint", "") or ""
+                    ),
+                    decided_at_utc=getattr(decision, "decided_at_utc", None) or now_utc(),
+                )
+                session.add(row)
+                session.commit()
+                session.refresh(row)
+                if intent_key:
+                    self._decisions[intent_key] = row.id
+                return row.id
+        except Exception as exc:  # noqa: BLE001
+            _LOG.error("تعذّر تسجيل قرار المخاطر: %s", type(exc).__name__)
+            return None
+
+    # -- التنفيذات ---------------------------------------------------------
+
+    def executed(self, result, *, broker=None, account_id: str = "") -> int:
+        """
+        يحفظ التنفيذات كما يقولها الوسيط — **وهي وحدها تُعرِّف الانزلاق**.
+
+        `broker_orders` تحمل ما طُلب وما تأكّد؛ و`executions` تحمل **ما وقع
+        فعلاً**: السعر المنفَّذ والكمية والرسوم لكلّ تعبئة. وبلا هذه لا يُعرف
+        الفرقُ بين السعر المتوقَّع والمنفَّذ — أي لا تُقاس جودةُ التنفيذ، وهي
+        نصفُ `E3`.
+
+        والمحوّل يملك `get_executions` منذ بُني، **ولم يكن أحدٌ يحفظ ما تعيده**.
+
+        ولا يرفع شيئاً: التنفيذ وقع، وفشلُ تسجيله لا يُنكره.
+        """
+        if not self.enabled or broker is None:
+            return 0
+        order = getattr(result, "order", None)
+        broker_order_id = str(getattr(order, "broker_order_id", "") or "")
+        if not broker_order_id:
+            return 0
+        try:
+            fills = list(broker.get_executions(account_id) or [])
+        except Exception as exc:  # noqa: BLE001
+            _LOG.error("تعذّرت قراءة التنفيذات من الوسيط: %s", type(exc).__name__)
+            return 0
+
+        saved = 0
+        try:
+            with self.session_factory() as session:  # type: ignore[misc]
+                for fill in fills:
+                    if str(getattr(fill, "broker_order_id", "")) != broker_order_id:
+                        continue
+                    key = str(getattr(fill, "execution_id", "") or "")
+                    if not key:
+                        continue
+                    existing = session.execute(
+                        select(ExecutionRow).where(ExecutionRow.execution_id == key)
+                    ).scalar_one_or_none()
+                    if existing is not None:
+                        continue
+                    session.add(
+                        ExecutionRow(
+                            execution_id=key,
+                            broker_order_id=broker_order_id,
+                            symbol=getattr(fill, "symbol", "") or "",
+                            side=getattr(
+                                getattr(fill, "side", None), "value", str(getattr(fill, "side", ""))
+                            ),
+                            quantity=getattr(fill, "quantity", 0) or 0,
+                            price=getattr(fill, "price", 0) or 0,
+                            commission=getattr(fill, "commission", 0) or 0,
+                            executed_at_utc=getattr(fill, "executed_at_utc", None) or now_utc(),
+                        )
+                    )
+                    saved += 1
+                if saved:
+                    session.commit()
+        except Exception as exc:  # noqa: BLE001
+            _LOG.error("تعذّر حفظ التنفيذات: %s", type(exc).__name__)
+            return 0
+        return saved
 
     # -- قبل الإرسال ---------------------------------------------------------
 
@@ -104,7 +243,12 @@ class ExecutionJournal:
                     )
                 ).scalar_one_or_none()
                 if existing is None:
-                    session.add(_intent_row(intent, broker=broker, environment=environment))
+                    row = _intent_row(intent, broker=broker, environment=environment)
+                    # الرابطُ يُقرأ من الذاكرة لا يُخمَّن؛ وغيابُه يتركه فارغاً.
+                    row.risk_decision_id = self._decisions.pop(
+                        intent.idempotency_key, None
+                    )
+                    session.add(row)
                     session.commit()
 
                 attempt = session.execute(

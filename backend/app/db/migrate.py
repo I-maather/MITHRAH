@@ -28,6 +28,8 @@ ADDITIONS: tuple[tuple[str, str, str], ...] = (
     ("position_book", "assessment_source", "VARCHAR(32)"),
     ("position_book", "assessment_version", "VARCHAR(32)"),
     ("position_book", "assessed_at_utc", "DATETIME"),
+    # 2026-09-05: قرارُ المخاطر بلا أداةٍ لا يُقرأ.
+    ("risk_decisions", "symbol", "VARCHAR(24) DEFAULT ''"),
 )
 
 
