@@ -11,13 +11,18 @@ import {
   Field,
   LoadingState,
   Screen,
+  SectionTitle,
   StatusPill,
+  Tag,
   Text,
+  Trio,
+  type TradeKind,
 } from '@/components';
 import { fixtures, isPreviewMode, previewOr } from '@/fixtures';
 import { formatInstant, t } from '@/i18n';
 import { useTheme } from '@/theme';
 import { presentPnlTone } from '@/utils/present';
+import { anyMissing, money, totalsByKind } from '@/utils/tradeTotals';
 
 /**
  * سجل الصفقات.
@@ -47,6 +52,9 @@ export default function HistoryScreen(): React.JSX.Element {
       </Screen>
     );
   }
+
+  const totals = totalsByKind(data.trades ?? []);
+  const missing = anyMissing(totals);
 
   return (
     <Screen
@@ -80,10 +88,65 @@ export default function HistoryScreen(): React.JSX.Element {
         />
       ) : null}
 
-      {data.sync.ok && !data.unavailable && data.realised_pnl_total !== null ? (
-        <Card testID="history-total-card" title="المحقَّق الكلي">
-          <Field label="مجموع الصفقات المغلقة" value={data.realised_pnl_total} large />
-        </Card>
+      {/* ----------------------------------------------------------------
+          **ثلاثة أرقامٍ بلا رابعٍ يجمعها** — بند التدقيق `E2`.
+
+          كان هنا «المحقَّق الكلي»: رقمٌ واحد يجمع الاستراتيجي والإداري
+          والتشغيلي. وجمعُها يعطي عدداً **لا يقيس أداء استراتيجية** — الإغلاقُ
+          الإداري لم تتّخذه استراتيجية، وصفقةُ التشغيل غرضُها اختبار المسار
+          لا الربح. ونسبةُ خسارتهما إلى استراتيجيةٍ لم تقرّرهما تُفسد كلّ
+          نسبةٍ تُحسب بعدها.
+      ---------------------------------------------------------------- */}
+      {data.sync.ok && !data.unavailable ? (
+        <>
+          <Trio
+            testID="history-totals"
+            tiles={[
+              {
+                label: 'استراتيجي',
+                value: money(totals.STRATEGY.value),
+                tone: totals.STRATEGY.value < 0 ? 'negative' : 'positive',
+              },
+              {
+                label: 'إداري',
+                value: money(totals.ADMINISTRATIVE.value),
+                tone: totals.ADMINISTRATIVE.value < 0 ? 'negative' : 'positive',
+              },
+              {
+                label: 'تشغيلي',
+                value: money(totals.COMMISSIONING.value),
+                tone: totals.COMMISSIONING.value < 0 ? 'negative' : 'positive',
+              },
+            ]}
+          />
+          <Text variant="caption" tone="tertiary" testID="history-no-grand-total">
+            لا يُعرض «محقَّق كلّي» في رقمٍ واحد: جمعُ الثلاثة يعطي رقماً لا يقيس
+            أداء استراتيجية.
+          </Text>
+          {missing > 0 ? (
+            <Text variant="caption" tone="caution" testID="history-partial">
+              {`${missing} صفقةً لم تدخل هذه المجاميع لأنّ نتيجتها لم تُطابَق بعد — الأرقام أعلاه ناقصة، لا كاملة.`}
+            </Text>
+          ) : null}
+          {totals.UNATTRIBUTED.counted > 0 || totals.UNATTRIBUTED.missing > 0 ? (
+            <Text variant="caption" tone="caution" testID="history-unattributed">
+              {`${totals.UNATTRIBUTED.counted + totals.UNATTRIBUTED.missing} صفقةً بلا نسبةٍ إلى قرار — لا تُحسب في أيٍّ من الثلاثة، ولا تُخمَّن نسبتُها.`}
+            </Text>
+          ) : null}
+        </>
+      ) : null}
+
+      {data.sync.ok && !data.unavailable && data.trades.length > 0 ? (
+        <SectionTitle
+          testID="history-list-title"
+          title="الصفقات المغلقة"
+          note={
+            data.sync.stale
+              ? 'قراءةٌ قديمة'
+              : `${data.trades.length} صفقة · آخر مزامنة الآن`
+          }
+          noteTone={data.sync.stale ? 'caution' : 'tertiary'}
+        />
       ) : null}
 
       {!data.sync.ok || data.unavailable ? null : data.trades.length === 0 ? (
@@ -112,9 +175,9 @@ export default function HistoryScreen(): React.JSX.Element {
               <Text variant="bodyStrong" style={{ flex: 1 }}>
                 {trade.instrument_ar ?? trade.instrument}
               </Text>
-              {trade.kind === 'COMMISSIONING' ? (
-                <StatusPill label="تشغيل" tone="neutral" />
-              ) : null}
+              {/* **نسبةُ الصفقة على كلّ صفّ** لا على التشغيلية وحدها:
+                  الإغلاقُ الإداري كان يُقرأ صفقةَ استراتيجية. */}
+              <Tag kind={(trade.kind ?? 'UNATTRIBUTED') as TradeKind} />
               {trade.outcome_ar !== null ? (
                 <StatusPill
                   label={trade.outcome_ar}
