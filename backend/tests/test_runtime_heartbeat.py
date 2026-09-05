@@ -63,7 +63,17 @@ class FakeBroker:
         return []
 
     def get_balances(self, account_id=""):
-        return SimpleNamespace(account_id="TEST", total_cash=D("140"), settled_cash=D("140"))
+        # **المزيّفُ يجب أن يحمل ما يحمله الحقيقي.** صارت الحلقة تقرأ
+        # `net_liquidation` قبل أيّ قرار وتُفشَل مغلقاً بدونها — ومزيّفٌ
+        # بلا هذا الحقل يجعل كلّ دورةٍ تُردّ بـ`EQUITY_UNKNOWN`، وهو سلوكٌ
+        # صحيح والنقصُ في المزيّف لا في الحارس.
+        return SimpleNamespace(
+            account_id="TEST",
+            total_cash=D("140"),
+            settled_cash=D("140"),
+            net_liquidation=D("140"),
+            as_of_utc=now_utc(),
+        )
 
 
 def _session_state() -> SessionRiskState:

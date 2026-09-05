@@ -41,11 +41,13 @@ from ..contracts import Bar, DataSource, Decision
 from ..money import D
 from ..portfolio.book import read_portfolio, unavailable, PORTFOLIO_NOT_ATTEMPTED
 from ..risk.size_ladder import (
+    EQUITY_UNKNOWN,
     REALISED_PNL_INCOMPLETE,
     RECONCILIATION_NOT_READY,
+    RISK_STATE_STALE,
 )
 from ..pipeline.runner import MacroAssessment, NewsBlackout, PipelineResult
-from ..risk.session_state import load_session_state
+from ..risk.session_state import load_session_state, read_equity
 from ..scheduling import JobKind
 
 logger = logging.getLogger(__name__)
@@ -374,40 +376,13 @@ def register_runtime_jobs(state, *, interval_seconds: int = DEFAULT_INTERVAL_SEC
             )
             return
 
-        # حالة المخاطرة تُقرأ من السجل مرّة لكل دورة مسح، لا مرّة لكل أداة:
-        # قراءتها بين الأدوات تجعل نتيجة الأداة الثانية تعتمد على أثر الأولى
-        # في المنتصف — وهو ما لا يمكن إعادة إنتاجه ولا تفسيره في التدقيق.
-        session_state = load_session_state(
-            state.db_session, baseline_equity=state.limits.baseline_equity
-        )
-
-        # **حسابٌ لا نعرف كم خسر فيه اليوم لا يُخاطَر فوقه.**
-        #
-        # `realized_pnl_today` تجمع ما عُرف وحده. فصفقةٌ مغلقةٌ بلا
-        # `realised_pnl` تجعل `day_loss` أقلَّ من الحقيقة، ويصير حدُّ الخسارة
-        # اليومي يقيس إلى سقفٍ أبعد ممّا هو. والفرقُ بين «لم يخسر» و«لا أعرف
-        # كم خسر» هو الفرقُ الذي بُني عليه هذا النظام كلّه.
-        #
-        # ولا يُبطَل الإقلاع ولا تُوقَف القراءة: الممنوعُ **مخاطرةٌ جديدة**.
-        if getattr(session_state, "unknown_realised_closes", 0) > 0:
-            state.last_result = _no_trade(
-                REALISED_PNL_INCOMPLETE,
-                (
-                    f"{session_state.unknown_realised_closes} صفقةً مغلقةً بلا "
-                    "نتيجةٍ معروفة. حدُّ الخسارة اليومي يُحسب على ما عُرف وحده، "
-                    "فلا يُفتَح مركزٌ جديد حتى تُطابَق نتائجُها مع الوسيط."
-                ),
-                "runtime",
-            )
-            return
-
         # ---------------------------------------------------------------
         # **حالةُ التعرّض تُصحَّح من الوسيط قبل أن يُسأل محرّك المخاطر.**
         #
-        # `load_session_state` تقرأ `open_symbols` من جدول `TradeRow` حيث
-        # `closed_at_utc IS NULL`. والجدول **لا يُكتَب فيه عند فتح مركز** —
-        # فيعود فارغاً دائماً، فتقرأ بوابةُ مصدر التعرّض «لا مركز مفتوح»
-        # ويقرأ سقفُ المراكز صفراً.
+        # كانت `load_session_state` تقرأ `open_symbols` من `TradeRow` — وهو
+        # جدولٌ لا يُكتَب فيه، فيعود فارغاً دائماً. صارت تقرأ من
+        # `position_book` (2026-09-05)، لكنّ الدفتر يصف آخرَ مطابقةٍ لا
+        # هذه اللحظة، فيبقى التصحيحُ من اللقطة لازماً.
         #
         # وأثرُ ذلك مقيس: يوم 2026-09-04 بلغت المراكز المفتوحة عند الوسيط
         # **خمسة** والسقف المعلن في الدستور ثلاثة، ولم يمنع شيء — لأن
@@ -427,6 +402,77 @@ def register_runtime_jobs(state, *, interval_seconds: int = DEFAULT_INTERVAL_SEC
                 (
                     "لم تُقرأ المراكز من الوسيط، فلا تُعرَف حدود التعرّض. "
                     "لا يُفتَح مركزٌ على جهلٍ بما هو مفتوح."
+                ),
+                "runtime",
+            )
+            return
+
+        # حالة المخاطرة تُقرأ من السجل مرّة لكل دورة مسح، لا مرّة لكل أداة:
+        # قراءتها بين الأدوات تجعل نتيجة الأداة الثانية تعتمد على أثر الأولى
+        # في المنتصف — وهو ما لا يمكن إعادة إنتاجه ولا تفسيره في التدقيق.
+        # **الرصيد يُقرأ بعد اللقطة لا قبلها.** غيرُ المحقَّق جزءٌ من حقوق
+        # الملكية، ولا يُعرَف إلا من المراكز المفتوحة — فقياسُه قبل قراءتها
+        # قياسٌ على نصف الحقيقة. واللقطةُ نفسها هي مصدرُ الاثنين، فلا
+        # يتناقض عددُ المراكز مع الربح المحسوب عليها.
+        #
+        # والمقياسُ **حصّةُ الاستراتيجية** لا رصيدُ الحساب: على حسابٍ
+        # تجريبيّ رصيده تسعون ألفاً والحصّةُ ثلاثمئة، تصير `total_loss`
+        # صفراً أبداً — فيُعطَّل حاجزُ التراجع الذي يُفترض أن يحمي.
+        equity = read_equity(
+            state.broker,
+            getattr(state.broker, "account_id", "") or "",
+            snapshot=snapshot,
+        )
+
+        session_state = load_session_state(
+            state.db_session,
+            baseline_equity=state.limits.baseline_equity,
+            equity=equity,
+        )
+
+        # **الحكمُ على القراءة نفسها لا على حقلٍ يصفها.**
+        #
+        # `session_state.equity_known` يصف ما بُني منه؛ وحارسٌ يقرأ الوصف
+        # يمكن أن يُخدَع ببديلٍ يقول «معروف» وهو لم يقرأ شيئاً. أمّا
+        # `equity` فهي نتيجةُ المكالمة التي جرت قبل سطرين.
+        if not equity.ok:
+            state.last_result = _no_trade(
+                EQUITY_UNKNOWN,
+                (
+                    "لم تُقرأ حقوقُ الملكية: "
+                    f"{equity.reason_ar} "
+                    "ولا يُستبدَل الرصيد بالأساس ولا بصفر — فلا يُفتَح مركز."
+                ),
+                "runtime",
+            )
+            return
+
+        if equity.is_stale():
+            state.last_result = _no_trade(
+                RISK_STATE_STALE,
+                (
+                    "لقطةُ الحساب أقدمُ من الحدّ المسموح. رصيدٌ عمره دقائق ليس "
+                    "رصيدَ الآن — يُعاد القياس قبل أيّ مركزٍ جديد."
+                ),
+                "runtime",
+            )
+            return
+
+        # **حسابٌ لا نعرف كم خسر فيه اليوم لا يُخاطَر فوقه.**
+        #
+        # `realized_pnl_today` تجمع ما عُرف وحده. فصفقةٌ مغلقةٌ بلا
+        # `realised_pnl` تجعل `day_loss` أقلَّ من الحقيقة، ويصير حدُّ الخسارة
+        # اليومي يقيس إلى سقفٍ أبعد ممّا هو. والفرقُ بين «لم يخسر» و«لا أعرف
+        # كم خسر» هو الفرقُ الذي بُني عليه هذا النظام كلّه.
+        #
+        # ولا يُبطَل الإقلاع ولا تُوقَف القراءة: الممنوعُ **مخاطرةٌ جديدة**.
+        if getattr(session_state, "unknown_realised_closes", 0) > 0:
+            state.last_result = _no_trade(
+                REALISED_PNL_INCOMPLETE,
+                (
+                    f"{session_state.unknown_realised_closes} صفقةً مغلقةً بلا "
+                    "نتيجةٍ معروفة. حدُّ الخسارة اليومي يُحسب على ما عُرف وحده، "
+                    "فلا يُفتَح مركزٌ جديد حتى تُطابَق نتائجُها مع الوسيط."
                 ),
                 "runtime",
             )

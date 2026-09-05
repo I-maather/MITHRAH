@@ -20,7 +20,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from app.clock import now_utc, trading_day_bounds_utc
-from app.db.models import Base, PositionBookRow
+from app.db.models import Base, OrderIntentRow, PositionBookRow
 from app.risk import session_state as ss
 
 BASELINE = Decimal("300")
@@ -43,6 +43,9 @@ def _closed(session, deal_id, pnl, *, when=None, symbol="EURUSD"):
         symbol=symbol,
         quantity=Decimal("1"),
         state="CLOSED",
+        # **الإغلاقُ لا يدخل عدّاداً يوقف التداول إلا مؤكَّداً** بدليلٍ مستقلّ
+        # من دفتر معاملات الوسيط. و`STALE` تعني «لم نُثبته بعد».
+        reconciliation="CONFIRMED",
         first_seen_utc=at,
         last_seen_utc=at,
         opened_at_utc=at,
@@ -69,6 +72,31 @@ def _open(session, deal_id, *, symbol="EURUSD"):
     session.add(row)
     session.commit()
     return row
+
+
+def _intent(session, key, *, when=None):
+    """نيّةُ أمرٍ كما يكتبها `execution/journal.py` قبل الإرسال."""
+    day_start, _ = trading_day_bounds_utc(now_utc())
+    at = when or (day_start + timedelta(hours=1))
+    session.add(OrderIntentRow(
+        idempotency_key=key,
+        client_order_id="MAT-" + key,
+        broker="MOCK",
+        broker_environment="demo",
+        epic="EURUSD",
+        strategy_name="T",
+        strategy_version="1",
+        symbol="EURUSD",
+        side="BUY",
+        order_type="MARKET",
+        quantity=Decimal("1"),
+        expected_fill_price=Decimal("1"),
+        max_slippage_abs=Decimal("0.001"),
+        exit_plan_ar="",
+        instrument_snapshot_json="{}",
+        created_at_utc=at,
+    ))
+    session.commit()
 
 
 def _state(session):
@@ -113,11 +141,28 @@ class TestTheSourceIsTheBookWeWrite:
         assert state.open_positions == 1
         assert state.open_symbols == ("GBPUSD",)
 
-    def test_entries_today_counts_what_opened_today(self, session):
+    def test_entries_today_counts_intents_not_positions(self, session):
+        """
+        السقفُ يحرس **المحاولات** لا النجاحات.
+
+        أمرٌ رفضه الوسيط استهلك محاولةً ولم يترك مركزاً؛ وعدُّه من الدفتر
+        يجعل النظام يُعيد المحاولة بلا حدٍّ ما دامت كلّها تُرفض.
+        """
         _open(session, "d3")
         _closed(session, "d4", Decimal("1"))
-        state = _state(session)
-        assert state.entry_orders_today == 2
+        assert _state(session).entry_orders_today == 0, (
+            "المراكزُ تُعَدّ دخولاً — والمرفوضُ لا يُعَدّ."
+        )
+
+        _intent(session, "k1")
+        _intent(session, "k2")
+        assert _state(session).entry_orders_today == 2
+
+    def test_a_rejected_intent_still_counts_as_an_attempt(self, session):
+        """النيّة تُكتَب قبل الإرسال، فتُعَدّ ولو لم ينتج عنها مركز."""
+        _intent(session, "rejected-1")
+        assert _state(session).entry_orders_today == 1
+        assert _state(session).open_positions == 0
 
 
 class TestTheStreakStopsAtWhatWeKnow:

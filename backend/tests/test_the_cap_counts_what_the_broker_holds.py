@@ -15,6 +15,7 @@ from types import SimpleNamespace
 
 from tests.runtime_fixtures import passing_startup
 
+from app.clock import now_utc
 from app.money import D
 from app.portfolio.book import OpenPosition
 from app.risk.engine import SessionRiskState
@@ -61,7 +62,17 @@ class _Broker:
         return list(self._orders)
 
     def get_balances(self, account_id=""):
-        return SimpleNamespace(account_id="T", total_cash=D("300"), settled_cash=D("300"))
+        # **المزيّفُ يجب أن يحمل ما يحمله الحقيقي.** صارت الحلقة تقرأ
+        # `net_liquidation` وغيرَ المحقَّق قبل أيّ قرار وتُفشَل مغلقاً
+        # بدونهما — ومزيّفٌ بلا هذا السطح يجعل كلّ دورةٍ تُردّ بـ
+        # `EQUITY_UNKNOWN`، وهو سلوكٌ صحيح والنقصُ في المزيّف لا في الحارس.
+        return SimpleNamespace(
+            account_id="T",
+            total_cash=D("300"),
+            settled_cash=D("300"),
+            net_liquidation=D("300"),
+            as_of_utc=now_utc(),
+        )
 
 
 class _Pipeline:
@@ -112,8 +123,15 @@ def _run(state):
     return state.last_result
 
 
-def _position(symbol: str, quantity: str) -> OpenPosition:
-    return OpenPosition(symbol=symbol, quantity=D(quantity), entry_price=D("1.35"))
+def _position(symbol: str, quantity: str, upl: str = "0") -> OpenPosition:
+    # `unrealised_pnl` جزءٌ من حقوق الملكية. ومركزٌ بلا قيمةٍ له يجعل
+    # المجموعَ مجهولاً — وهو سلوكٌ مقصود، فالمزيّفُ يقول رقماً صريحاً.
+    return OpenPosition(
+        symbol=symbol,
+        quantity=D(quantity),
+        entry_price=D("1.35"),
+        unrealised_pnl=D(upl),
+    )
 
 
 def test_the_open_count_comes_from_the_broker_not_from_an_empty_table(monkeypatch):

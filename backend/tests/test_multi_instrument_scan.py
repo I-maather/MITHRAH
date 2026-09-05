@@ -26,6 +26,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.contracts import Decision
+from app.clock import now_utc
 from app.money import D
 from app.pipeline.runner import PipelineResult
 from app.risk.constitution import (
@@ -176,7 +177,17 @@ class FakeBroker:
         return []
 
     def get_balances(self, account_id=""):
-        return SimpleNamespace(account_id="TEST", total_cash=D("140"), settled_cash=D("140"))
+        # **المزيّفُ يجب أن يحمل ما يحمله الحقيقي.** صارت الحلقة تقرأ
+        # `net_liquidation` وغيرَ المحقَّق قبل أيّ قرار وتُفشَل مغلقاً
+        # بدونهما — ومزيّفٌ بلا هذا السطح يجعل كلّ دورةٍ تُردّ بـ
+        # `EQUITY_UNKNOWN`، وهو سلوكٌ صحيح والنقصُ في المزيّف لا في الحارس.
+        return SimpleNamespace(
+            account_id="TEST",
+            total_cash=D("140"),
+            settled_cash=D("140"),
+            net_liquidation=D("140"),
+            as_of_utc=now_utc(),
+        )
 
 
 class FakeKill:
@@ -226,7 +237,10 @@ def no_db(monkeypatch):
 
     monkeypatch.setattr(
         "app.runtime.heartbeat.load_session_state",
-        lambda session, *, baseline_equity: SessionRiskState(
+        # **البديلُ يقبل ما يقبله الأصل.** توقيعٌ ضيّقٌ ينكسر عند أوّل
+        # وسيطٍ جديد — وينكسر بـ`TypeError` تبتلعها المهمةُ المجدولة،
+        # فتبدو الدورةُ كأنها لم تُستدعَ.
+        lambda session, *, baseline_equity, **_: SessionRiskState(
             baseline_equity=baseline_equity, current_equity=baseline_equity,
             realized_pnl_today=D("0"), realized_pnl_week=D("0"), unrealized_pnl=D("0"),
             open_positions=0, entry_orders_today=0, consecutive_losses=0,
@@ -270,7 +284,7 @@ def test_the_risk_state_is_read_once_per_scan_not_once_per_instrument(no_db, mon
     calls = []
     from app.risk.engine import SessionRiskState
 
-    def counted(session, *, baseline_equity):
+    def counted(session, *, baseline_equity, **_):
         calls.append(1)
         return SessionRiskState(
             baseline_equity=baseline_equity, current_equity=baseline_equity,

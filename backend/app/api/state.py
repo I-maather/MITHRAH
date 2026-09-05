@@ -389,7 +389,15 @@ def build_system(settings: Settings | None = None) -> SystemState:
     # C1: حالة المخاطرة تُقرأ من جدول الصفقات، لا تُثبَّت على صفر.
     # قبل هذا كانت realized_pnl_today/week صفراً دائماً، فحدود الخسارة
     # اليومية والأسبوعية وحاجز التراجع **لا يمكن أن تُفعَّل**.
-    state = load_session_state(session, baseline_equity=limits.baseline_equity)
+    # الرصيدُ من الوسيط عند الإقلاع أيضاً — وفشلُه لا يُبطل الإقلاع، إنما
+    # يُعلَن `equity_known=False` فتحجب البوّابةُ الدخولَ حتى تصحّ قراءة.
+    from ..risk.session_state import read_equity
+
+    state = load_session_state(
+        session,
+        baseline_equity=limits.baseline_equity,
+        equity=read_equity(broker),
+    )
 
     audit.record(
         actor=Actor.SYSTEM, action=AuditAction.SYSTEM_START,
