@@ -77,6 +77,9 @@ class SystemState:
     strategy_definitions: StrategyDefinitionRegistry
     #: مزوّدو البيانات. الافتراضي **غير مُعدّ** لكل واحد — بلا اختراع مزوّد.
     providers: ProviderRegistry
+    #: مخزنُ الأسرار. يُحفَظ في الحالة كي يقرأ منه حارسُ مجال `/api`
+    #: رمزَه — لا لتوسيع الوصول، بل لأنّ الحارس وسيطٌ لا يملك تبعيّات.
+    secrets: object = None
     #: قفل محلي يوقفه المالكة من الواجهة. لا يفتح شيئاً — يوقف فقط.
     locally_paused: bool = True
     #: لقطةُ المحفظة من الوسيط — **مصدرُ الحقيقة الواحد** للمخاطر والجوال
@@ -434,6 +437,7 @@ def build_system(settings: Settings | None = None) -> SystemState:
         # يُبنى من المفاتيح المتاحة. مفتاحٌ غائب ⇒ مزوّدٌ غير مُعدّ يظهر
         # باسمه في «ما هو ناقص» — لا مزوّدٌ يُخفق بصمت عند أول نداء.
         providers=build_provider_registry(secret_provider, broker),
+        secrets=secret_provider,
         # **الإيقاف المحلي يُقرأ من القرص، لا يُفترض عند كل إقلاع.**
         #
         # كان `True` دائماً، وقاطع الطوارئ يُحفَظ. فكل نشرٍ يعيد الإيقاف

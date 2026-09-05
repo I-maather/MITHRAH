@@ -286,3 +286,38 @@ def test_credential_script_refuses_command_line_values():
     assert "read -r -s" in script
     assert "set +o history" in script
     assert "chmod 600" in script
+
+
+def test_the_api_token_script_writes_where_the_app_reads():
+    """
+    **الكاتب والقارئ يتفقان بالاختبار، لا بالانتباه.**
+
+    كُتب `configure_api_token.sh` أوّلاً على `secrets/capital.env` — اسمُ ملف
+    اعتمادات الوسيط — والتطبيق يقرأ `Settings.secrets_file` وهو
+    `secrets/runtime.env`. فكان السكربت يقول «✅ خُزّن» صادقاً، والخادم يقول
+    «الرمز غائب» صادقاً: نجاحٌ وفشلٌ متزامنان بلا رسالةٍ تدلّ على السبب.
+
+    وهو العطل نفسه الذي وقع بين كاتب اعتمادات المزوّدين وقارئها، وله اختبارٌ
+    دائم أعلاه. هذا أخوه.
+    """
+    from app.config import Settings
+
+    script = (REPO_ROOT / "scripts" / "configure_api_token.sh").read_text(encoding="utf-8")
+    default_line = [
+        line for line in script.splitlines()
+        if line.strip().startswith("SECRETS_FILE=")
+    ]
+    assert default_line, "لا تعريف SECRETS_FILE في السكربت"
+
+    expected_name = Path(Settings().secrets_file).name
+    assert expected_name in default_line[0], (
+        f"السكربت يكتب في «{default_line[0]}» والتطبيق يقرأ «{expected_name}»"
+    )
+
+
+def test_the_api_token_script_refuses_a_value_on_the_command_line():
+    """السرّ في وسيطٍ يظهر في `ps` وفي سجل الصدفة — يُرفَض كما في أخيه."""
+    script = (REPO_ROOT / "scripts" / "configure_api_token.sh").read_text(encoding="utf-8")
+    assert "لا يُقبل تمرير الرمز في سطر الأوامر" in script
+    assert "read -r -s" in script
+    assert "set +o history" in script

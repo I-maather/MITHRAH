@@ -16,6 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from .audit.log import Actor, AuditAction, verify_chain
+from .api import auth as _api_auth
 from .api.state import SystemState, build_system
 from .clock import format_riyadh, now_utc, forex_market_status
 from .config import get_settings
@@ -343,6 +344,15 @@ def _money(value: Decimal | None) -> str:
 
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# حارسُ مجال `/api` — يُركَّب **قبل** أي مسار، ويحرس ما لم يُكتَب بعد.
+#
+# الترتيب مقصود: الوسيط يلتقط كل ما تحت `/api` أياً كان تاريخ إضافته، فلا
+# يوجد «مسارٌ نُسي». وقائمةُ الإعفاء مغلقةٌ ومبرَّرة في `api/auth.py`.
+# ---------------------------------------------------------------------------
+_api_auth.install(app, state_getter=system)
+
+
 @app.get("/api/version")
 def version():
     """
@@ -364,6 +374,18 @@ def version():
     مرّة: قراءته عند كل طلب تجعله يتبع القرص لا الذاكرة — وهو نفس الخداع.
     """
     return {"commit": _BOOT_COMMIT, "started_utc": _BOOT_TIME.isoformat()}
+
+
+@app.get("/api/health/live")
+def health_live():
+    """
+    نبضُ حياةٍ **بلا بيانات** — المسار الوحيد المعفى من رمز المجال.
+
+    يحتاجه فحصُ ما بعد النشر ليعرف أن الخدمة أقلعت، قبل أن يملك رمزاً.
+    ولا يقول شيئاً عن الحساب: لا وسيط، ولا قاطع طوارئ، ولا مجدول. تلك في
+    `/api/health` وهي محروسة.
+    """
+    return {"ok": True}
 
 
 @app.get("/api/health")

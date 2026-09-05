@@ -174,3 +174,32 @@ def _isolate_local_pause(tmp_path, monkeypatch):
 
     monkeypatch.setenv(PATH_ENV_VAR, str(tmp_path / "local-pause.json"))
     yield
+
+# ---------------------------------------------------------------------------
+# مصادقةُ مجال `/api` في الاختبارات
+# ---------------------------------------------------------------------------
+#
+# حارسُ المجال (`app/api/auth.py`) وسيطٌ يلتقط كلَّ ما تحت `/api`، وهو ما
+# نريده: لا مسارَ يُنسى. لكنّ ذلك يعني أنّ كلَّ اختبارٍ يستدعي مساراً كان
+# سيحتاج ترويسةً — مئاتُ المواضع، وكلُّها تختبر منطق المسار لا المصادقة.
+#
+# **والحلّ ليس ثقباً في الحارس.** لا علمَ في شيفرة الإنتاج تقول «هذه
+# اختبارات فافتح»؛ فمفتاحٌ كهذا يُشحَن يوماً. بل تُصادِق حزمةُ الاختبارات
+# نفسَها: تقدّم رمزاً وتقدّمه، تماماً كما يفعل مستدعٍ حقيقيّ.
+#
+# ومن أراد فحصَ الحارس نفسه يضع `pytestmark = pytest.mark.raw_api` فيُترَك
+# مجالُه بلا مصادقة — وهو ما يفعله `test_no_api_route_is_open.py`.
+
+_TEST_API_TOKEN = "conftest-token-not-a-real-secret"
+
+
+@pytest.fixture(autouse=True)
+def _api_authenticated(request, monkeypatch):
+    if request.node.get_closest_marker("raw_api"):
+        return
+    monkeypatch.setattr(
+        "app.api.auth._configured_token", lambda state: _TEST_API_TOKEN, raising=False
+    )
+    monkeypatch.setattr(
+        "app.api.auth._presented", lambda req: _TEST_API_TOKEN, raising=False
+    )

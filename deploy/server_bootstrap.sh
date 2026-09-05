@@ -213,7 +213,7 @@ systemctl restart mathrah || die "تعذّر إعادة تشغيل الخدمة.
 ready=0
 for _ in $(seq 1 40); do
   if [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 \
-        http://127.0.0.1:8000/api/mobile/v1/describe 2>/dev/null)" = "200" ]; then
+        http://127.0.0.1:8000/api/health/live 2>/dev/null)" = "200" ]; then
     ready=1; break
   fi
   sleep 0.5
@@ -234,8 +234,22 @@ if [ "$pid_after" = "$pid_before" ] || [ -z "$pid_after" ] || [ "$pid_after" = "
 fi
 green "✅ أُعيد تشغيل الخدمة — العملية $pid_before ⇐ $pid_after"
 
+# **رمزُ مجال `/api`** — يُولَّد إن غاب، ولا يُطبع أبداً.
+#
+# المجال يفشل مغلقاً بلا رمز (503)، وهو الصواب. لكن نشرةً تترك الخدمة
+# مغلقةً على نفسها ليست نشرةً ناجحة، فيُولَّد رمزٌ عشوائيّ قويّ عند أول
+# نشرةٍ بعد إضافة الحارس. التوليد لا **يفتح** شيئاً: من لا يملك الرمز
+# يبقى خارجاً؛ إنما يُنشئ الاعتماد الذي بلا وجودِه لا أحد يدخل، نحن أولاً.
+sudo -u mathrah bash /opt/mathrah/scripts/configure_api_token.sh --generate >/dev/null 2>&1 || true
+API_TOKEN="$(sudo -u mathrah bash /opt/mathrah/scripts/configure_api_token.sh --show 2>/dev/null || true)"
+if [ -z "$API_TOKEN" ]; then
+  red "⛔ لا رمزَ لمجال /api — المجال مغلق ولا يمكن التحقق من الكوميت."
+  exit 1
+fi
+
 # ويُقرأ الكوميت من داخل الخدمة نفسها: القرص قد يحمل شيئاً والذاكرة غيره.
-running_sha="$(curl -s --max-time 3 http://127.0.0.1:8000/api/version 2>/dev/null \
+running_sha="$(curl -s --max-time 3 -H "Authorization: Bearer $API_TOKEN" \
+  http://127.0.0.1:8000/api/version 2>/dev/null \
   | sed -n 's/.*"commit":"\([^"]*\)".*/\1/p')"
 if [ -n "$running_sha" ] && [ "$running_sha" != "$EXPECTED_SHA" ]; then
   red "⛔ الخدمة تعمل بكوميت $running_sha والمنشور $EXPECTED_SHA."
