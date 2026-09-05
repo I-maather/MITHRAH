@@ -1,6 +1,7 @@
 import React from 'react';
 import { View } from 'react-native';
 
+import { duplicateInstruments, sumOf } from '@/api/positionTotals';
 import { useEndpoint } from '@/api/useEndpoint';
 import {
   Banner,
@@ -159,6 +160,56 @@ export default function PositionScreen(): React.JSX.Element {
           {data.total_unrealised !== null ? (
             <Field label="مجموع غير المحقّق" value={data.total_unrealised} />
           ) : null}
+
+        {/*
+          **التعرّض والمخاطرة المفتوحة وتكرار الأداة.**
+        
+          الشاشة كانت تملك المصفوفة كاملةً ولا تجمعها. ويوم 2026-09-04 كان على
+          GBPUSD مركزان في اليوم نفسه — ضِعفُ المخاطرة المعتمدة على أداة واحدة —
+          وسطرٌ واحد كان سيقول ذلك.
+        
+          و**المجموع الناقص يُعلَن ناقصاً**: حقلٌ فارغٌ في مركز يجعل المجموع أقلّ
+          من الحقيقة ويُقرَأ على أنه الحقيقة.
+        */}
+        {data.positions.length > 0 ? (
+          <Card testID="position-totals-card" title="المجموع">
+            {(() => {
+              const exposure = sumOf(data.positions, 'notional_display');
+              const risk = sumOf(data.positions, 'risk_at_stop');
+              const repeated = duplicateInstruments(data.positions);
+              return (
+                <>
+                  <Field
+                    testID="total-exposure"
+                    label="التعرّض"
+                    value={exposure.value === null ? null : exposure.value.toFixed(2)}
+                  />
+                  <Field
+                    testID="total-risk"
+                    label="المخاطرة المفتوحة عند الوقف"
+                    value={risk.value === null ? null : risk.value.toFixed(2)}
+                    tone="caution"
+                  />
+                  {exposure.missing > 0 || risk.missing > 0 ? (
+                    <Text variant="caption" tone="secondary" testID="total-incomplete">
+                      {`مجموعٌ ناقص: ${Math.max(exposure.missing, risk.missing)} من ${data.positions.length} مركزاً بلا قيمة. الرقم أقلّ من الحقيقة.`}
+                    </Text>
+                  ) : null}
+                  {repeated.length > 0 ? (
+                    <Banner
+                      testID="position-duplicate-instrument"
+                      tone="negative"
+                      title="تكرارُ أداة"
+                      body={repeated
+                        .map((d) => `${d.instrument}: ${d.count} مراكز`)
+                        .join(' · ')}
+                    />
+                  ) : null}
+                </>
+              );
+            })()}
+          </Card>
+        ) : null}
         </Card>
       ) : null}
 
@@ -169,7 +220,7 @@ export default function PositionScreen(): React.JSX.Element {
           why={t.position.noneWhy}
           next={t.position.noneNext}
         />
-      ) : (
+      ) : data.positions.length > 1 ? null : (
         <>
           <Card testID="position-summary-card" title={data.instrument_ar ?? data.instrument ?? '—'}>
             <View style={{ flexDirection: 'row', gap: theme.spacing.xl }}>

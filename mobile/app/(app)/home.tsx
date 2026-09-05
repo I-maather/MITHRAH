@@ -319,6 +319,7 @@ export default function HomeScreen(): React.JSX.Element {
 
       {/* ---- كم بقي لي ---- */}
       {r !== null ? (
+        <>
         <Card testID="risk-card" title={t.home.risk}>
           {/*
             **أيّ الحدّين يعمل — بنصّ الخادم لا بتفسير العميل.**
@@ -362,6 +363,98 @@ export default function HomeScreen(): React.JSX.Element {
             <Banner tone="negative" title="قفل الخسارتين مُفعَّل" body="لا دخول جديد اليوم." />
           ) : null}
         </Card>
+
+        {/*
+          **حدودٌ يحملها العقد ولا تُعرض.**
+        
+          `RiskData` يحمل سقفَ المراكز وسقفَ أوامر الدخول اليومية والخسائر
+          المتتالية وحدَّي التراجع — ولم يكن **واحدٌ منها** معروضاً. والعيب
+          `C2` — أربعةُ مراكز مقابل سقفٍ ثلاثة — كان سيُرى على الشاشة في اليوم
+          نفسه لو عُرض حقلان موجودان في العقد أصلاً. الشاشة لا تمنع الخرق
+          (المنع في محرّك المخاطر)، لكنها كانت ستكشفه.
+        */}
+        <Card testID="limits-card" title="الحدود">
+          {/*
+            **الملفُّ ورأسُ المال المحسوب عليه.** كانا في العقد ولا موضع
+            لهما على أيّ شاشة — أمسكهما `no-limit-is-silent`. وحدٌّ بلا
+            معرفةِ أيِّ ملفٍّ أنتجه وعلى أيّ رقمٍ حُسب رقمٌ بلا سند.
+          */}
+          <Field
+            label="الملف"
+            value={r.profile_name_ar}
+            testID="limit-profile-name"
+          />
+          <Field
+            label="رأس المال المحسوب عليه"
+            value={r.equity_used}
+            testID="limit-equity-used"
+          />
+          <Divider />
+          <Field
+            label="المراكز المفتوحة"
+            value={
+              r.open_positions === null
+                ? null
+                : `${r.open_positions} من ${r.max_open_positions ?? '—'}`
+            }
+            testID="limit-open-positions"
+            tone={
+              r.open_positions !== null &&
+              r.max_open_positions !== null &&
+              r.open_positions > r.max_open_positions
+                ? 'negative'
+                : undefined
+            }
+          />
+          {r.open_positions !== null &&
+          r.max_open_positions !== null &&
+          r.open_positions > r.max_open_positions ? (
+            <Text variant="caption" tone="secondary" testID="limit-open-positions-breach">
+              {`مفتوحٌ فوق السقف بمقدار ${r.open_positions - r.max_open_positions}. لا يُفتَح جديد.`}
+            </Text>
+          ) : null}
+          <Field
+            label="أوامر الدخول اليوم"
+            value={
+              r.entry_orders_today === null
+                ? null
+                : `${r.entry_orders_today} من ${r.max_entry_orders_per_day ?? '—'}`
+            }
+            testID="limit-entry-orders"
+          />
+          <Field
+            label="خسائر متتالية"
+            value={r.consecutive_losses === null ? null : String(r.consecutive_losses)}
+            testID="limit-consecutive-losses"
+            tone={r.two_loss_lock_active ? 'caution' : undefined}
+          />
+          <Divider />
+          <Field
+            label="توقّف التراجع التشغيلي"
+            value={r.operational_drawdown_stop}
+            testID="limit-operational-drawdown"
+          />
+          <Field
+            label="الحدّ المطلق للخسارة"
+            value={r.absolute_loss_boundary}
+            testID="limit-absolute-loss"
+          />
+          <Divider />
+          {/*
+            **ثلاثة أرقامٍ للمحفظة لا واحد، والخلاف بينها معلومة.**
+            «قيمة المحفظة» في قائمة الخمس ثوانٍ هي `current_equity` تحديداً،
+            وهو الرقم الذي كان غائباً.
+          */}
+          <Field label="المرجعي" value={r.portfolio.baseline_equity} testID="equity-baseline" />
+          <Field label="الحالي" value={r.portfolio.current_equity} testID="equity-current" />
+          <Field label="لدى الوسيط" value={r.portfolio.broker_equity} testID="equity-broker" />
+          {r.portfolio.diverged && r.portfolio.note_ar !== null ? (
+            <Text variant="caption" tone="secondary" testID="equity-diverged">
+              {r.portfolio.note_ar}
+            </Text>
+          ) : null}
+        </Card>
+        </>
       ) : null}
 
       {/* ---- المركز: الفراغ حالة لا خطأ ---- */}
