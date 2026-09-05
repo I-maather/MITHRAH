@@ -161,3 +161,19 @@ def test_no_row_is_duplicated_and_no_identity_changes(session):
     assert sorted(r.broker_deal_id for r in rows) == identity
     assert sorted(r.id for r in rows) == ids, "تبدّل مفتاحُ الصف"
     assert {r.reconciliation for r in rows} == {RECON_CONFIRMED}
+
+
+def test_a_confirmed_close_is_labelled_confirmed(session):
+    """صفٌّ كُتب مغلقاً بتأكيدٍ متكرّر ليس «غيرَ مؤكَّد».
+
+    `reconciliation` تصف الثقة في `state`. فصفٌّ بقي `STALE` بعد الإغلاق
+    يُقرأ «لا نعرف أمُغلقٌ هو» — وهو عكس ما جرى.
+    """
+    _seed(session)
+    for _ in range(CLOSE_CONFIRMATIONS):
+        sync(session, _snap(at=LATER))
+    rows = session.query(PositionBookRow).all()
+    assert {r.state for r in rows} == {"CLOSED"}
+    assert {r.reconciliation for r in rows} == {RECON_CONFIRMED}, (
+        "الإغلاق المؤكَّد وُسم غيرَ مؤكَّد"
+    )

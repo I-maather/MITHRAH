@@ -257,6 +257,12 @@ def sync(session: Session, snapshot: PortfolioSnapshot) -> Optional[LedgerSync]:
         if row.absent_confirmations >= CLOSE_CONFIRMATIONS:
             row.state = STATE_CLOSED
             row.closed_at_utc = now
+            # **الإغلاق نفسه مؤكَّد.** `reconciliation` تصف الثقة في
+            # `state` لا في وجود المركز: صفٌّ بقي `STALE` بعد أن كُتب
+            # مغلقاً يُقرأ «لا نعرف أمُغلقٌ هو» — وهو عكسُ ما جرى، فقد
+            # تأكّد غيابُه من لقطاتٍ ناجحةٍ متتالية. و`last_confirmed_utc`
+            # يبقى آخرَ لحظةٍ رُئي فيها **مفتوحاً**، وذلك معناه.
+            row.reconciliation = RECON_CONFIRMED
             closed.append(row.broker_deal_id)
             notes.append(
                 f"مركز {row.broker_deal_id} غاب عن {row.absent_confirmations} "
