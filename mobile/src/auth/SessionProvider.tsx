@@ -12,7 +12,6 @@ import { AppState, type AppStateStatus } from 'react-native';
 
 import { MobileApiClient, type RefreshOutcome, type TokenSource } from '@/api/client';
 import { API_BASE_URL, AUTO_LOCK_MINUTES, SESSION_REFRESH_PATH, verifyBaseUrl } from '@/api/config';
-import { t } from '@/i18n';
 import { requestUnlock, type GateOutcome } from './biometrics';
 import { tokenStore, type StoredSession } from './tokenStore';
 
@@ -262,8 +261,10 @@ export function SessionProvider({
           return;
         }
         // لا يُخمَّن `NO_SESSION`: ذلك ادّعاءُ معرفةٍ لا نملكها.
+        //
+        // ولا تُكتب الرسالة في `lastGateMessageAr`: بطاقةُ `UNREADABLE`
+        // تحملها، وكتابتُها هنا تُظهرها مرّتين في شاشةٍ واحدة — وقد ظهرت.
         setDeviceId(null);
-        setLastGateMessageAr(t.gate.unreadableBody);
         setStatus('UNREADABLE');
       }
     })();
