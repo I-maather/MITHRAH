@@ -714,17 +714,28 @@ def _strategy_trades_by_day(sys: SystemState) -> dict:
     session = getattr(sys, "db_session", None)
     if session is None:
         return {}
+    # **كان يقرأ `TradeRow` — وهو جدولٌ لا يُكتَب فيه.** فكان تقريرُ
+    # المشاركة يقول «صفر صفقة استراتيجية» كلَّ يومٍ منذ بُني، لا لأنّ الصفقات
+    # لم تقع بل لأنّ الجدول فارغ. والمصدرُ الآن `position_book`: الدفتر الذي
+    # يكتبه `ledger.sync()` ويُغلق صفوفَه بدليلٍ مستقلّ.
     try:
         from sqlalchemy import select
 
-        from .db.models import TradeRow
+        from .db.models import PositionBookRow
+        from .portfolio.book import KIND_STRATEGY
 
-        rows = list(session.execute(select(TradeRow)).scalars())
+        rows = [
+            row
+            for row in session.execute(select(PositionBookRow)).scalars()
+            if row.kind == KIND_STRATEGY
+        ]
     except Exception:  # noqa: BLE001
         return {}
     out: dict[str, list] = {}
     for row in rows:
-        opened = getattr(row, "opened_at_utc", None)
+        # `opened_at_utc` وقتُ الوسيط وقد يغيب؛ و`first_seen_utc` أوّلُ دورةٍ
+        # رأيناه فيها. البديلُ معلَنٌ لا صامت، ولا يُسقَط الصفّ من التقرير.
+        opened = getattr(row, "opened_at_utc", None) or getattr(row, "first_seen_utc", None)
         if opened is None:
             continue
         out.setdefault(opened.date().isoformat(), []).append(row)

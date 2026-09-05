@@ -23,6 +23,7 @@ import type {
   CandlesData,
   PerformanceData,
   ManagementData,
+  ParticipationData,
   SyncView,
   PositionData,
   ProfilesData,
@@ -175,6 +176,9 @@ export class MobileApiClient {
 
   getManagement(): Promise<MobileEnvelope<ManagementData>> {
     return this.read<ManagementData>('management');
+  }
+  getParticipation(): Promise<MobileEnvelope<ParticipationData>> {
+    return this.read<ParticipationData>('participation/today');
   }
 
   getTrades(): Promise<MobileEnvelope<TradesData>> {

@@ -53,6 +53,9 @@ READ_ROUTES: tuple[str, ...] = (
     "notifications",
     "audit/recent",
     "scan/latest",
+    # **مسار اليوم بالأرقام.** كان محسوباً في `participation/funnel.py`
+    # منذ بُني ولا يصل إلى أيّ شاشة — وحدةٌ سليمةٌ غيرُ موصولة.
+    "participation/today",
     "market/candles",
 )
 
@@ -308,6 +311,7 @@ class MobileApi:
             "sync": lambda: state.get("sync", {}),
             "management": lambda: state.get("management", {}),
             "trades": lambda: state.get("trades", {}),
+            "participation/today": lambda: state.get("participation", {}),
             "performance": lambda: state.get("performance", {}),
             "providers/health": lambda: state.get("providers", {}),
             "notifications": lambda: {"notifications": state.get("notifications", [])},

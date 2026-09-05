@@ -16,6 +16,7 @@ import type {
   TradesData,
   SyncView,
   ManagementData,
+  ParticipationData,
 } from '@/api/types';
 
 /**
@@ -576,6 +577,36 @@ const management: ManagementData = {
   notes_ar: ['بيانات معاينة — ليست حالة النظام.'],
 };
 
+/**
+ * مسارُ يومٍ توقّف عند «الإعداد» — الحالة الغالبة في القياس، لا اللحظة المثيرة.
+ *
+ * الأرقام مصطنعةٌ وواضحة الاصطناع، والغرض أن تُرى الشاشة في حالتها الشائعة:
+ * أدواتٌ فُحصت، وبعضُها أُهِّل، ولا واحدة كوّنت إعداداً صالحاً.
+ */
+const participation: ParticipationData = {
+  available: true,
+  trading_day: '2026-01-15',
+  reason_ar: '',
+  steps: [
+    { key: 'scans', label_ar: 'فُحصت', count: '4', reached: true },
+    { key: 'eligible', label_ar: 'مؤهّلة', count: '3', reached: true },
+    { key: 'assessed', label_ar: 'إعداد', count: '0', reached: false },
+    { key: 'signals', label_ar: 'إشارة', count: '0', reached: false },
+    { key: 'filled', label_ar: 'نُفّذت', count: '0', reached: false },
+  ],
+  collapse_stage: 'assessed',
+  collapse_stage_ar: 'استراتيجيات شُغّلت',
+  collapse_in_headline: true,
+  blamed_on: 'STRATEGY',
+  blamed_on_ar: 'الاستراتيجية',
+  owner_paused: true,
+  kill_switch_active: false,
+  isolated_instruments: [{ symbol: 'USDJPY', reason_code: 'CONVERSION_COST_UNMEASURED' }],
+  top_reasons: [{ code: 'NO_SETUP', count: 3 }],
+  note_ar:
+    'الدخول موقوفٌ بقرارك — والمسار يُقاس ولا يُلام عليه. توقّف المسار عند «استراتيجيات شُغّلت»؛ والمسؤول: الاستراتيجية.',
+};
+
 export const fixtures = {
   status,
   intelligence,
@@ -585,6 +616,7 @@ export const fixtures = {
   position,
   sync,
   management,
+  participation,
   trades,
   performance,
   providers,

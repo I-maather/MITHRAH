@@ -278,6 +278,11 @@ def test_every_read_route_is_declared_and_no_other():
         # 2026-09-04: `management` — ما فُعل بالمراكز بعد الفتح، **وما لم
         # يُفعَل ولماذا**. شاشةٌ تعرض الأفعال وحدها تُخفي السؤال الأهمّ.
         "management",
+        # 2026-09-05: `participation/today` — مسارُ اليوم بأرقامه. كان
+        # محسوباً في `participation/funnel.py` منذ بُني ومعروضاً على
+        # `/api/participation`، **ولا يصل إلى أيّ شاشة**. وهو الجواب على
+        # «لماذا لم تتداول اليوم؟» — وقد كان في الذاكرة لا عند صاحبته.
+        "participation/today",
     }
 
 

@@ -217,6 +217,7 @@ describe('سطح المسارات', () => {
       'notifications',
       'audit/recent',
       'scan/latest',
+      'participation/today',
       'market/candles',
     ]);
   });
@@ -290,6 +291,7 @@ describe('لا واجهة تداول في العميل', () => {
         // كلتاهما قراءة، ولا واحدة تفتح شيئاً ولا تعدّل مركزاً من الجهاز.
         'getManagement',
         'getNotifications',
+        'getParticipation',
         'getPerformance',
         'getSync',
         'getProfiles',

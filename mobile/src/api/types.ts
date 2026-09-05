@@ -735,3 +735,47 @@ export interface ManagementData {
   dynamic_enabled: boolean;
   notes_ar: string[];
 }
+
+/**
+ * مسار اليوم — **أين توقّف، بالأرقام**.
+ *
+ * `available: false` تعني أنّ اليوم لم يُسجَّل بعد أو تعذّرت قراءة السجلّ.
+ * وحينها تكون `count` في كل خطوة «—» لا صفراً: الصفرُ يقول «فحصتُ ولم أجد»،
+ * والشرطةُ تقول «لم أفحص بعد». والشاشة تفرّع على `available` قبل أي رقم.
+ */
+export interface PathStepData {
+  key: string;
+  label_ar: string;
+  /** نصٌّ لا رقم: «—» حين لا يُعرَف. */
+  count: string;
+  reached: boolean;
+}
+
+export interface IsolatedInstrument {
+  symbol: string;
+  reason_code: string;
+}
+
+export interface PathReason {
+  code: string;
+  count: number;
+}
+
+export interface ParticipationData {
+  available: boolean;
+  trading_day: string;
+  reason_ar: string;
+  steps: PathStepData[];
+  /** المرحلة التي انهار عندها المسار — بمفتاحها ثم باسمها العربي. */
+  collapse_stage: string;
+  collapse_stage_ar: string;
+  /** هل الانهيار داخل الخمس المعروضة؟ خارجها يُسمّى في `note_ar`. */
+  collapse_in_headline: boolean;
+  blamed_on: string;
+  blamed_on_ar: string;
+  owner_paused: boolean;
+  kill_switch_active: boolean;
+  isolated_instruments: IsolatedInstrument[];
+  top_reasons: PathReason[];
+  note_ar: string;
+}

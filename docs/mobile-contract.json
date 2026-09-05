@@ -1,5 +1,5 @@
 {
-  "__comment_ar__": "شكلُ الحمولة المرجعي بين الخادم والتطبيق. حُدِّث 2026-09-04: أُضيفت `sync` إلى كل قسمٍ يقرأ المحفظة، وصارت `position.has_position` تحتمل null لأن «لا أعرف» ليست «لا»، وصار `trades` يحمل حالة المزامنة والمحقَّق الكلي. الشاشة تفرّع على `sync.ok` قبل أي حقلٍ آخر.",
+  "__comment_ar__": "شكلُ الحمولة المرجعي بين الخادم والتطبيق. حُدِّث 2026-09-04: أُضيفت `sync` إلى كل قسمٍ يقرأ المحفظة، وصارت `position.has_position` تحتمل null لأن «لا أعرف» ليست «لا»، وصار `trades` يحمل حالة المزامنة والمحقَّق الكلي. الشاشة تفرّع على `sync.ok` قبل أي حقلٍ آخر. وحُدِّث 2026-09-05: أُضيف `participation` — مسارُ اليوم بأرقامه، وكان محسوباً في الخادم منذ بُني ولا يصل إلى أيّ شاشة. و`steps[].count` نصٌّ لا رقم عمداً: «—» تعني «لم أفحص بعد»، والصفرُ يعني «فحصتُ ولم أجد».",
   "__non_nullable_paths__": [
     "candles.instruments",
     "candles.levels",
@@ -14,6 +14,10 @@
     "intelligence.missing_providers",
     "intelligence.stages",
     "notifications.notifications",
+    "participation.available",
+    "participation.note_ar",
+    "participation.steps",
+    "participation.trading_day",
     "performance.calibration",
     "performance.sample_size",
     "performance.sufficient_sample",
@@ -272,6 +276,39 @@
         "type": "string"
       }
     ]
+  },
+  "participation": {
+    "available": "boolean",
+    "blamed_on": "string",
+    "blamed_on_ar": "string",
+    "collapse_in_headline": "boolean",
+    "collapse_stage": "string",
+    "collapse_stage_ar": "string",
+    "isolated_instruments": [
+      {
+        "reason_code": "string",
+        "symbol": "string"
+      }
+    ],
+    "kill_switch_active": "boolean",
+    "note_ar": "string",
+    "owner_paused": "boolean",
+    "reason_ar": "string",
+    "steps": [
+      {
+        "count": "string",
+        "key": "string",
+        "label_ar": "string",
+        "reached": "boolean"
+      }
+    ],
+    "top_reasons": [
+      {
+        "code": "string",
+        "count": "number"
+      }
+    ],
+    "trading_day": "string"
   },
   "performance": {
     "average_r": "nullable",

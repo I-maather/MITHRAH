@@ -930,6 +930,151 @@ _NEEDS_A_HAND = frozenset({
 })
 
 
+#: الخمس التي يعرضها النموذج المعتمد، بأسمائها فيه.
+_PATH_HEADLINE: tuple[tuple[str, str], ...] = (
+    ("scans", "فُحصت"),
+    ("eligible", "مؤهّلة"),
+    ("assessed", "إعداد"),
+    ("signals", "إشارة"),
+    ("filled", "نُفّذت"),
+)
+
+#: ما يُكتب مكان العدد حين لا يُعرَف. **ليس صفراً.**
+_UNKNOWN_COUNT = "—"
+
+
+def _unknown_path(day: str, reason_ar: str) -> dict[str, Any]:
+    """
+    مسارٌ لا نعرفه — بكلّ مفاتيحه وبلا صفرٍ واحد.
+
+    العقد يوجب أن تُنتَج المفاتيح كلُّها في كل حال، وإلا اختلف شكلُ الحمولة
+    بين حالٍ وحال فانكسرت الشاشة عند الحالة النادرة. والصدقُ يُحفَظ في
+    **القيم** لا في الغياب: `count` تصير «—» ولا تصير صفراً.
+    """
+    return {
+        "available": False,
+        "trading_day": day,
+        "reason_ar": reason_ar,
+        "steps": [
+            {"key": key, "label_ar": label, "count": _UNKNOWN_COUNT, "reached": False}
+            for key, label in _PATH_HEADLINE
+        ],
+        "collapse_stage": "",
+        "collapse_stage_ar": "",
+        "collapse_in_headline": False,
+        "blamed_on": "",
+        "blamed_on_ar": "",
+        "owner_paused": False,
+        "kill_switch_active": False,
+        "isolated_instruments": [],
+        "top_reasons": [],
+        "note_ar": reason_ar,
+    }
+
+
+def _participation(sys: Any) -> dict[str, Any]:
+    """
+    **مسار اليوم — أين توقّف، بالأرقام.**
+
+    القمع محسوبٌ في `participation/funnel.py` منذ بُني، ومعروضٌ على
+    `/api/participation` — **ولم يكن يصل إلى التطبيق قط**. ستةَ عشرَ مساراً في
+    عقد الجوال وليس بينها هذا، فكان أثمنُ ما يجيب سؤال «لماذا لم تتداول
+    اليوم؟» محسوباً في الذاكرة ولا يبلغ صاحبته. وهو نفسُ النمط الذي لاحقناه:
+    **وحدةٌ سليمةٌ غيرُ موصولة**.
+
+    ## الخمس المعروضة من الثلاث عشرة
+
+    القمع الكامل ثلاث عشرة مرحلة، والنموذج المعتمد يعرض خمساً — لأنّ خمساً
+    تُقرأ في ثانية. ولكنّ **الانهيار يُسمّى باسمه الحقيقي** ولو وقع خارجها:
+    `collapse_stage_ar` تحمل المرحلة كما هي، فلا يضيع التشخيص في التبسيط.
+
+    ## ولا رقم يُخترع
+
+    يومٌ لم تُسجَّل فيه دورةُ مسحٍ واحدة يُعيد `available: False` وأعداداً
+    «—». وصفرٌ يقول «فحصتُ ولم أجد»، والشرطةُ تقول «لم أفحص بعد» — وقد بُني
+    هذا النظام على ألّا يُخلَطا.
+    """
+    from ..clock import now_utc
+    from ..participation.funnel import (
+        OWNER_LABEL_AR,
+        STAGE_LABEL_AR,
+        funnel_for_day,
+    )
+
+    today = now_utc().date().isoformat()
+
+    audit = getattr(sys, "audit", None)
+    if audit is None:
+        return _unknown_path(today, "سجلّ التدقيق غير متاح — لا يُعرَف مسار اليوم.")
+
+    try:
+        events = list(audit.events())
+    except Exception as exc:  # noqa: BLE001
+        return _unknown_path(
+            today,
+            f"تعذّرت قراءة سجلّ التدقيق ({type(exc).__name__}) — "
+            "لا يُعرَف مسار اليوم، ولا يُعرض صفرٌ مكانه.",
+        )
+
+    funnel = funnel_for_day(events, today)
+    counts = funnel.counts
+
+    if not any(counts.get(key, 0) for key, _ in _PATH_HEADLINE):
+        return _unknown_path(
+            today,
+            "لم تُسجَّل دورةُ مسحٍ واحدة اليوم بعد. هذه ليست «صفر فرص» — "
+            "هذه يومٌ لم يبدأ.",
+        )
+
+    blamed_ar = OWNER_LABEL_AR.get(funnel.blamed_on, funnel.blamed_on)
+    stage = funnel.collapse_stage
+    stage_ar = STAGE_LABEL_AR.get(stage or "", stage or "")
+    in_headline = bool(stage) and stage in {key for key, _ in _PATH_HEADLINE}
+
+    if stage is None:
+        note = "اكتمل المسار اليوم — بلغت صفقةٌ مرحلةَ التنفيذ."
+    elif in_headline:
+        note = f"توقّف المسار عند «{stage_ar}»؛ والمسؤول: {blamed_ar}."
+    else:
+        note = (
+            f"توقّف المسار عند «{stage_ar}» — وهي مرحلةٌ لا تظهر في الخمس "
+            f"أعلاه. والمسؤول: {blamed_ar}."
+        )
+
+    if funnel.owner_paused:
+        note = "الدخول موقوفٌ بقرارك — والمسار يُقاس ولا يُلام عليه. " + note
+
+    return {
+        "available": True,
+        "trading_day": today,
+        "reason_ar": "",
+        "steps": [
+            {
+                "key": key,
+                "label_ar": label,
+                "count": str(counts.get(key, 0)),
+                "reached": counts.get(key, 0) > 0,
+            }
+            for key, label in _PATH_HEADLINE
+        ],
+        "collapse_stage": stage or "",
+        "collapse_stage_ar": stage_ar,
+        "collapse_in_headline": in_headline,
+        "blamed_on": funnel.blamed_on,
+        "blamed_on_ar": blamed_ar,
+        "owner_paused": funnel.owner_paused,
+        "kill_switch_active": funnel.kill_switch_active,
+        "isolated_instruments": [
+            {"symbol": symbol, "reason_code": code}
+            for symbol, code in sorted(funnel.isolated_instruments.items())
+        ],
+        "top_reasons": [
+            {"code": code, "count": count} for code, count in funnel.top_reasons(5)
+        ],
+        "note_ar": note,
+    }
+
+
 def _scan(sys: Any) -> dict[str, Any]:
     """
     **ماذا رأى النظام في السوق كلّه** — لا ماذا قرّر في أداة واحدة.
@@ -1156,6 +1301,7 @@ def build_mobile_state(sys: Any) -> Any:
         "performance": lambda: _performance(sys),
         "providers": lambda: _providers(sys),
         "scan": lambda: _scan(sys),
+        "participation": lambda: _participation(sys),
         "candles": lambda: _candles(sys),
         "notifications": lambda: _notifications(sys),
     })
