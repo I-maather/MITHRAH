@@ -221,8 +221,11 @@ def main() -> int:
         # الخادم لا نسخةٌ مصنوعة هنا — فيُثبَت الرسم الحقيقي بما فيه دفتر
         # الأوامر.
         # ---------------------------------------------------------------
-        from app.api.state import system as _system
+        # `system()` في `app.main` لا في `api.state`: الأولى هي المُخبّأة
+        # التي يبنيها الخادم فعلاً (بقفل بناءٍ واحد)، والثانية مصنعٌ يبني
+        # نسخةً جديدة. والمقصود هنا **الكائن الذي يعمل**، لا مثيلٌ له.
         from app.execution.orders import SubmissionOutcome
+        from app.main import system as _system
 
         service = _system().execution
         sent = True
