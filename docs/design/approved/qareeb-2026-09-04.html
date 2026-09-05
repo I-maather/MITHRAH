@@ -1,0 +1,676 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found]){display:none!important}</style></head><body>
+<title>الذكاء القريب · النموذج الكامل</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&family=Reem+Kufi:wght@400;600&display=swap">
+
+<style>
+/* ==========================================================================
+   الذكاء القريب — الاتجاه المعتمد. ستّ شاشات، وأربع حالات نظام.
+   الألوان كلها من رموز مِثْراة. الشعار والاسم والرمز لم تُمَسّ.
+   ========================================================================== */
+*{box-sizing:border-box}
+:root{
+  --night-950:#100F0E; --night-900:#181716; --night-800:#201F1D;
+  --night-700:#3A3734; --night-600:#57534E;
+  --glow-0:#F4F2EE; --glow-200:#D6D3CD; --glow-400:#A5A19A; --glow-600:#878279;
+  --jamr:#D97B3C; --jamr-soft:#2A1C13; --jamr-line:#4A3524;
+  --murjan:#E09A6B;
+  --nakhl:#4BD08D; --rumman:#F0736F; --kathib:#DBA94E; --sama:#7FB6E0;
+  --ui:"IBM Plex Sans Arabic",system-ui,sans-serif;
+  --num:Manrope,sans-serif;
+  --logo:"Reem Kufi",var(--ui);
+}
+body{margin:0;font-family:var(--ui);color:var(--glow-0);background:#0C0B0A;min-height:100vh}
+button{font:inherit;cursor:pointer}
+.rtl{direction:rtl}
+.shell{max-width:1240px;margin:0 auto;padding:26px 22px 70px}
+
+.mast .mk{font-family:var(--logo);font-size:14px;color:var(--jamr);letter-spacing:.06em}
+.mast h1{font-size:clamp(24px,3.4vw,40px);margin:7px 0 0;letter-spacing:-.03em;line-height:1.2}
+.mast p{margin:9px 0 0;color:var(--glow-400);font-size:14.5px;max-width:66ch;line-height:1.85}
+.mast strong{color:var(--glow-0)}
+.stamp{display:inline-flex;align-items:center;gap:8px;margin-top:16px;padding:8px 14px;
+  border-radius:999px;background:#111C16;border:1px solid #2E5C42;font-size:12.5px;
+  color:var(--nakhl);font-weight:600}
+
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:30px;align-items:start;
+  margin-top:26px}
+.stage{display:flex;flex-direction:column;align-items:center;gap:14px}
+.ctrl{display:flex;gap:6px;border:1px solid var(--night-700);background:var(--night-900);
+  padding:5px;border-radius:14px;flex-wrap:wrap;justify-content:center;max-width:392px}
+.ctrl button{border:0;background:transparent;color:var(--glow-400);padding:8px 12px;
+  border-radius:10px;white-space:nowrap;font-weight:600;font-size:12.5px}
+.ctrl button[aria-pressed="true"]{background:var(--jamr);color:var(--night-950);font-weight:700}
+.ctrl button:focus-visible{outline:2px solid var(--jamr);outline-offset:2px}
+.ctrllab{font-size:11px;letter-spacing:.1em;color:var(--glow-600);font-weight:700;
+  text-align:center;margin:0}
+.hintline{text-align:center;color:var(--glow-600);font-size:12.5px;margin:0;max-width:392px;
+  line-height:1.7}
+
+.side{position:sticky;top:20px;background:var(--night-900);border:1px solid var(--night-700);
+  border-radius:22px;padding:24px}
+.side .n{font:700 11px var(--num);color:var(--glow-600);letter-spacing:.17em}
+.side h2{font-size:27px;line-height:1.25;margin:11px 0 9px}
+.side>p{color:var(--glow-400);line-height:1.85;margin:0 0 20px;font-size:13.5px}
+.blocklist{display:grid;gap:9px}
+.bl{padding:13px 15px;border-radius:14px;background:var(--night-800);
+  border:1px solid var(--night-700)}
+.bl b{display:block;font-size:13px}
+.bl span{display:block;color:var(--glow-400);font-size:12px;margin-top:3px;line-height:1.7}
+.side h3{font-size:11px;letter-spacing:.12em;color:var(--glow-600);margin:22px 0 9px;
+  font-weight:700;border-top:1px solid var(--night-700);padding-top:18px}
+.side ul{margin:0;padding-inline-start:17px;font-size:12.5px;color:var(--glow-400);line-height:1.85}
+.side code{font-family:var(--num);font-size:11px;background:var(--night-800);padding:0 5px;
+  border-radius:4px;border:1px solid var(--night-700);direction:ltr;unicode-bidi:isolate;
+  display:inline-block;color:var(--glow-200)}
+
+/* ---------- الجهاز ---------- */
+.device{width:392px;max-width:100%;border-radius:44px;padding:11px;background:#201A16;
+  border:1px solid #4A3B2E;box-shadow:0 30px 90px rgba(0,0,0,.55)}
+.screen{height:786px;border-radius:34px;overflow:hidden;position:relative;
+  background:radial-gradient(circle at 88% 10%,#3A2318,transparent 34%),
+  linear-gradient(160deg,#1A1512,#100F0E 60%);display:flex;flex-direction:column}
+.screen.flat{background:radial-gradient(circle at 88% 10%,#241A15,transparent 34%),
+  linear-gradient(160deg,#161311,#100F0E 60%)}
+.ios{height:36px;display:flex;align-items:center;justify-content:space-between;padding:0 22px;
+  font:600 10px var(--num);direction:ltr;color:var(--glow-400);flex:0 0 auto}
+
+/* شريط الطوارئ — علاج العيب الوحيد الذي خسره هذا الاتجاه */
+.siren{flex:0 0 auto;margin:0 16px 4px;background:var(--rumman);color:#1C1211;border-radius:12px;
+  padding:8px 13px;font-size:11.5px;font-weight:700;display:flex;align-items:center;gap:8px}
+.siren i{font-style:normal;font-size:13px}
+
+.chead{flex:0 0 auto;display:flex;justify-content:space-between;align-items:center;
+  padding:6px 20px 14px}
+.logo{display:flex;align-items:center;gap:10px}
+.logo-mark{width:36px;height:36px;border-radius:12px;display:grid;place-items:center;
+  font-family:var(--logo);font-size:18px;font-weight:600;padding-bottom:2px;
+  background:linear-gradient(135deg,var(--murjan),var(--jamr));color:var(--night-950)}
+.logo b{font-family:var(--logo);font-size:18px;font-weight:600}
+.logo small{display:block;font-size:9px;color:var(--glow-600);font-family:var(--ui)}
+.avatar{width:35px;height:35px;border-radius:50%;display:grid;place-items:center;font-size:11px;
+  background:#2A211B;border:1px solid #4A3B2E;color:var(--glow-400)}
+.demo{font:700 9px var(--num);letter-spacing:.08em;padding:6px 9px;border-radius:20px;
+  background:var(--jamr-soft);color:var(--kathib)}
+.demo.live{background:#2B1614;color:var(--rumman)}
+
+.body{flex:1 1 auto;overflow:hidden;padding:0 20px 8px}
+.money{font-family:var(--num);direction:ltr;unicode-bidi:isolate;display:inline-block}
+.good{color:var(--nakhl)}.bad{color:var(--rumman)}.wa{color:var(--kathib)}
+.dim{color:var(--glow-600)}
+
+.welcome{font-size:11px;color:var(--glow-400)}
+.welcome strong{display:block;color:var(--glow-0);font-size:22px;margin-top:4px;line-height:1.35}
+
+/* زجاج فوق صبغة صلبة — تباتٌ للتباين مهما كان خلفه */
+.glass{background:linear-gradient(135deg,rgba(255,255,255,.10),rgba(255,255,255,.035));
+  border:1px solid rgba(255,255,255,.15);border-radius:26px;padding:18px;
+  box-shadow:inset 0 1px rgba(255,255,255,.09);position:relative;isolation:isolate}
+.glass:before{content:"";position:absolute;inset:0;border-radius:inherit;
+  background:rgba(16,15,14,.55);z-index:-1}
+.gtop{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.gtop span{font-size:10px;color:var(--glow-400)}
+.gtop i{font-style:normal;background:var(--jamr-soft);border:1px solid var(--jamr-line);
+  border-radius:20px;padding:4px 9px;font-size:9px;color:var(--kathib)}
+.gbal{font:800 33px var(--num);margin:11px 0 3px;direction:ltr;text-align:right}
+.gbal.na{font-size:21px;font-family:var(--ui);color:var(--glow-600);font-weight:600}
+.gsub{font-size:10.5px;text-align:right}
+.grow{display:flex;justify-content:space-between;font-size:10px;color:var(--glow-400);
+  margin-top:14px;gap:10px}
+.heat{height:7px;background:#2A211B;border:1px solid var(--night-700);border-radius:8px;
+  margin-top:8px;overflow:hidden}
+.heat i{display:block;height:100%;background:linear-gradient(90deg,var(--jamr),var(--murjan));
+  border-radius:8px}
+.heat i.over{background:var(--rumman)}
+
+.title{display:flex;justify-content:space-between;margin:17px 2px 9px;align-items:baseline;gap:10px}
+.title b{font-size:13.5px}
+.title span{font-size:10px;color:var(--murjan)}
+.title span.mute{color:var(--glow-600)}
+
+.ai{position:relative;overflow:hidden;border-inline-end:3px solid var(--rail,var(--jamr))}
+.ai:after{content:"";position:absolute;width:120px;height:120px;border-radius:50%;
+  background:var(--rail,var(--jamr));filter:blur(55px);opacity:.14;left:-30px;top:-45px;z-index:-1}
+.aist{display:flex;gap:11px}
+.aic{width:36px;height:36px;border-radius:12px;flex:0 0 auto;
+  background:linear-gradient(135deg,var(--murjan),var(--jamr));display:grid;place-items:center;
+  color:var(--night-950);font-size:15px}
+.ai b{font-size:13px;display:block}
+.ai p{font-size:10.5px;line-height:1.75;color:var(--glow-200);margin:5px 0 0}
+.chips{display:flex;gap:6px;margin-top:12px;flex-wrap:wrap}
+.chip{padding:5px 9px;border-radius:10px;background:#2A211B;border:1px solid var(--night-700);
+  color:var(--glow-200);font-size:9.5px}
+.chip.warn{color:var(--kathib);border-color:var(--jamr-line)}
+.chip.bad{color:var(--rumman);border-color:#5C2E2E}
+.chip.ok{color:var(--nakhl);border-color:#2E5C42}
+
+/* مسار اليوم — العنصر المنقول من غرفة الإشارة، بأرقامٍ لا بخطواتٍ صمّاء */
+.funnel{background:var(--night-800);border:1px solid var(--night-700);border-radius:18px;
+  padding:14px 15px}
+.fbars{display:grid;grid-template-columns:repeat(5,1fr);gap:4px}
+.fbars i{height:5px;background:var(--night-700);border-radius:4px}
+.fbars i.on{background:var(--jamr)}
+.fbars i.stop{background:var(--kathib)}
+.flabs{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-top:8px;text-align:center}
+.flabs div span{display:block;font-size:8.5px;color:var(--glow-400);line-height:1.4}
+.flabs div b{display:block;font:700 12px var(--num);margin-top:2px;direction:ltr}
+.flabs div.stop b{color:var(--kathib)}
+.fnote{font-size:10px;color:var(--glow-400);margin:11px 0 0;line-height:1.7;
+  border-top:1px solid var(--night-700);padding-top:9px}
+
+.row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:8px;
+  padding:12px 13px;background:var(--night-800);border:1px solid var(--night-700);
+  border-radius:16px;width:100%;text-align:right;color:inherit}
+.row:focus-visible{outline:2px solid var(--jamr);outline-offset:2px}
+.row b{font:700 12px var(--num);direction:ltr;display:block}
+.row small{display:block;color:var(--glow-400);font-size:9.5px;margin-top:3px}
+.row strong{font:700 12.5px var(--num);direction:ltr;white-space:nowrap}
+.row .sub{display:block;font-size:9px;color:var(--glow-600);margin-top:2px;font-family:var(--num)}
+
+.vac{border:1px dashed var(--night-600);border-radius:16px;padding:14px 15px;margin-top:8px}
+.vac.fault{border-color:#6B3A38;border-style:solid}
+.vac.wait{border-color:#5C4A24}
+.vac b{display:block;font-size:12.5px;margin-bottom:5px}
+.vac p{margin:0 0 5px;font-size:10.5px;color:var(--glow-400);line-height:1.7}
+.vac p:last-child{margin:0;color:var(--glow-600)}
+
+.card{background:var(--night-800);border:1px solid var(--night-700);border-radius:18px;
+  padding:15px;margin-top:9px}
+.card>b{font-size:12.5px;display:block;margin-bottom:4px}
+.kv{display:flex;justify-content:space-between;gap:10px;margin-top:9px;font-size:11.5px;
+  align-items:baseline}
+.kv span{color:var(--glow-400)}
+.kv strong{font-family:var(--num);direction:ltr;unicode-bidi:isolate;font-weight:700;
+  font-size:12px}
+.kv strong.ar{font-family:var(--ui);direction:rtl;font-weight:600}
+.note{font-size:10px;color:var(--glow-400);line-height:1.75;margin:10px 0 0}
+.gap{border:1px dashed var(--jamr-line);border-radius:12px;padding:11px 13px;margin-top:10px}
+.gap b{color:var(--kathib);font-size:10.5px;display:block;margin-bottom:3px}
+.gap p{margin:0;font-size:10px;color:var(--glow-400);line-height:1.7}
+
+/* الحدّ */
+.hadd{position:relative;height:12px;margin:9px 0 6px}
+.hadd i{position:absolute;inset-inline:0;top:5px;height:2px;background:var(--night-600)}
+.hadd s{position:absolute;top:5px;height:2px;inset-inline-end:0;background:var(--glow-400);
+  text-decoration:none}
+.hadd s.over{background:var(--rumman)}
+.hadd u{position:absolute;top:3px;width:1px;height:7px;background:var(--glow-400)}
+.hadd u.bad{background:var(--rumman)}.hadd u.good{background:var(--nakhl)}
+.hadd b{position:absolute;top:0;width:2px;height:12px;background:var(--jamr)}
+.hlab{display:flex;justify-content:space-between;font-size:9.5px;color:var(--glow-400)}
+
+.back{background:none;border:0;color:var(--jamr);font-size:12px;font-weight:600;padding:0;
+  margin:2px 0 6px;display:flex;align-items:center;gap:6px}
+.back:focus-visible{outline:2px solid var(--jamr);outline-offset:3px}
+.h2{font-size:23px;margin:6px 0 3px;font-weight:700;letter-spacing:-.02em}
+.h2s{color:var(--glow-400);font-size:11.5px;margin:0 0 14px;line-height:1.65}
+.verdictline{font-size:19px;line-height:1.45;margin:10px 0 6px;font-weight:700}
+
+.trio{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.tile{background:var(--night-800);border:1px solid var(--night-700);border-radius:15px;
+  padding:12px 9px;text-align:center}
+.tile span{display:block;font-size:9.5px;color:var(--glow-400)}
+.tile b{display:block;font:700 13px var(--num);margin-top:5px;direction:ltr}
+
+.tag{display:inline-block;padding:3px 8px;border-radius:8px;background:#2A211B;
+  border:1px solid var(--night-700);font-size:9px;color:var(--glow-400);margin-top:5px}
+.tag.str{color:var(--jamr);border-color:var(--jamr-line)}
+.tag.adm{color:var(--kathib);border-color:var(--jamr-line)}
+
+.nav{flex:0 0 auto;margin:0 14px 12px;background:rgba(26,21,18,.9);border:1px solid #4A3B2E;
+  border-radius:20px;padding:7px;display:grid;grid-template-columns:repeat(4,1fr)}
+.nav button{background:none;border:0;color:var(--glow-400);font-size:9.5px;padding:7px 2px;
+  border-radius:12px}
+.nav button.on{color:var(--murjan)}
+.nav button:focus-visible{outline:2px solid var(--jamr);outline-offset:-2px}
+.nav i{display:block;font-size:15px;margin-bottom:2px;font-style:normal}
+
+h2.sec{font-size:clamp(21px,2.8vw,29px);margin:54px 0 8px;letter-spacing:-.02em}
+.secsub{color:var(--glow-400);font-size:14px;max-width:68ch;margin:0;line-height:1.85}
+.tw{overflow-x:auto;margin:22px 0 0;border:1px solid var(--night-700);border-radius:14px;
+  background:var(--night-900)}
+table{width:100%;border-collapse:collapse;font-size:13.5px;min-width:640px}
+th{text-align:right;font-weight:600;font-size:11px;letter-spacing:.05em;color:var(--glow-600);
+  padding:11px 14px;border-bottom:1px solid var(--night-700);background:var(--night-800);
+  white-space:nowrap}
+td{padding:12px 14px;border-bottom:1px solid var(--night-700);color:var(--glow-400);
+  line-height:1.7;vertical-align:top}
+tr:last-child td{border-bottom:0}
+td strong{color:var(--glow-0)}
+td.c{font-family:var(--num);direction:ltr;unicode-bidi:isolate;color:var(--glow-200);
+  font-weight:700;white-space:nowrap}
+
+@media(max-width:1000px){
+  .layout{grid-template-columns:1fr}
+  .side{position:static;order:2}
+  .stage{order:1}
+  .shell{padding:18px 14px 60px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<div class="rtl">
+<main class="shell">
+
+  <header class="mast">
+    <div class="mk">مثراة</div>
+    <h1>الذكاء القريب — النموذج الكامل</h1>
+    <p>الاتجاه المعتمد، مُخرَجًا على <strong>الشاشات الست</strong> وفي <strong>أربع حالات
+      نظام</strong>. ومعه العنصر الوحيد المنقول من غرفة الإشارة: <strong>مسار اليوم</strong> —
+      بأرقامٍ لا بخطواتٍ صمّاء.</p>
+    <div class="stamp">✓ قرار معتمد · 2026-09-04 · الشعار والاسم والرمز لم تُمَسّ</div>
+  </header>
+
+  <section class="layout">
+    <div class="stage">
+      <p class="ctrllab">حالة النظام</p>
+      <div class="ctrl" role="group" aria-label="حالة النظام">
+        <button type="button" data-st="0" aria-pressed="true">يوم عامل</button>
+        <button type="button" data-st="1" aria-pressed="false">يوم بلا فرصة</button>
+        <button type="button" data-st="2" aria-pressed="false">لا أعرف حالتي</button>
+        <button type="button" data-st="3" aria-pressed="false">قاطع الطوارئ</button>
+      </div>
+
+      <div class="device">
+        <div class="screen" id="screen">
+          <div class="ios"><span>9:41</span><span>● ● ● 100%</span></div>
+          <div id="siren"></div>
+          <div class="chead">
+            <div class="logo"><div class="logo-mark">مـ</div>
+              <div><b>مثراة</b><small>الشعار الحالي</small></div></div>
+            <span class="demo">DEMO</span>
+            <div class="avatar">مآ</div>
+          </div>
+          <div class="body" id="body"></div>
+          <nav class="nav" aria-label="التنقل">
+            <button data-v="home" class="on"><i>✦</i>اليوم</button>
+            <button data-v="folio"><i>◫</i>المحفظة</button>
+            <button data-v="log"><i>⌁</i>السجل</button>
+            <button data-v="sys"><i>◎</i>النظام</button>
+          </nav>
+        </div>
+      </div>
+
+      <p class="hintline">حالة النظام تغيّر شاشة «اليوم». والشاشات الأخرى معروضة في الحالة
+        العاملة — اضغطي أي مركزٍ أو صفقةٍ لفتح تفصيلها.</p>
+    </div>
+
+    <aside class="side">
+      <span class="n">DIRECTION 06 · معتمد</span>
+      <h2>الذكاء القريب</h2>
+      <p>الوكيل شخصيةٌ ماليةٌ هادئة تشرح ما يحدث. القرار هو البطل، والأرقام مرتبطةٌ بتفسيرٍ
+        واضح — والصمت جوابٌ صالح يُقال بلغةٍ لا بفراغ.</p>
+      <div class="blocklist">
+        <div class="bl"><b>القرار قبل الرقم</b>
+          <span>«ما يفكر فيه الوكيل» أعلى من المراكز — لأن سؤالك «هل أتدخّل؟» لا «كم عندي؟».</span></div>
+        <div class="bl"><b>مسار اليوم بالأرقام</b>
+          <span>خمس خطوات وأين توقّفت اليوم — تنفيذٌ حرفيّ لقاعدة «أين توقف المسار بالأرقام».</span></div>
+        <div class="bl"><b>الزجاج فوق صبغة صلبة</b>
+          <span>‎rgba(16,15,14,.55)‎ تحت كل بطاقة زجاجية، فالتباين ثابتٌ مهما كان خلفها.</span></div>
+        <div class="bl"><b>شريط طوارئ عريض</b>
+          <span>العلاج الوحيد الذي احتاجه هذا الاتجاه — يظهر في الحالة الحرجة وحدها.</span></div>
+      </div>
+      <h3>بنود التدقيق المعالَجة</h3>
+      <ul>
+        <li><code>A1</code> شارة البيئة ثابتة في الرأس، ولا تُمرَّر.</li>
+        <li><code>A3</code> عنوانٌ واحد لكل شاشة، بلا هيدرٍ يكرّره.</li>
+        <li><code>B3</code> المراكز ‎4/3‎ والخسائر المتتالية ظاهرة.</li>
+        <li><code>B4</code> «المحفظة المخصصة» تفصل رأس المال عن رصيد الوسيط.</li>
+        <li><code>C1</code> مسار «الحدّ» بتباينٍ يُرى وطرفين مسمّيين.</li>
+        <li><code>E1</code> شاشة صفقةٍ مغلقة مستقلة.</li>
+        <li><code>E2</code> المحقَّق مُصنَّفًا ثلاثة أرقام، بلا رقمٍ كلّي.</li>
+        <li><code>E3</code> فجوة العقد معلَنةٌ لا صامتة.</li>
+        <li><code>F1</code> قائمة مراكز موحّدة، والتفصيل خلف اختيار.</li>
+        <li><code>F2</code> تنبيه تكرار الأداة والمخاطرة المفتوحة مجموعةً.</li>
+      </ul>
+      <h3>ما لم يُنفَّذ بعد</h3>
+      <ul>
+        <li>الشاشة لم تُبنَ في الكود — <strong>المستودع لم يُمَسّ</strong>.</li>
+        <li>حقول <code>TradeRecord</code> الخمسة تحتاج توسعة عقد.</li>
+        <li>نسخ Xcode المكرّرة تُحسم قبل أي تنفيذ.</li>
+      </ul>
+    </aside>
+  </section>
+
+  <h2 class="sec">ما يحتاجه التنفيذ من الخادم</h2>
+  <p class="secsub">النموذج أعلاه يعرض كل ما يرسله العقد اليوم. وهذه الحقول الستة
+    <strong>معروضة في النموذج ولا تصل بعد</strong> — وهي وحدها ما يمنع تنفيذ الشاشتين
+    التفصيليتين كاملتين.</p>
+  <div class="tw">
+    <table>
+      <thead><tr><th>الحقل</th><th>أين يظهر</th><th>ما البديل حتى يصل</th></tr></thead>
+      <tbody>
+        <tr><td class="c">r_multiple</td><td>مركز مفتوح · صفقة مغلقة</td>
+          <td>يُحسب في التطبيق من <span class="c">risk_at_stop</span> — تقديرٌ يُوسَم بأنه محسوب لا مُرسَل.</td></tr>
+        <tr><td class="c">initial_stop_price</td><td>«الوقف الأصلي مقابل الحالي»</td>
+          <td>يُعرض الحالي وحده مع سطر «الأصلي لا يصل من الخادم».</td></tr>
+        <tr><td class="c">entry_reason_ar</td><td>صفقة مغلقة · «لماذا دخلتُ»</td>
+          <td>يُعرض <span class="c">strategy_ar</span> بديلًا ناقصًا.</td></tr>
+        <tr><td class="c">decision_quality</td><td>«جودة القرار مقابل التنفيذ»</td>
+          <td>الكتلة كاملةً تُخفى ويُعلَن سببها — لا تُترك فارغة.</td></tr>
+        <tr><td class="c">execution_quality</td><td>الكتلة نفسها</td>
+          <td>الأمر نفسه.</td></tr>
+        <tr><td class="c">kind: ADMINISTRATIVE</td><td>السجل · التصنيف الثلاثي</td>
+          <td>يُصنَّف <span class="c">UNATTRIBUTED</span> مؤقتًا مع وسمٍ صريح.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 class="sec">القرارات الصغيرة المتبقية</h2>
+  <div class="tw">
+    <table>
+      <thead><tr><th>#</th><th>القرار</th><th>ما فعلته في النموذج</th></tr></thead>
+      <tbody>
+        <tr><td class="c">1</td><td>خط الأرقام</td>
+          <td><strong>Manrope</strong> كما في مرجعك. الهوية تعتمد <span class="c">Newsreader</span> —
+            أبدّله بكلمةٍ منك.</td></tr>
+        <tr><td class="c">2</td><td>حواشي ‎9–10px‎</td>
+          <td>رفعتُ الأدنى إلى <strong>‎9.5px‎</strong> وأبقيت البنية. عند التنفيذ أوصي بـ‎11px‎
+            حدًّا أدنى، لأن Dynamic Type يكبّرها من هذا الأساس.</td></tr>
+        <tr><td class="c">3</td><td>الأرقام العربية-الهندية</td>
+          <td>لاتينية كما في مرجعك وكما في التطبيق اليوم. تبديلها قرارٌ لغويّ لا تصميميّ.</td></tr>
+        <tr><td class="c">4</td><td>التاريخ الهجري</td>
+          <td>غير معروضٍ في هذا النموذج. أُضيفه في رأس «اليوم» إن أردتِه.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+</main>
+</div>
+
+<script>
+(function(){
+  var view='home', state=0, detail=null;
+
+  /* ────── حالات شاشة اليوم ────── */
+  var ST=[
+  { flat:false, siren:'', demo:'DEMO',
+    welcome:'مساء الخير، مآثر', head:'مركزان يحتاجان انتباهك.',
+    chip:'متزامن الآن', bal:'$299.21', na:false,
+    sub:'<span class="bad money">−0.79</span> <span class="dim">محقق · استراتيجي</span>',
+    riskLab:'المخاطرة المفتوحة', risk:'$3.52 / $6.00', heat:59, over:false,
+    rail:'var(--rumman)', aiT:'لن أفتح مركزًا جديدًا',
+    aiP:'عدد المراكز أربعة والسقف المعتمد ثلاثة. سأستمر في مراقبتها وإدارة خروجها، ولن أضيف أي تعرّض جديد حتى يعود العدد تحت السقف.',
+    chips:[['4 مراكز','bad'],['سقف 3 مخترَق','bad'],['كلها محمية','ok']],
+    funnel:{on:[1,1,1,1,0],stop:3,
+      labs:[['فُحصت','4'],['مؤهّلة','4'],['إعداد','2'],['إشارة','1'],['نُفّذت','1']],
+      note:'المسار اكتمل مرّةً اليوم: إشارةٌ واحدة أُرسلت ونُفّذت وثُبِّتت حمايتها.'},
+    posT:'مراكز تحتاج انتباهك', posL:'عرض الكل',
+    pos:[['GBPUSD','مركزان على الأداة نفسها · تعرّض مضاعف','+0.36','good','R +0.36'],
+         ['GOLD','بيع · محمي','−0.12','bad','R −0.20']],
+    vac:null },
+
+  { flat:true, siren:'', demo:'DEMO',
+    welcome:'مساء الخير، مآثر', head:'لا شيء يحتاجكِ اليوم.',
+    chip:'متزامن الآن', bal:'$300.00', na:false,
+    sub:'<span class="dim money">0.00</span> <span class="dim">محقق · استراتيجي</span>',
+    riskLab:'المخاطرة المفتوحة', risk:'$0.00 / $6.00', heat:0, over:false,
+    rail:'var(--night-600)', aiT:'لم أدخل اليوم',
+    aiP:'فحصتُ أربع أدوات في ١٤٤ دورة. لا واحدة بلغت شرط الدخول: الاتجاه لم يتّضح على إطار الأربع ساعات في ثلاثٍ منها، والذهب سبريده أوسع من حدّي.',
+    chips:[['١٤٤ دورة',''],['٤ أدوات',''],['صفر إشارة','']],
+    funnel:{on:[1,1,0,0,0],stop:2,
+      labs:[['فُحصت','4'],['مؤهّلة','3'],['إعداد','0'],['إشارة','0'],['نُفّذت','0']],
+      note:'توقّف المسار عند «الإعداد»: ثلاث أدوات مؤهّلة، ولا واحدة كوّنت إعدادًا صالحًا.'},
+    posT:'مراكز تحتاج انتباهك', posL:'لا شيء',
+    pos:[],
+    vac:{cls:'',b:'لا مركز مفتوح.',p1:'لا أدخل إلا حين تكتمل شروطي كلها — واكتمالها هو الاستثناء لا القاعدة.',p2:'أوّل مركزٍ يظهر هنا بوقفه وهدفه وموضعه بينهما.'} },
+
+  { flat:true, siren:'', demo:'DEMO',
+    welcome:'مآثر', head:'لا أعرف حالتي الآن.',
+    chip:'آخر قراءة قبل ٤٧ د', bal:'غير متاح', na:true,
+    sub:'<span class="dim">لا يُعرض رقمٌ قديم على أنه حاليّ</span>',
+    riskLab:'المخاطرة المفتوحة', risk:'غير متاح', heat:-1, over:false,
+    rail:'var(--rumman)', aiT:'انقطع اتصالي بالخادم',
+    aiP:'آخر قراءة ناجحة قبل ٤٧ دقيقة. لا أعرض رقمًا قديمًا على أنه حاليّ — وما تراه أعلاه «غير متاح» لا صفر. والمراكز، إن وُجدت، محميّة بوقفها المثبَّت عند الوسيط ولا تعتمد على هذا الاتصال.',
+    chips:[['آخر قراءة ٤٧ د','bad'],['الحماية عند الوسيط','ok']],
+    funnel:{on:[0,0,0,0,0],stop:0,
+      labs:[['فُحصت','—'],['مؤهّلة','—'],['إعداد','—'],['إشارة','—'],['نُفّذت','—']],
+      note:'لا أعرف أين توقّف المسار — لم تصلني قراءةٌ منذ ٤٧ دقيقة.'},
+    posT:'المراكز', posL:'غير معروفة',
+    pos:[],
+    vac:{cls:'fault',b:'لا أعرف إن كان لديكِ مركز.',p1:'هذه ليست «صفر مراكز» — هذه قراءةٌ لم تنجح.',p2:'يُعاد المحاولة تلقائيًا كل ٣٠ ثانية.'} },
+
+  { flat:false, siren:'قاطع الطوارئ مُفعَّل — لا تنفيذ', demo:'DEMO',
+    welcome:'مآثر', head:'أوقفتُ نفسي اليوم.',
+    chip:'متزامن الآن', bal:'$294.00', na:false,
+    sub:'<span class="bad money">−6.00</span> <span class="dim">محقق · استراتيجي</span>',
+    riskLab:'المخاطرة المستهلَكة', risk:'$6.00 / $6.00', heat:100, over:true,
+    rail:'var(--rumman)', aiT:'قاطع الطوارئ مُفعَّل',
+    aiP:'بلغت خسارة اليوم حدّها المعتمد ٦.٠٠ دولار عند ١٥:٢٢. أغلقتُ ما كان مفتوحًا، ولن أفتح شيئًا. ولا يُرفع هذا القاطع من الهاتف: رفعه يزيد المخاطرة، فموضعه الخادم.',
+    chips:[['الحدّ اليومي بلغ','bad'],['التنفيذ موقوف','bad'],['الرفع من الخادم','warn']],
+    funnel:{on:[1,1,1,1,1],stop:-1,
+      labs:[['فُحصت','4'],['مؤهّلة','4'],['إعداد','3'],['إشارة','3'],['نُفّذت','3']],
+      note:'ثلاث صفقاتٍ اكتمل مسارها اليوم، وثلاثتها خاسرة — فبلغ الحدّ اليومي حدَّه.'},
+    posT:'المراكز', posL:'أُغلقت كلها',
+    pos:[],
+    vac:{cls:'fault',b:'لا مركز مفتوح.',p1:'أُغلق ما كان قائمًا عند تفعيل القاطع.',p2:'السجل يحمل تفصيل كل إغلاق وسببه.'} }
+  ];
+
+  function vacHTML(v){
+    return '<div class="vac '+v.cls+'"><b>'+v.b+'</b><p>'+v.p1+'</p><p>'+v.p2+'</p></div>';
+  }
+
+  /* ────── شاشة اليوم ────── */
+  function home(){
+    var s=ST[state];
+    var heat = s.heat<0 ? '' :
+      '<div class="heat"><i class="'+(s.over?'over':'')+'" style="width:'+s.heat+'%"></i></div>';
+    var f=s.funnel;
+    var bars=f.on.map(function(v,i){
+      var c = v? 'on' : (i===f.stop? 'stop':'');
+      return '<i class="'+c+'"></i>';}).join('');
+    var labs=f.labs.map(function(l,i){
+      return '<div class="'+(i===f.stop?'stop':'')+'"><span>'+l[0]+'</span><b>'+l[1]+'</b></div>';
+    }).join('');
+
+    var posBlock = s.pos.length ? s.pos.map(function(p){
+      return '<button class="row" data-open="pos"><div><b>'+p[0]+'</b><small>'+p[1]+'</small></div>'+
+        '<div style="text-align:left"><strong class="'+p[3]+'">'+p[2]+'</strong>'+
+        '<span class="sub">'+p[4]+'</span></div></button>';
+    }).join('') : vacHTML(s.vac);
+
+    return '<div class="welcome">'+s.welcome+'<strong>'+s.head+'</strong></div>'+
+    '<div class="glass" style="margin-top:14px"><div class="gtop"><span>المحفظة المخصصة</span>'+
+      '<i>'+s.chip+'</i></div>'+
+      '<div class="gbal'+(s.na?' na':'')+'">'+s.bal+'</div>'+
+      '<div class="gsub">'+s.sub+'</div>'+
+      '<div class="grow"><span>'+s.riskLab+'</span><b class="money">'+s.risk+'</b></div>'+heat+'</div>'+
+    '<div class="title"><b>ما يفكر فيه الوكيل</b><span>مباشر</span></div>'+
+    '<div class="glass ai" style="--rail:'+s.rail+'"><div class="aist"><div class="aic">✦</div>'+
+      '<div><b>'+s.aiT+'</b><p>'+s.aiP+'</p></div></div>'+
+      '<div class="chips">'+s.chips.map(function(c){
+        return '<span class="chip '+c[1]+'">'+c[0]+'</span>';}).join('')+'</div></div>'+
+    '<div class="title"><b>مسار اليوم</b><span class="mute">أين توقّف</span></div>'+
+    '<div class="funnel"><div class="fbars">'+bars+'</div><div class="flabs">'+labs+'</div>'+
+      '<p class="fnote">'+f.note+'</p></div>'+
+    '<div class="title"><b>'+s.posT+'</b><span class="'+(s.pos.length?'':'mute')+'">'+s.posL+'</span></div>'+
+    posBlock;
+  }
+
+  /* ────── المحفظة ────── */
+  function folio(){
+    var rows=[
+      ['GBPUSD','بيع · 200 · دخول 1.35213','+0.26','good','R +0.36'],
+      ['GBPUSD','بيع · 200 · دخول 1.35111','+0.10','good','R +0.14'],
+      ['GOLD','بيع · 0.01 · دخول 4420.85','−0.12','bad','R −0.20'],
+      ['EURUSD','شراء · 300 · دخول 1.16194','+0.18','good','R +0.23']
+    ].map(function(p){
+      return '<button class="row" data-open="pos"><div><b>'+p[0]+'</b><small>'+p[1]+'</small></div>'+
+      '<div style="text-align:left"><strong class="'+p[3]+'">'+p[2]+'</strong>'+
+      '<span class="sub">'+p[4]+'</span></div></button>';}).join('');
+
+    return '<div class="h2">المحفظة</div>'+
+    '<p class="h2s">أربعة مراكز · جميعها مطابِقة للوسيط ومحميّة بوقفها</p>'+
+    '<div class="trio"><div class="tile"><span>التعرّض</span><b>1,024</b></div>'+
+      '<div class="tile"><span>غير محقَّق</span><b class="good">+0.42</b></div>'+
+      '<div class="tile"><span>الحماية</span><b class="good">4/4</b></div></div>'+
+    '<div class="title"><b>المخاطرة المفتوحة</b><span class="mute">من حدّ اليوم</span></div>'+
+    '<div class="hadd"><i></i><s style="width:59%"></s><u style="inset-inline-end:59%"></u>'+
+      '<b style="inset-inline-end:59%"></b></div>'+
+    '<div class="hlab"><span class="money">0.00</span><span class="money">3.52 / 6.00</span></div>'+
+    '<div class="title"><b>عدد المراكز</b><span class="mute">من السقف</span></div>'+
+    '<div class="hadd"><i></i><s class="over" style="width:100%"></s>'+
+      '<u class="bad" style="inset-inline-end:75%"></u><b style="inset-inline-end:100%"></b></div>'+
+    '<div class="hlab"><span class="money">0</span><span class="bad money">4 من 3 ✕</span></div>'+
+    '<div class="gap" style="border-style:solid;border-color:#5C2E2E">'+
+      '<b style="color:var(--rumman)">تنبيه تعرّض</b>'+
+      '<p>مركزان على GBPUSD في الوقت نفسه — التعرّض على هذه الأداة ضِعف المعتمد. وسقف المراكز '+
+      'الثلاثة مخترَق. الحدّ يمنع الدخول الجديد ولا يغلق ما هو قائم.</p></div>'+
+    '<div class="title"><b>كل المراكز</b><span class="mute">آخر مزامنة الآن</span></div>'+rows;
+  }
+
+  /* ────── مركز مفتوح ────── */
+  function pos(){
+    return '<button class="back" data-open="">‹ المحفظة</button>'+
+    '<div class="h2">GBPUSD · بيع</div>'+
+    '<p class="h2s">200 وحدة · فُتح 13:43 · ارتداد اتجاه على إطار 4 ساعات</p>'+
+    '<div class="glass"><div class="gtop"><span>الربح غير المحقَّق</span><i>متزامن الآن</i></div>'+
+      '<div class="gbal good">+0.26</div>'+
+      '<div class="gsub"><span class="good money">+0.36 R</span> '+
+      '<span class="dim">من مخاطرة 0.73</span></div></div>'+
+    '<div class="title"><b>الموضع بين الوقف والهدف</b><span class="mute">1.35080</span></div>'+
+    '<div class="hadd"><i></i><u class="bad" style="inset-inline-end:0"></u>'+
+      '<u class="good" style="inset-inline-end:100%"></u><b style="inset-inline-end:45%"></b></div>'+
+    '<div class="hlab"><span class="bad">وقف <span class="money">1.35580</span></span>'+
+      '<span class="good">هدف <span class="money">1.34479</span></span></div>'+
+    '<div class="card"><b>المستويات</b>'+
+      '<div class="kv"><span>الدخول</span><strong>1.35213</strong></div>'+
+      '<div class="kv"><span>السعر الآن</span><strong>1.35080</strong></div>'+
+      '<div class="kv"><span>الوقف الأصلي</span><strong>1.35580</strong></div>'+
+      '<div class="kv"><span>الوقف الحالي</span><strong class="ar">1.35580 · لم يُحرَّك</strong></div>'+
+      '<div class="kv"><span>الهدف</span><strong>1.34479</strong></div></div>'+
+    '<div class="card"><b>المخاطرة والتعرّض</b>'+
+      '<div class="kv"><span>المخاطرة عند الوقف</span><strong>0.73</strong></div>'+
+      '<div class="kv"><span>التعرّض</span><strong>270.42</strong></div>'+
+      '<div class="kv"><span>الحماية</span><strong class="ar good">مثبَّتة عند الوسيط</strong></div>'+
+      '<p class="note">الوقف والهدف محفوظان لدى الوسيط لا في هذا التطبيق. لو صمت الهاتف أسبوعًا '+
+      'تبقى الحماية قائمة. ولا يمكن تعديل هذا المركز ولا إغلاقه من هنا.</p></div>'+
+    '<div class="gap" style="border-style:solid;border-color:#5C2E2E">'+
+      '<b style="color:var(--rumman)">ما يقلق في هذا المركز</b>'+
+      '<p>مركزٌ ثانٍ على GBPUSD مفتوحٌ الآن بـ200 وحدة — التعرّض على الجنيه مضاعف.</p></div>';
+  }
+
+  /* ────── السجل ────── */
+  function log(){
+    var rows=[
+      ['GBPUSD · بيع','ضرب الوقف · 13:43 · القرار سليم','−0.79','bad','−1.00 R','str','استراتيجية'],
+      ['GBPUSD · بيع','إغلاق إداري · 14:34 · مركز يتيم','−0.34','bad','لا تُحسب','adm','إغلاق إداري'],
+      ['EURUSD · شراء','Commissioning · ثانية واحدة','−0.01','bad','لا تُحسب','','تشغيلية']
+    ].map(function(t){
+      return '<button class="row" data-open="trade" style="align-items:flex-start">'+
+      '<div><b>'+t[0]+'</b><small>'+t[1]+'</small><span class="tag '+t[5]+'">'+t[6]+'</span></div>'+
+      '<div style="text-align:left"><strong class="'+t[3]+'">'+t[2]+'</strong>'+
+      '<span class="sub">'+t[4]+'</span></div></button>';}).join('');
+
+    return '<div class="h2">السجل</div>'+
+    '<p class="h2s">النتيجة والسياق منفصلان — بلا رقمٍ كلّي يخلطهما</p>'+
+    '<div class="trio"><div class="tile"><span>استراتيجي</span><b class="bad">−0.79</b></div>'+
+      '<div class="tile"><span>إداري</span><b class="bad">−0.34</b></div>'+
+      '<div class="tile"><span>تشغيلي</span><b class="bad">−0.01</b></div></div>'+
+    '<p class="note" style="margin:11px 2px 0">لا يُعرض «محقَّق كلّي» في رقمٍ واحد: جمع الثلاثة '+
+      'يعطي رقمًا لا يقيس أداء استراتيجية.</p>'+
+    '<div class="title"><b>الصفقات المغلقة</b><span class="mute">٤ سبتمبر</span></div>'+rows;
+  }
+
+  /* ────── صفقة مغلقة ────── */
+  function trade(){
+    return '<button class="back" data-open="">‹ السجل</button>'+
+    '<div class="verdictline">خسرتُ بقواعدي، لا رغمًا عنها.</div>'+
+    '<p class="h2s">GBPUSD بيعًا · 2026-09-04 · 13:00 ← 13:43 · '+
+      '<span class="tag str" style="margin:0">استراتيجية</span></p>'+
+    '<div class="glass"><div class="gtop"><span>المحقَّق الصافي — بعد السبريد والعمولة</span></div>'+
+      '<div class="gbal bad">−0.79</div>'+
+      '<div class="gsub"><span class="bad money">−1.00 R</span> '+
+      '<span class="dim">مخاطرة كاملة، كما صُمِّمت</span></div></div>'+
+    '<div class="card"><b>لماذا دخلتُ</b>'+
+      '<div class="kv"><span>الاستراتيجية</span><strong class="ar">ارتداد اتجاه · 4 ساعات</strong></div>'+
+      '<div class="kv"><span>النتيجة الحتمية</span><strong>68 / 100</strong></div>'+
+      '<div class="kv"><span>البوابات</span><strong class="ar good">11 مرّت</strong></div>'+
+      '<div class="kv"><span>نقطة الإبطال</span><strong>1.35364</strong></div></div>'+
+    '<div class="card"><b>لماذا خرجتُ</b>'+
+      '<div class="kv"><span>السبب</span><strong class="ar bad">ضرب الوقف</strong></div>'+
+      '<div class="kv"><span>الوقف الأصلي</span><strong>1.35364</strong></div>'+
+      '<div class="kv"><span>الوقف عند الإغلاق</span><strong class="ar">1.35364 · لم يُحرَّك</strong></div>'+
+      '<div class="kv"><span>الدخول ← الخروج</span><strong>1.34997 → 1.35364</strong></div></div>'+
+    '<div class="card"><b>جودة القرار مقابل جودة التنفيذ</b>'+
+      '<div class="kv"><span>القرار</span><strong class="ar good">سليم — التزم القواعد</strong></div>'+
+      '<div class="kv"><span>التنفيذ</span><strong class="ar">انزلاق 0.3 نقطة</strong></div>'+
+      '<p class="note"><strong style="color:var(--glow-0)">القرار سليم والنتيجة خاسرة</strong> — '+
+      'وهذان أمران مختلفان. الخسارة نتيجةٌ متوقّعة في نظامٍ احتمالي، والحكم على القرار بنتيجته '+
+      'وحدها أسرعُ طريقٍ لتخريب نظامٍ يعمل.</p>'+
+      '<div class="gap"><b>فجوة عقد</b><p>هذان الحقلان لا يصلان من الخادم بعد — يحتاجان '+
+      'decision_quality و execution_quality في TradeRecord.</p></div></div>';
+  }
+
+  /* ────── النظام ────── */
+  function sys(){
+    return '<div class="h2">النظام</div>'+
+    '<p class="h2s">كل ما يلزمكِ للحكم على سلامة الوكيل</p>'+
+    '<div class="card"><b>حالة التشغيل</b>'+
+      '<div class="kv"><span>الخدمة</span><strong class="ar good">تعمل</strong></div>'+
+      '<div class="kv"><span>الدخول الجديد</span><strong class="ar wa">متوقف محليًا</strong></div>'+
+      '<div class="kv"><span>مراقبة المراكز</span><strong class="ar good">مستمرة</strong></div>'+
+      '<div class="kv"><span>قاطع الطوارئ</span><strong class="ar good">غير مُفعَّل</strong></div></div>'+
+    '<div class="card"><b>الإصدار</b>'+
+      '<div class="kv"><span>التطبيق</span><strong>0.6.2 (42)</strong></div>'+
+      '<div class="kv"><span>كوميت التطبيق</span><strong>0f9cb1e</strong></div>'+
+      '<div class="kv"><span>كوميت الخادم</span><strong>0f9cb1e</strong></div>'+
+      '<div class="kv"><span>التطابق</span><strong class="ar good">متطابقان ✓</strong></div>'+
+      '<div class="kv"><span>البيئة</span><strong class="wa">CAPITAL DEMO</strong></div></div>'+
+    '<div class="card"><b>المزامنة والمصدر</b>'+
+      '<div class="kv"><span>Capital.com</span><strong class="ar good">مطابِق</strong></div>'+
+      '<div class="kv"><span>آخر قراءة من الوسيط</span><strong class="ar">قبل دقيقتين</strong></div>'+
+      '<div class="kv"><span>اكتمال البيانات</span><strong class="good">100%</strong></div>'+
+      '<div class="gap"><b>الرصيد التجريبي ليس رأس المال</b>'+
+      '<p>لدى الوسيط ~91,000 دولار تجريبية. كل الحدود تُحسب من رأس المال المخصص 300.00 — '+
+      'والفرق يُقال ولا يُخفى.</p></div></div>'+
+    '<div class="card"><b>ما لا يستطيعه هذا التطبيق</b>'+
+      '<p class="note">لا يُنشئ أمرًا ولا يعدّل كمية ولا وقفًا ولا هدفًا · لا يفتح مركزًا ولا '+
+      'يغلقه · لا يحمل مفتاح وسيط · لا يصل إلى الوسيط إطلاقًا — كل وصولٍ للوسيط في الخادم.</p></div>';
+  }
+
+  var VIEWS={home:home,folio:folio,log:log,sys:sys};
+  var DETAILS={pos:pos,trade:trade};
+
+  function render(){
+    var s=ST[state];
+    var screen=document.getElementById('screen');
+    screen.className='screen'+((view==='home'&&s.flat)?' flat':'');
+    document.getElementById('siren').innerHTML =
+      (view==='home'&&s.siren) ? '<div class="siren"><i>⬤</i>'+s.siren+'</div>' : '';
+    document.querySelector('.demo').className='demo';
+    document.getElementById('body').innerHTML =
+      detail ? DETAILS[detail]() : VIEWS[view]();
+    document.getElementById('body').scrollTop=0;
+    document.querySelectorAll('.nav button').forEach(function(b){
+      b.classList.toggle('on',b.dataset.v===view);});
+  }
+
+  document.querySelectorAll('[data-st]').forEach(function(b){
+    b.addEventListener('click',function(){
+      state=+b.dataset.st; view='home'; detail=null;
+      document.querySelectorAll('[data-st]').forEach(function(x){
+        x.setAttribute('aria-pressed',String(x===b));});
+      render();
+    });
+  });
+
+  document.querySelector('.nav').addEventListener('click',function(e){
+    var b=e.target.closest('button[data-v]');
+    if(!b){return;}
+    view=b.dataset.v; detail=null; render();
+  });
+
+  document.getElementById('body').addEventListener('click',function(e){
+    var el=e.target.closest('[data-open]');
+    if(!el){return;}
+    detail = el.dataset.open || null;
+    render();
+  });
+
+  render();
+})();
+</script>
+
+</body></html>
