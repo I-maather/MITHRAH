@@ -12,6 +12,7 @@ import { AppState, type AppStateStatus } from 'react-native';
 
 import { MobileApiClient, type RefreshOutcome, type TokenSource } from '@/api/client';
 import { API_BASE_URL, AUTO_LOCK_MINUTES, SESSION_REFRESH_PATH, verifyBaseUrl } from '@/api/config';
+import { t } from '@/i18n';
 import { requestUnlock, type GateOutcome } from './biometrics';
 import { tokenStore, type StoredSession } from './tokenStore';
 
@@ -32,7 +33,15 @@ export type SessionStatus =
   | 'NO_SESSION'
   | 'LOCKED'
   | 'UNLOCKED'
-  | 'REVOKED';
+  | 'REVOKED'
+  /**
+   * **تعذّرت قراءة سلسلة المفاتيح.**
+   *
+   * ليست `NO_SESSION`: تلك تقول «لا جهاز مسجَّل» وهي دعوى معرفة. وهذه
+   * تقول «لم أعرف» — والفرق بينهما هو الفرق نفسه الذي لاحقناه في
+   * الخادم كلّه: الجهل لا يُكتب غياباً.
+   */
+  | 'UNREADABLE';
 
 export interface SessionContextValue {
   status: SessionStatus;
@@ -58,6 +67,8 @@ export interface SessionContextValue {
   signOut: () => Promise<void>;
   /** تُستدعى بعد نجاح `device/revoke` على الجهاز نفسه. */
   markRevoked: () => Promise<void>;
+  /** إعادة قراءة سلسلة المفاتيح بعد `UNREADABLE`. */
+  retryBoot: () => void;
 }
 
 const SessionContext = createContext<SessionContextValue | null>(null);
@@ -82,6 +93,7 @@ export function SessionProvider({
   const [obscured, setObscured] = useState(false);
   const [deviceId, setDeviceId] = useState<string | null>(null);
   const [pendingDeepLink, setPendingDeepLink] = useState<string | null>(null);
+  const [bootAttempt, setBootAttempt] = useState(0);
 
   const lastActivityRef = useRef<number>(Date.now());
   const autoLockMs = overrides?.autoLockMs ?? AUTO_LOCK_MINUTES * 60 * 1000;
@@ -202,26 +214,63 @@ export function SessionProvider({
 
   // -- الإقلاع --------------------------------------------------------------
 
+  /**
+   * إعادةُ محاولةِ القراءة بعد `UNREADABLE`.
+   *
+   * سلسلةُ المفاتيح مفتوحةٌ بـ`WHEN_UNLOCKED_THIS_DEVICE_ONLY`: قراءتُها
+   * **تفشل والجهازُ مقفل**. فالفشلُ هنا كثيراً ما يكون لحظياً، ويحتاج
+   * بابَ خروجٍ لا إعادةَ تثبيت.
+   */
+  const retryBoot = useCallback((): void => {
+    setLastGateMessageAr(null);
+    setStatus('BOOTING');
+    setBootAttempt((n) => n + 1);
+  }, []);
+
   useEffect(() => {
     if (overrides?.initialStatus !== undefined) {
       return;
     }
     let alive = true;
     void (async () => {
-      const [hasSession, storedDeviceId] = await Promise.all([
-        tokenStore.hasSession(),
-        tokenStore.loadDeviceId(),
-      ]);
-      if (!alive) {
-        return;
+      /*
+        **كان هذا `await` بلا `catch`.**
+
+        فإن رفضت سلسلةُ المفاتيح — والجهازُ مقفل، أو مُحيت، أو استُعيد من
+        نسخة — لم تُستدعَ `setStatus` أبداً، فبقيت الحالة `BOOTING`،
+        ورسم `(app)/_layout` «جارٍ التحميل…» إلى الأبد: بلا رسالة، وبلا
+        مخرج، وبلا أثرٍ سوى رفضِ وعدٍ في الطرفية.
+
+        وهو العطلُ الصامت نفسه الذي مُنع في `FontGate` بالاسم: «شاشةٌ
+        سوداء عطلٌ صامت». وشاشةُ تحميلٍ لا تنتهي أسوأ منها — لأنها تبدو
+        انتظاراً فتُنتظَر.
+
+        رُئي على المحاكي يوم ٦ سبتمبر ٢٠٢٦ عند أوّل تثبيت.
+      */
+      try {
+        const [hasSession, storedDeviceId] = await Promise.all([
+          tokenStore.hasSession(),
+          tokenStore.loadDeviceId(),
+        ]);
+        if (!alive) {
+          return;
+        }
+        setDeviceId(storedDeviceId);
+        setStatus(hasSession ? 'LOCKED' : 'NO_SESSION');
+      } catch {
+        if (!alive) {
+          return;
+        }
+        // لا يُخمَّن `NO_SESSION`: ذلك ادّعاءُ معرفةٍ لا نملكها.
+        setDeviceId(null);
+        setLastGateMessageAr(t.gate.unreadableBody);
+        setStatus('UNREADABLE');
       }
-      setDeviceId(storedDeviceId);
-      setStatus(hasSession ? 'LOCKED' : 'NO_SESSION');
     })();
     return () => {
       alive = false;
     };
-  }, [overrides?.initialStatus]);
+  }, [overrides?.initialStatus, bootAttempt]);
 
   // -- ستر المحتوى في مبدّل التطبيقات + القفل التلقائي -----------------------
 
@@ -312,6 +361,7 @@ export function SessionProvider({
       adoptSession,
       signOut,
       markRevoked,
+      retryBoot,
     }),
     [
       status,
@@ -329,6 +379,7 @@ export function SessionProvider({
       adoptSession,
       signOut,
       markRevoked,
+      retryBoot,
     ],
   );
 

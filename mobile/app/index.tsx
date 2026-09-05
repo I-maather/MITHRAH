@@ -25,7 +25,7 @@ export default function SecureLaunchScreen(): React.JSX.Element {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { status, unlock, lastGateMessageAr, pendingDeepLink } = useSession();
+  const { status, unlock, lastGateMessageAr, pendingDeepLink, retryBoot } = useSession();
 
   const [caps, setCaps] = useState<GateCapabilities | null>(null);
   const [busy, setBusy] = useState(false);
@@ -80,6 +80,28 @@ export default function SecureLaunchScreen(): React.JSX.Element {
       </View>
 
       <View style={{ gap: theme.spacing.lg }}>
+        {/*
+          **الجهل يُقال، ولا يُترك شاشةَ تحميلٍ لا تنتهي.**
+          قراءةُ سلسلة المفاتيح تفشل والجهازُ مقفل — وهي حالةٌ عابرة
+          غالباً، فلها زرُّ خروج.
+        */}
+        {status === 'UNREADABLE' ? (
+          <Card testID="unreadable-card">
+            <Banner
+              testID="unreadable-banner"
+              tone="negative"
+              title={t.gate.unreadableTitle}
+              body={t.gate.unreadableBody}
+            />
+            <Button
+              label={t.gate.unreadableRetry}
+              accessibilityLabel={t.gate.unreadableRetry}
+              testID="unreadable-retry"
+              onPress={retryBoot}
+            />
+          </Card>
+        ) : null}
+
         {status === 'REVOKED' ? (
           <Banner
             testID="revoked-banner"
@@ -132,7 +154,9 @@ export default function SecureLaunchScreen(): React.JSX.Element {
           <Button
             label={t.gate.unlock}
             busy={busy}
-            disabled={status === 'REVOKED' || status === 'NO_SESSION'}
+            disabled={
+              status === 'REVOKED' || status === 'NO_SESSION' || status === 'UNREADABLE'
+            }
             accessibilityLabel={t.gate.unlock}
             accessibilityHint={t.gate.faceIdNote}
             testID="unlock-button"
