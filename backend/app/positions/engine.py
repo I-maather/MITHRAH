@@ -199,8 +199,29 @@ class PositionManager:
             elif action is not None:
                 actions.append(action)
 
-        if not actions and book_rows:
-            notes.append("لا فعلَ هذه الدورة — والمراكز كلُّها مقروءةٌ ومطابَقة.")
+        # **الملاحظة كانت تدّعي المطابقة لأنّ الأفعال صفر.** وهذان أمران
+        # مختلفان تماماً: «لا حاجةَ إلى فعل» ليس «كلُّ شيءٍ مقروءٌ ومطابَق».
+        # فمركزٌ لم يظهر عند الوسيط يُتخطّى بلا فعل، فتقول الشاشة إنّه
+        # مطابَق — وهي أسوأ رسالةٍ ممكنة: طمأنينةٌ في موضع الجهل.
+        if not book_rows:
+            notes.append("لا مركزَ مفتوحاً في الدفتر.")
+        elif not actions:
+            unmatched = [s for s in skipped if s.code == SKIP_NOT_RECONCILED]
+            if len(unmatched) == len(book_rows):
+                notes.append(
+                    f"لا فعل — ولا واحدٌ من {len(book_rows)} مركزاً ظهر عند "
+                    "الوسيط في هذه الدورة. لا يُقال إنّها مطابَقة."
+                )
+            elif unmatched:
+                notes.append(
+                    f"لا فعل — و{len(unmatched)} من {len(book_rows)} مركزاً "
+                    "لم يظهر عند الوسيط في هذه الدورة."
+                )
+            else:
+                notes.append(
+                    f"لا فعلَ هذه الدورة — و{len(book_rows)} مركزاً قُرئت "
+                    "وطُوبقت، وهي على خروجها الثابت المعتمد."
+                )
 
         return ManagementPlan(
             at_utc=now, actions=tuple(actions), skipped=tuple(skipped), notes_ar=tuple(notes)

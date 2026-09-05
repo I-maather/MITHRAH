@@ -80,6 +80,11 @@ _BOOT_COMMIT = _read_boot_commit()
 _BOOT_TIME = datetime.now(timezone.utc)
 
 
+# **قبل أيّ شيء.** بلا هذه السطور يكتب التطبيق تحذيراته إلى العدم.
+from . import logging_setup as _logging_setup
+_logging_setup.configure()
+
+
 @asynccontextmanager
 async def _lifespan(_app: FastAPI):
     """

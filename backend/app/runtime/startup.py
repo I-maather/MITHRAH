@@ -117,6 +117,20 @@ def run(state) -> Optional[StartupReport]:
         report.notes_ar.append(
             f"{len(unlinked)} مركزاً بلا نسبةٍ إلى قرار: {', '.join(unlinked[:5])}."
         )
+    # **بوابةٌ بلا أثرٍ بوابةٌ لا تُدقَّق.** كان الحكم يعيش في الذاكرة وحدها،
+    # فلم يكن في السجلّ ما يشهد أنّ الفحص جرى أصلاً — ولا كيف انتهى.
+    _LOG.info(
+        "startup gate: verdict=%s locked=%s reset=%d book=%d unlinked=%d problems=%d",
+        getattr(report.verdict, "name", report.verdict),
+        report.trading_locked,
+        reset,
+        len(book),
+        len(unlinked),
+        len(report.reconciliation_problems or []),
+    )
+    for problem in report.reconciliation_problems or []:
+        _LOG.warning("startup gate problem: %s", problem)
+
     state.startup = report
     return report
 
