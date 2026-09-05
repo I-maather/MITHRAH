@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useSession } from '@/auth/SessionProvider';
+import { observeEnvironment } from './environment';
 import type { MobileApiClient } from './client';
 import type { MobileEnvelope } from './types';
 
@@ -67,6 +68,8 @@ export function useEndpoint<T>(
         }
         setEnvelope(result);
         setData(result.data);
+        // أيّ حمولةٍ تحمل حالة الوسيط تُحدِّث شارة البيئة في كل الشاشات.
+        observeEnvironment(result.data);
         setError(null);
         setFetchedAt(Date.now());
       } catch (caught) {

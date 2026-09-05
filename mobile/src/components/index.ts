@@ -15,6 +15,7 @@ export {
   type PreparedChart,
 } from './CandleChart';
 export { CrashGuard } from './CrashGuard';
+export { EnvironmentBadge } from './EnvironmentBadge';
 export { NavRow } from './NavRow';
 export { PrivacyVeil } from './PrivacyVeil';
 export { RiskMeter } from './RiskMeter';

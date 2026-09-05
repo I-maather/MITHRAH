@@ -65,3 +65,6 @@ htmlcov/
 
 # مخرجاتُ جلساتٍ لا شيفرة — تُحفظ في المشروع لا في المستودع.
 Claude outputs/
+
+# مكرّرات صراع مزامنة iCloud — مُزاحةٌ لا محذوفة.
+mobile/_icloud-duplicates-*/

@@ -37,7 +37,11 @@ export default function AuthenticatedLayout(): React.JSX.Element {
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
     <Stack
       screenOptions={{
-        headerShown: true,
+        // **العنوان كان يُكتَب مرّتين في أربع عشرة شاشة.** هيدرُ التنقّل
+        // يكتبه، ثم `Screen` يكتبه بحجم `display` تحته مباشرةً — نصٌّ واحد
+        // فوق نفسه، و~٩٠ نقطة تُهدَر في أعلى كل شاشة. وهو العطل نفسه الذي
+        // عولج في الرئيسية وحدها وتُرك في البقية. الرجوع انتقل إلى `Screen`.
+        headerShown: false,
         headerTitleAlign: 'center',
         headerStyle: { backgroundColor: theme.colors.background },
         headerTintColor: theme.colors.accent,
@@ -48,7 +52,7 @@ export default function AuthenticatedLayout(): React.JSX.Element {
         animation: theme.reduceMotion ? 'none' : 'default',
       }}
     >
-      <Stack.Screen name="home" options={{ title: t.nav.home, headerShown: false }} />
+      <Stack.Screen name="home" options={{ title: t.nav.home }} />
       <Stack.Screen name="intelligence" options={{ title: t.nav.intelligence }} />
       <Stack.Screen name="decision" options={{ title: t.nav.decision }} />
       <Stack.Screen name="scan" options={{ title: t.nav.scan }} />

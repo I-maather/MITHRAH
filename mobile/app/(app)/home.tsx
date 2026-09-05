@@ -193,6 +193,7 @@ export default function HomeScreen(): React.JSX.Element {
 
   return (
     <Screen
+      root
       testID="home-screen"
       // العنوان يملكه شريط التبويبات وحده. كان يُكتب ثلاث مرّات في شاشة
       // واحدة: هيدر التنقّل، وعنوان الشاشة، والتبويب.
