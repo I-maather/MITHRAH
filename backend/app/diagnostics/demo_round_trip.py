@@ -62,7 +62,7 @@ TARGET_DISTANCE = Decimal("0.0040")
 OK, BAD, WARN, DIM, END = "\033[32m", "\033[31m", "\033[33m", "\033[2m", "\033[0m"
 
 
-def step(n: int, text: str) -> None:
+def step(n, text: str) -> None:
     print(f"\n\033[1m  {n} · {text}\033[0m")
 
 
@@ -185,7 +185,7 @@ def main() -> int:
         take_profit_price=target,
         expected_fill_price=entry,
         max_slippage_abs=D(5) * pip,
-        strategy_name="MANUAL_PIPELINE_PROOF",
+        strategy_name="COMMISSIONING",
         strategy_version="0.0.0",
         risk_amount_usd=(STOP_DISTANCE / pip) * pip * size,
         commission_estimate_usd=D("0"),
@@ -204,16 +204,77 @@ def main() -> int:
     deal_ids: tuple[str, ...] = ()
     deal_id = None
     try:
-        step(4, "الإرسال ⇐ التأكيد ⇐ المطابقة")
+        step(4, "الإرسال عبر **خدمة التنفيذ** ⇐ التأكيد ⇐ المطابقة")
+        # ---------------------------------------------------------------
+        # **الأنبوب الحقيقي، لا المحوّل وحده.**
+        #
+        # كان هذا السطر `adapter.place_order(intent)` — إرسالٌ مباشر يتخطّى
+        # `ExecutionService` كلَّها: لا حارسَ تكرار، ولا معاينة إلزامية، ولا
+        # قيدَ في خط التدقيق، ولا أثرَ في القاعدة.
+        #
+        # فكان هذا التشخيص — واسمه «دورة كاملة» ووصفه «هل الآلة تعمل من
+        # طرفها إلى طرفها» — يُثبت أنّ **المحوّل** يعمل، لا أنّ **النظام**
+        # يعمل. وهو الفرق نفسه الذي كلّفنا يوماً كاملاً: وحدةٌ سليمة غير
+        # موصولة، واختبارٌ يمرّ عليها فيطمئننا.
+        #
+        # والإرسال الآن من `state.execution` نفسها — الكائن الذي يبني
+        # الخادم لا نسخةٌ مصنوعة هنا — فيُثبَت الرسم الحقيقي بما فيه دفتر
+        # الأوامر.
+        # ---------------------------------------------------------------
+        from app.api.state import system as _system
+        from app.execution.orders import SubmissionOutcome
+
+        service = _system().execution
         sent = True
         try:
-            order = adapter.place_order(intent)
+            result = service.submit(intent)
         except CapitalExecutionUncertain as exc:
             deal_ids = exc.deal_ids
             print(f"{BAD}⛔ غموضٌ في التنفيذ: {exc}{END}", file=sys.stderr)
             raise
-        print(f"{OK}✅{END} الحالة {order.status.value} · "
+
+        if result.outcome not in (
+            SubmissionOutcome.FILLED, SubmissionOutcome.PARTIALLY_FILLED
+        ):
+            print(f"{BAD}⛔ خدمة التنفيذ لم تؤكّد: {result.outcome.value} — "
+                  f"{result.reason_ar}{END}", file=sys.stderr)
+            if result.order is None:
+                return 1
+        order = result.order
+        if order is None:
+            print(f"{BAD}⛔ لا أمرَ من خدمة التنفيذ.{END}", file=sys.stderr)
+            return 1
+        print(f"{OK}✅{END} {result.outcome.value} · الحالة {order.status.value} · "
               f"المعرّف {order.broker_order_id} · التنفيذ {order.average_fill_price}")
+
+        step("4ب", "هل تُرك أثرٌ في القاعدة؟")
+        from sqlalchemy import select
+
+        from app.db.models import BrokerOrderRow, ExecutionAttempt, OrderIntentRow
+        from app.db.session import get_session
+
+        with get_session() as _s:
+            has_intent = _s.execute(
+                select(OrderIntentRow).where(
+                    OrderIntentRow.client_order_id == intent.client_order_id)
+            ).scalar_one_or_none() is not None
+            attempt = _s.execute(
+                select(ExecutionAttempt).where(
+                    ExecutionAttempt.idempotency_key == intent.idempotency_key)
+            ).scalar_one_or_none()
+            broker_row = _s.execute(
+                select(BrokerOrderRow).where(
+                    BrokerOrderRow.client_order_id == intent.client_order_id)
+            ).scalar_one_or_none()
+
+        print(f"   نيّة مسجَّلة: {'✅' if has_intent else '⛔'}")
+        print(f"   محاولة مسجَّلة: {'✅' if attempt else '⛔'}"
+              + (f" · محسومة: {'✅' if attempt.resolved else '⛔ لا'}" if attempt else ""))
+        print(f"   أمرُ وسيط مسجَّل: {'✅' if broker_row else '⛔'}"
+              + (f" · dealId {broker_row.broker_deal_id}" if broker_row else ""))
+        if not (has_intent and attempt and broker_row):
+            print(f"{BAD}⛔ الأثر ناقص — دفتر الأوامر لم يُكتَب كما يجب.{END}",
+                  file=sys.stderr)
 
         step(5, "هل ظهر المركز فعلاً في القائمة؟")
         positions = {p.deal_id: p for p in adapter.list_positions()}
