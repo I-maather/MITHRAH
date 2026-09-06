@@ -82,8 +82,34 @@ describe('محتوى اللوحة', () => {
   });
 
   it('مخاطرةُ اليوم في البطاقة نفسها — سؤالٌ واحد لا بطاقتان', () => {
-    expect(screen.getByTestId('risk-meter-daily')).toBeTruthy();
-    expect(screen.getByTestId('risk-hadd')).toBeTruthy();
+    /*
+      صارت كما في النموذج: سطرٌ واحد يقول المخاطرةَ من الحدّ، وتحته شريطُ
+      حرارةٍ متدرّج — بدل مقياسٍ نصّيّ و«حدّ» منفصلين يشغلان نصف البطاقة.
+    */
+    expect(screen.getByTestId('open-risk')).toBeTruthy();
+    expect(screen.getByTestId('heat-bar')).toBeTruthy();
+  });
+
+  it('**الرقمُ الرئيسي بحجم النموذج** — 33 لا 34، وبوزن 800', () => {
+    const node = screen.getByTestId('allocated-equity');
+    const flat = [node.props.style].flat(4).filter(Boolean) as Record<string, unknown>[];
+    /*
+      **الأخيرةُ هي الفعّالة.** React Native تدمج المصفوفة بالترتيب، فما
+      يأتي آخراً يغلب. وأخذُ الأولى يقيس ما لا يُرى.
+    */
+    const last = <T,>(key: string): T | undefined =>
+      flat.reduce<T | undefined>(
+        (acc, one) => (one[key] === undefined ? acc : (one[key] as T)),
+        undefined,
+      );
+    const size = last<number>('fontSize');
+    const family = last<string>('fontFamily');
+    expect(size).toBe(33);
+    expect(family).toBe('Manrope-ExtraBold');
+  });
+
+  it('حبّةُ المزامنة في زاوية البطاقة كما في `.gtop`', () => {
+    expect(screen.getByTestId('sync-chip')).toBeTruthy();
   });
 
   it('مسار اليوم يصل إلى الشاشة', () => {

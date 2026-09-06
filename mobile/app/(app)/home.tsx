@@ -1,8 +1,10 @@
 import React, { useCallback } from 'react';
 import { View } from 'react-native';
 
+import { sumOf } from '@/api/positionTotals';
 import { useEndpoint } from '@/api/useEndpoint';
 import { ApiError } from '@/api/client';
+import { LinearGradient } from 'expo-linear-gradient';
 import {
   AgentCard,
   AnimatedNumber,
@@ -10,14 +12,12 @@ import {
   CandleChart,
   Card,
   DayPath,
-  Divider,
   ErrorState,
+  Glass,
   Field,
-  Hadd,
   LoadingState,
   NavRow,
   OfflineBanner,
-  RiskMeter,
   Screen,
   StaleBanner,
   SectionTitle,
@@ -31,6 +31,7 @@ import {
 import { fixtures, isPreviewMode, previewOr } from '@/fixtures';
 import { formatSince, formatToday, t } from '@/i18n';
 import { useTheme } from '@/theme';
+import { fontFamilies } from '@/theme/tokens';
 import { dayVerdict } from '@/utils/verdict';
 import {
   presentPnlTone,
@@ -153,12 +154,6 @@ export default function HomeScreen(): React.JSX.Element {
     return prepared === null ? null : { symbol, resolution, prepared, levels };
   })();
 
-  /** المتبقّي رقماً — للعدّ المتدرّج. نصٌّ غير قابل للتحويل ⇒ `null` بلا تخمين. */
-  const remainingToday = ((): number | null => {
-    const v = Number(r?.risk_remaining_today?.replace(/,/g, ''));
-    return Number.isFinite(v) ? v : null;
-  })();
-
   /** الربح غير المحقّق رقماً. نصٌّ غير قابل للتحويل ⇒ يُعرض كما هو بلا حركة. */
   const unrealised = ((): number | null => {
     const v = Number(pos?.unrealised_pnl?.replace(/[,\s+]/g, '').replace('−', '-'));
@@ -190,6 +185,14 @@ export default function HomeScreen(): React.JSX.Element {
   const delta =
     allocated !== null && baselineNumber !== null ? allocated - baselineNumber : null;
 
+  /**
+   * **المخاطرةُ المفتوحة** — مجموعُ ما يخسره كلُّ مركزٍ عند وقفه.
+   *
+   * هي ما يعرضه النموذج في هذا الموضع، لا المستهلَك من الحدّ. والمجموعُ
+   * الناقص يُعلَن ناقصاً: `missing` تقول كم مركزاً بلا قيمة.
+   */
+  const openRisk = sumOf(pos?.positions ?? [], 'risk_at_stop');
+
   const riskRatio = ((): number | null => {
     if (r === null) {
       return null;
@@ -201,6 +204,15 @@ export default function HomeScreen(): React.JSX.Element {
     }
     const total = used + remaining;
     return total > 0 ? used / total : null;
+  })();
+
+  /** ما يملأ شريطَ الحرارة: المفتوحةُ من الحدّ إن عُرفت، وإلا المستهلَك. */
+  const heatRatio = ((): number | null => {
+    const limit = Number(limitToday);
+    if (openRisk.value !== null && Number.isFinite(limit) && limit > 0) {
+      return openRisk.value / limit;
+    }
+    return riskRatio;
   })();
 
   // **الجهل يُعلن جهلاً.** `unknown` تجمع ثلاثة: انقطاعٌ، أو بياناتٌ
@@ -293,92 +305,172 @@ export default function HomeScreen(): React.JSX.Element {
           و«كم يجوز أن أخسر اليوم» سؤالٌ واحد في النموذج.
       ---------------------------------------------------------------- */}
       {r !== null ? (
-        <Card
-          testID="allocated-card"
-          title={t.home.allocated}
-          variant="glass"
-        >
-          {allocated !== null ? (
-            <AnimatedNumber
-              value={allocated}
-              decimals={2}
-              unit="دولار"
-              variant="numericLarge"
-              testID="allocated-equity"
-            />
-          ) : (
-            <Text variant="numericLarge" tabular testID="allocated-equity">
-              {r.portfolio?.current_equity ?? '—'}
+        <Glass testID="allocated-card" padding={18}>
+          {/* `.gtop` — الاسمُ يميناً وحبّةُ المزامنة يساراً. */}
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 10,
+            }}
+          >
+            <Text variant="micro" tone="secondary" style={{ fontSize: 10 }}>
+              {t.home.allocated}
             </Text>
-          )}
-          <View style={{ flexDirection: 'row', gap: theme.spacing.sm, flexWrap: 'wrap' }}>
-            <Text variant="caption" tone="secondary" testID="allocated-baseline">
-              {`من ${r.portfolio?.baseline_equity ?? '—'} مخصَّصة`}
-            </Text>
-            {/*
-              الفرقُ عن المرجعي يُشتقّ من رقمين على الكائن نفسه — ولا يُسمّى
-              «محقَّقاً»: هو المحقَّق وغيرُ المحقَّق معاً على الحصّة، وتسميتُه
-              محقَّقاً دعوى لا يحملها العقد.
-            */}
-            {delta !== null ? (
-              <Text
-                variant="caption"
-                tone={delta < 0 ? 'negative' : delta > 0 ? 'positive' : 'secondary'}
-                tabular
-                testID="allocated-delta"
+            {s !== null ? (
+              <View
+                testID="sync-chip"
+                style={{
+                  borderRadius: 20,
+                  paddingVertical: 4,
+                  paddingHorizontal: 9,
+                  backgroundColor: theme.colors.accentSoft,
+                  borderWidth: 1,
+                  borderColor: theme.colors.accentSoft,
+                }}
               >
-                {`${delta < 0 ? '−' : '+'}${Math.abs(delta).toFixed(2)} عن المرجعي`}
-              </Text>
+                <Text variant="micro" style={{ fontSize: 9, color: theme.colors.caution }}>
+                  {formatSince(s.last_refresh_utc)}
+                </Text>
+              </View>
             ) : null}
           </View>
-          {s !== null ? (
-            <Text variant="micro" tone="tertiary" testID="allocated-freshness">
-              {formatSince(s.last_refresh_utc)}
-            </Text>
-          ) : null}
 
-          <Divider />
+          {/* `.gbal` — 33 بوزن 800، والرقمُ يسارُ الاتجاه دائماً. */}
+          <View style={{ marginTop: 11, marginBottom: 3 }}>
+            {/*
+              `.gbal` — 33 بوزن 800. ولا عدَّ متدرّجاً هنا: النموذج رقمٌ
+              ساكن، والحركةُ في رقمٍ بهذا الحجم تجذب العين إلى التغيّر لا
+              إلى القيمة. والحركةُ باقيةٌ حيث تنفع — الربحُ غير المحقَّق.
+
+              و«لم يصل» تُعرض «غير متاح» بحجمٍ أصغر وبلا لونٍ — `.gbal.na`
+              في النموذج — فلا يُقرأ الجهلُ رقماً.
+            */}
+            {allocated !== null ? (
+              <Text
+                variant="numericLarge"
+                tabular
+                testID="allocated-equity"
+                accessibilityLabel={`${t.home.allocated}: ${allocated.toFixed(2)} دولار`}
+                style={{ fontSize: 33, fontFamily: fontFamilies.numeric['800'] }}
+              >
+                {allocated.toFixed(2)}
+              </Text>
+            ) : (
+              <Text
+                variant="numericLarge"
+                testID="allocated-equity"
+                style={{ fontSize: 21, color: theme.colors.textTertiary }}
+              >
+                {r.portfolio?.current_equity ?? 'غير متاح'}
+              </Text>
+            )}
+          </View>
+
+          {/* `.gsub` — المحقَّق اليوم، أو الفرقُ عن المرجعي حتى يصل الحقل. */}
+          <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+            {delta !== null ? (
+              <Text
+                variant="micro"
+                tabular
+                testID="allocated-delta"
+                style={{
+                  fontSize: 10.5,
+                  color:
+                    delta < 0
+                      ? theme.colors.negative
+                      : delta > 0
+                        ? theme.colors.positive
+                        : theme.colors.textSecondary,
+                }}
+              >
+                {`${delta < 0 ? '−' : '+'}${Math.abs(delta).toFixed(2)}`}
+              </Text>
+            ) : null}
+            <Text
+              variant="micro"
+              tone="tertiary"
+              testID="allocated-baseline"
+              style={{ fontSize: 10.5 }}
+            >
+              {`عن المرجعي ${r.portfolio?.baseline_equity ?? '—'}`}
+            </Text>
+          </View>
+
+          {/* `.grow` — المخاطرةُ المفتوحة من حدّ اليوم. */}
+          <View
+            style={{
+              flexDirection: 'row',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: 10,
+              marginTop: 14,
+            }}
+          >
+            <Text variant="micro" tone="secondary" style={{ fontSize: 10 }}>
+              {openRisk.value === null ? 'المستهلَك من مخاطرة اليوم' : 'المخاطرة المفتوحة'}
+            </Text>
+            <Text
+              variant="micro"
+              tabular
+              testID="open-risk"
+              style={{ fontSize: 10.5, fontFamily: fontFamilies.numeric['700'] }}
+            >
+              {`${
+                openRisk.value === null
+                  ? (r.risk_used_today ?? '—')
+                  : openRisk.value.toFixed(2)
+              } / ${limitToday ?? '—'}`}
+            </Text>
+          </View>
+
+          {/* `.heat` — شريطٌ 7px بتدرّج الجمر→المرجان. */}
+          <View
+            testID="heat-bar"
+            accessible
+            accessibilityLabel={`${heatRatio === null ? 'غير معروف' : `${Math.round(heatRatio * 100)}٪`} من حدّ اليوم`}
+            style={{
+              height: 7,
+              borderRadius: 8,
+              marginTop: 8,
+              overflow: 'hidden',
+              backgroundColor: theme.colors.surfaceSunken,
+              borderWidth: 1,
+              borderColor: theme.colors.border,
+            }}
+          >
+            {heatRatio !== null ? (
+              <LinearGradient
+                colors={
+                  heatRatio >= 1
+                    ? [theme.colors.negative, theme.colors.negative]
+                    : [theme.colors.accent, theme.colors.accentGlow]
+                }
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={{ height: '100%', width: `${Math.min(100, heatRatio * 100)}%` }}
+              />
+            ) : null}
+          </View>
 
           {/*
-            **أيّ الحدّين يعمل — بنصّ الخادم لا بتفسير العميل.**
-
-            كانت هذه تعرض حدود الملف والمحرّك ينفّذ حدود الدستور: 0.75
-            معروضة و6.00 منفَّذة. وشاشةٌ تعد بحدٍّ أشدّ من العامل ليست
-            تحفّظاً، هي طمأنينةٌ كاذبة.
+            أيُّ الحدّين يعمل — بنصّ الخادم. ليس في النموذج، ولا يُحذف:
+            شاشةٌ تَعِد بحدٍّ أشدّ من العامل طمأنينةٌ كاذبة. فيبقى سطراً
+            هادئاً 9px لا بطاقةً تُزاحم.
           */}
-          <Text variant="micro" tone="tertiary" testID="risk-binding">
+          <Text
+            variant="micro"
+            tone="tertiary"
+            testID="risk-binding"
+            style={{ fontSize: 9, marginTop: 9, lineHeight: 15 }}
+          >
             {r.profile_binding_ar}
           </Text>
-          <RiskMeter
-            testID="risk-meter-daily"
-            label="المتبقّي من مخاطرة اليوم"
-            usedLabel={r.risk_used_today}
-            remainingLabel={r.risk_remaining_today}
-            remainingValue={remainingToday}
-            ratio={riskRatio}
-          />
-          {/*
-            «الحدّ» — العنصر التوقيعي. علامته تظهر عند صفر بالمئة أيضاً،
-            بخلاف المؤشّر الذي كان يختفي فتبدو الشاشة معطوبة وهي سليمة.
-          */}
-          {riskRatio !== null ? (
-            <Hadd
-              testID="risk-hadd"
-              value={riskRatio}
-              max={1}
-              label="المستهلَك من حدّ اليوم"
-              readout={`${r.risk_used_today ?? '—'} من ${limitToday ?? '—'}`}
-              thresholds={[
-                { at: 0.6, tone: 'neutral' },
-                { at: 0.85, tone: 'negative' },
-              ]}
-              style={{ marginTop: theme.spacing.sm }}
-            />
-          ) : null}
           {r.two_loss_lock_active ? (
             <Banner tone="negative" title="قفل الخسارتين مُفعَّل" body="لا دخول جديد اليوم." />
           ) : null}
-        </Card>
+        </Glass>
       ) : null}
 
       {/* ----------------------------------------------------------------

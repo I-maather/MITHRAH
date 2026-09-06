@@ -2,83 +2,85 @@ import React from 'react';
 import { View } from 'react-native';
 
 import { useTheme } from '@/theme';
+import { fontFamilies } from '@/theme/tokens';
 import { Text } from './Text';
 
 /**
- * مسار اليوم — **أين توقّف، بالأرقام**.
+ * مسارُ اليوم — «قمع اليوم» في النموذج المعتمد.
  *
- * ## لماذا `DayPath` لا الاسم الإنجليزي المعتاد
+ * خمسُ خطواتٍ بأرقامها، وأين توقّف المسار. تنفيذٌ حرفيّ لقاعدةِ «أين توقف
+ * المسار بالأرقام»: خطواتٌ صمّاء بلا أرقامٍ لا تقول شيئاً.
  *
- * سُمّي أوّلَ مرّة باسم القمع الإنجليزي، فأسقطه حارسُ الأمن في
- * `security-boundary.test.ts`: الكلمة نفسها اسمُ خدمة نفقٍ عامة ممنوعة في
- * كلّ ملف. والحارس مُحقّ، وتضييقُه ليتّسع لاسم مكوّنٍ يُضعف حمايةً حقيقية
- * من أجل راحةِ تسمية. والاسم العربي هو اسم النموذج المعتمد أصلاً.
+ * ## الألوان تحمل المعنى
  *
- * هذا هو العنصر الوحيد المنقول من «غرفة الإشارة» إلى الاتجاه المعتمد، ومطوَّرٌ
- * عنها: خمس خطواتٍ صمّاء صارت خمس خطواتٍ **بأرقام**. وهو تنفيذٌ حرفيّ لقاعدة
- * نظام التشغيل: «أين توقف المسار بالأرقام» — لا «لا توجد فرصة اليوم».
+ * كانت الأشرطةُ رماديّةً كلَّها، فلا يُعرف ما بلغ ممّا لم يبلغ. وفي النموذج:
  *
- * والفرق عمليّ لا لفظيّ: «صفر صفقات» لا تقول شيئاً، أمّا «فُحصت ٤ · مؤهّلة ٣ ·
- * إعداد ٠» فتقول إنّ التوقّف عند تكوين الإعداد لا عند التأهيل — ومن ذلك يُعرف
- * أهو غيابُ فرصةٍ أم عطلُ سياسة.
+ *   · ما بلغ        → الجمر.
+ *   · موضعُ التوقّف → الكثيب، ومعه اسمُه ورقمُه.
+ *   · ما لم يبلغ    → حدُّ الليل.
  *
- * ## القيم المجهولة
+ * ## و«—» ليست صفراً
  *
- * `count` نصٌّ لا رقم عمداً: حين تنقطع القراءة تُكتب «—» ولا تُكتب صفر. والصفر
- * حقيقةٌ مقيسة، والشرطة اعترافٌ بالجهل — وخلطُهما هو ما بُني هذا النظام على
- * تجنّبه.
- *
- * ## `stopAt`
- *
- * فهرس الخطوة التي توقّف عندها المسار (صفريّ). `-1` يعني أنّ المسار اكتمل،
- * و`null` يعني أننا لا نعرف أين توقّف.
+ * `count` نصٌّ لا رقم: «—» تعني «لم يُفحَص بعد»، و«0» تعني «فُحص فلم يوجد».
+ * وخلطُهما يجعل يوماً لم يبدأ يبدو يوماً بلا فرص.
  */
-export interface PathStep {
-  /** اسم الخطوة: فُحصت · مؤهّلة · إعداد · إشارة · نُفّذت. */
+export interface DayStep {
   label: string;
-  /** العدد كنصّ — أو «—» حين لا يُعرف. */
   count: string;
-  /** هل بلغها المسار؟ */
   reached: boolean;
 }
 
+/** الاسمُ القديم — يبقى تصديرُه فلا ينكسر ما يستورده. */
+export type PathStep = DayStep;
+
 export interface DayPathProps {
-  steps: readonly PathStep[];
-  /** فهرس التوقّف. `-1` اكتمل · `null` غير معروف. */
+  steps: readonly DayStep[];
+  /** موضعُ التوقّف — `null` إن لم يُعرف. */
   stopAt?: number | null;
-  /** جملةٌ تقول ماذا يعني هذا التوقّف. */
-  note: string;
+  note?: string | null;
   testID?: string;
 }
 
 export function DayPath({ steps, stopAt = null, note, testID }: DayPathProps): React.JSX.Element {
   const theme = useTheme();
 
-  const spoken = steps.map((s) => `${s.label} ${s.count}`).join('، ');
-
   return (
     <View
       testID={testID}
       accessible
-      accessibilityLabel={`مسار اليوم: ${spoken}. ${note}`}
+      /*
+        **يُنطق مساراً لا أشرطة.** قارئُ الشاشة لا يرى اللون، فلو قُرئ كلُّ
+        شريطٍ وحده لسمعت المالكةُ خمسَ شظايا بلا معنى. والجملةُ الواحدة
+        تقول الخطوةَ ورقمَها، و«—» تُنطق «لم يُفحَص بعد» لا صفراً.
+      */
+      accessibilityLabel={[
+        steps
+          .map((step) => `${step.label} ${step.count}`)
+          .join('، '),
+        note ?? '',
+      ]
+        .filter((part) => part !== '')
+        .join('. ')}
       style={{
         backgroundColor: theme.colors.surfaceSunken,
-        borderRadius: theme.radii.lg,
-        padding: theme.spacing.md,
-        gap: theme.spacing.sm,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.radii.card,
+        padding: 14,
+        gap: 9,
       }}
     >
-      <View style={{ flexDirection: 'row', gap: theme.spacing.xs }}>
-        {steps.map((step, index) => (
+      <View style={{ flexDirection: 'row', gap: 5 }}>
+        {steps.map((step, i) => (
           <View
-            key={step.label}
+            key={`bar-${step.label}`}
             style={{
               flex: 1,
-              height: 4,
-              borderRadius: theme.radii.pill,
+              height: 5,
+              borderRadius: 4,
               backgroundColor: step.reached
                 ? theme.colors.accent
-                : index === stopAt
+                : i === stopAt
                   ? theme.colors.caution
                   : theme.colors.border,
             }}
@@ -86,30 +88,52 @@ export function DayPath({ steps, stopAt = null, note, testID }: DayPathProps): R
         ))}
       </View>
 
-      <View style={{ flexDirection: 'row', gap: theme.spacing.xs }}>
-        {steps.map((step, index) => (
-          <View key={step.label} style={{ flex: 1, gap: theme.spacing.xxs }}>
-            <Text
-              variant="micro"
-              tone={index === stopAt ? 'caution' : 'tertiary'}
-              numberOfLines={1}
-            >
-              {step.label}
-            </Text>
-            <Text
-              variant="captionStrong"
-              tabular
-              tone={index === stopAt ? 'caution' : 'primary'}
-            >
-              {step.count}
-            </Text>
-          </View>
-        ))}
+      <View style={{ flexDirection: 'row', gap: 5 }}>
+        {steps.map((step, i) => {
+          const stopped = i === stopAt;
+          return (
+            <View key={`lab-${step.label}`} accessible={false} style={{ flex: 1, gap: 3 }}>
+              <Text
+                variant="micro"
+                numberOfLines={1}
+                style={{
+                  fontSize: 9.5,
+                  color: stopped ? theme.colors.caution : theme.colors.textSecondary,
+                }}
+              >
+                {step.label}
+              </Text>
+              <Text
+                variant="micro"
+                tabular
+                style={{
+                  fontSize: 13,
+                  fontFamily: fontFamilies.numeric['700'],
+                  color: stopped
+                    ? theme.colors.caution
+                    : step.reached
+                      ? theme.colors.textPrimary
+                      : theme.colors.textTertiary,
+                }}
+              >
+                {step.count}
+              </Text>
+            </View>
+          );
+        })}
       </View>
 
-      <Text variant="caption" tone="secondary">
-        {note}
-      </Text>
+      {note !== null && note !== undefined && note !== '' ? (
+        <>
+          <View style={{ height: 1, backgroundColor: theme.colors.border, marginTop: 2 }} />
+          <Text
+            variant="caption"
+            style={{ fontSize: 10, lineHeight: 17, color: theme.colors.textSecondary }}
+          >
+            {note}
+          </Text>
+        </>
+      ) : null}
     </View>
   );
 }

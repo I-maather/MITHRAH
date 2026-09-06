@@ -73,50 +73,39 @@ export function AppHeader(): React.JSX.Element {
       }}
     >
       {/* الشعار والاسم — وحدةٌ واحدة لا تتباعد ولا تفيض. */}
-      <View
-        style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 1, minWidth: 0 }}
+      {/*
+        **المربّعُ يحمل الاسم.**
+
+        قالت المالكة: «المربّعُ يحمل مِثْراة بدل مـ». وكان المربّعُ حرفاً
+        والاسمُ إلى جانبه، فصارا شيئين يتباعدان كلّما ضاق العرض. والاسمُ
+        داخل الشكل وحدةٌ واحدة لا تنفصل.
+      */}
+      <LinearGradient
+        colors={[theme.colors.accentGlow, theme.colors.accent]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={{
+          height: 38,
+          borderRadius: 13,
+          paddingHorizontal: 14,
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 1,
+        }}
       >
-        <LinearGradient
-          colors={[theme.colors.accentGlow, theme.colors.accent]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
+        <Text
+          variant="bodyStrong"
+          accessibilityRole="header"
+          numberOfLines={1}
           style={{
-            width: 36,
-            height: 36,
-            borderRadius: 12,
-            alignItems: 'center',
-            justifyContent: 'center',
+            fontFamily: fontFamilies.logo,
+            fontSize: 19,
+            color: theme.colors.textOnAccent,
           }}
         >
-          <Text
-            variant="bodyStrong"
-            style={{
-              fontFamily: fontFamilies.logo,
-              fontSize: 18,
-              color: theme.colors.textOnAccent,
-            }}
-          >
-            مـ
-          </Text>
-        </LinearGradient>
-        <View style={{ flexShrink: 1, minWidth: 0 }}>
-          <Text
-            variant="bodyStrong"
-            accessibilityRole="header"
-            numberOfLines={1}
-            style={{ fontFamily: fontFamilies.logo, fontSize: 18 }}
-          >
-            {t.gate.title}
-          </Text>
-          {/*
-            سطرٌ قصير — `.logo small` في النموذج 9px. وشعارُ التطبيق الكامل
-            كان هنا فأفاض الرأس، وهو مكتوبٌ أصلاً تحت عنوان الشاشة.
-          */}
-          <Text variant="micro" tone="tertiary" numberOfLines={1} style={{ fontSize: 9 }}>
-            {t.app.shortTagline}
-          </Text>
-        </View>
-      </View>
+          {t.gate.title}
+        </Text>
+      </LinearGradient>
 
       {/* البيئة ثم الحساب */}
       <View
