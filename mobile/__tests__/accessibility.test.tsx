@@ -184,7 +184,8 @@ describe('العناوين مُعلَنة', () => {
 
 describe('الحالة لا تُحمَّل على اللون وحده', () => {
   it('كل شارة حالة تحمل نصّاً منطوقاً', () => {
-    renderWithHarness(<HomeScreen />, { status: 'UNLOCKED' });
+    // الشارةُ انتقلت مع «حالة التشغيل» إلى تبويب النظام.
+    renderWithHarness(<SystemScreen />, { status: 'UNLOCKED' });
     const pill = screen.getByTestId('system-state-pill');
     expect(String(pill.props.accessibilityLabel).trim().length).toBeGreaterThan(0);
   });

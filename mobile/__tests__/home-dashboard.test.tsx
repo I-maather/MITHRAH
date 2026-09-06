@@ -26,21 +26,37 @@ jest.mock('@/api/config', () => ({
  * اللوحة الرئيسية تعرض ما اتُّفق عليه، كاملاً.
  */
 
+/**
+ * **ما بقي في «اليوم» بعد النقل.**
+ *
+ * النموذج المعتمد ينهي هذه الشاشة عند المراكز. وكان بعدها عشرُ بطاقات —
+ * وهو العيبُ المكتوب في رأس `home.tsx` بيدنا: «تسع بطاقات متساوية الوزن،
+ * والشاشة التي كل شيء فيها مهمّ لا شيء فيها مهمّ». عولج أعلى الشاشة يومها
+ * ولم يُعالج أسفلها.
+ */
 const REQUIRED_CARDS = [
-  // الشموع والمستويات صعدت إلى الرئيسية: الحكم يقول «لم أتداول»، والسؤال
-  // الذي يليه فوراً «على أيّ سعرٍ حكمتَ؟» — وكان جوابُه شاشةً خلف لمستين.
-  'home-chart-card',
-  'system-card', // حالة النظام · اتصال الوسيط · حالة السوق · اكتمال البيانات · آخر تحديث
-  'risk-card', // المخاطرة المستهلكة والمتبقية
-  'profile-card', // الملف المختار والفعّال
-  'decision-card', // القرار النهائي والنتيجة الحتمية
-  // «no-trade-card» حُذفت عمداً: شرح الامتناع صعد إلى أعلى الشاشة بحجم
-  // العنوان بدل أن يكون بطاقةً بين تسع. المعلومة تُفحَص بـ«no-trade-reason»
-  // أدناه — والاختبار يجب أن يحرس **وجود السبب** لا وجود العلبة.
-  'risk-week-card', // تفاصيل الأسبوع
-  'strategy-card', // حالة الاستراتيجية
-  'event-card', // الحدث القادم المهم
-  'position-card', // المركز الحالي
+  'allocated-card', // الرقم الرئيسي: الحصّة المخصَّصة، ومعها مخاطرةُ اليوم
+  'agent-card', // ما يفكر فيه الوكيل — الفراغ الذي لا يملؤه أحد
+  'home-chart-card', // على أيّ سعرٍ كان هذا الحكم
+  'today-more-card', // القرارُ شرحٌ لا أمر: صفُّ انتقالٍ يكفيه
+];
+
+/**
+ * **وما انتقل لا يعود.**
+ *
+ * هذه ليست قائمةَ نظافة: عودةُ أيٍّ منها إلى «اليوم» تُعيد الذيلَ الذي
+ * أُزيل، ولا يُلحَظ ذلك بالعين إلا بعد أن يطول من جديد.
+ */
+const MOVED_AWAY = [
+  'portfolio-card', // رصيدُ الوسيط ← النظام
+  'system-card', // حالة التشغيل ← النظام
+  'risk-week-card', // الأسبوع ← المحفظة
+  'limits-card', // الحدود ← المحفظة
+  'profile-card', // الملف ← النظام
+  'decision-card', // القرار ← صفُّ انتقالٍ وحده
+  'strategy-card', // الاستراتيجية ← النظام
+  'event-card', // الحدث ← النظام
+  'position-card', // المركز ← المحفظة
 ];
 
 describe('محتوى اللوحة', () => {
@@ -52,20 +68,28 @@ describe('محتوى اللوحة', () => {
     expect(screen.getByTestId(testID)).toBeTruthy();
   });
 
-  it('تعرض حالة النظام واتصال الوسيط وحالة السوق', () => {
-    expect(screen.getByTestId('system-state-pill')).toBeTruthy();
-    expect(screen.getByTestId('broker-field')).toBeTruthy();
-    expect(screen.getByTestId('market-field')).toBeTruthy();
+  it.each(MOVED_AWAY)('البطاقة «%s» لم تعد في «اليوم»', (testID) => {
+    expect(screen.queryByTestId(testID)).toBeNull();
   });
 
-  it('تعرض اكتمال البيانات وآخر تحديث', () => {
-    expect(screen.getByTestId('completeness-field')).toBeTruthy();
-    expect(screen.getByTestId('last-refresh-field')).toBeTruthy();
+  it('**الرقم الرئيسي رقمٌ واحد** — لا رقمان متساويا الوزن', () => {
+    /*
+      كانت الشاشة تعرض رصيدَ الوسيط والمرجعيَّ متجاورين متساويي الوزن،
+      فلا تقول أيُّهما الجواب — وقرارُك أنّ المخصَّص هو المقياس.
+    */
+    expect(screen.getByTestId('allocated-equity')).toBeTruthy();
+    expect(screen.getByTestId('allocated-baseline')).toBeTruthy();
+    expect(screen.queryByTestId('portfolio-broker')).toBeNull();
   });
 
-  it('تعرض النتيجة الحتمية بعدد ونهاية سلّم', () => {
-    const score = screen.getByTestId('score-field');
-    expect(String(score.props.accessibilityLabel)).toContain('/');
+  it('مخاطرةُ اليوم في البطاقة نفسها — سؤالٌ واحد لا بطاقتان', () => {
+    expect(screen.getByTestId('risk-meter-daily')).toBeTruthy();
+    expect(screen.getByTestId('risk-hadd')).toBeTruthy();
+  });
+
+  it('مسار اليوم يصل إلى الشاشة', () => {
+    expect(fixtures.participation.steps.length).toBeGreaterThan(0);
+    expect(screen.getByTestId('day-path')).toBeTruthy();
   });
 
   it('تعرض سبب الامتناع بنصّ الخادم', () => {
@@ -114,8 +138,16 @@ describe('محتوى اللوحة', () => {
     expect(screen.getByTestId('home-no-execution')).toHaveTextContent(t.common.noExecution);
   });
 
-  it('لا مركز مفتوح يُقال صراحةً لا يُترك فراغاً', () => {
-    expect(screen.getByTestId('no-position')).toHaveTextContent(t.home.noPosition);
+  it('**حالةُ المراكز تُقال دائماً** — إمّا ما يحتاج انتباهك، وإمّا فراغٌ مُعلَن', () => {
+    /*
+      واحدةٌ منهما لا كلتاهما ولا لا شيء: الصمتُ عن المراكز يُقرأ
+      «لا مركز»، وهي دعوى معرفةٍ لا تُقال بالسكوت.
+    */
+    const shown = [
+      screen.queryByTestId('attention-card'),
+      screen.queryByTestId('no-position-empty'),
+    ].filter((node) => node !== null);
+    expect(shown).toHaveLength(1);
   });
 });
 

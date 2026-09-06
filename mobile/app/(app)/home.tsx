@@ -15,14 +15,12 @@ import {
   Field,
   Hadd,
   LoadingState,
-  Metric,
   NavRow,
   OfflineBanner,
   RiskMeter,
   Screen,
   StaleBanner,
   SectionTitle,
-  StatusPill,
   Text,
   Welcome,
   Vacancy,
@@ -31,16 +29,11 @@ import {
   type ChartLevel,
 } from '@/components';
 import { fixtures, isPreviewMode, previewOr } from '@/fixtures';
-import { formatCooling, formatInstant, formatRatio, formatSince, formatToday, t } from '@/i18n';
+import { formatSince, formatToday, t } from '@/i18n';
 import { useTheme } from '@/theme';
 import { dayVerdict } from '@/utils/verdict';
 import {
-  presentCompleteness,
-  presentConnection,
-  presentDecision,
-  presentMarket,
   presentPnlTone,
-  presentSystemPhase,
 } from '@/utils/present';
 
 /**
@@ -77,9 +70,6 @@ export default function HomeScreen(): React.JSX.Element {
   const participation = useEndpoint((c) => c.getParticipation(), {
     previewData: previewOr(fixtures.participation),
   });
-  const profiles = useEndpoint((c) => c.getProfiles(), {
-    previewData: previewOr(fixtures.profiles),
-  });
   const position = useEndpoint((c) => c.getCurrentPosition(), {
     previewData: previewOr(fixtures.position),
   });
@@ -98,10 +88,9 @@ export default function HomeScreen(): React.JSX.Element {
     status.refresh();
     decision.refresh();
     risk.refresh();
-    profiles.refresh();
     position.refresh();
     candles.refresh();
-  }, [status, decision, risk, profiles, position, candles]);
+  }, [status, decision, risk, position, candles]);
 
   const offline =
     status.error instanceof ApiError && status.error.kind === 'OFFLINE';
@@ -110,7 +99,6 @@ export default function HomeScreen(): React.JSX.Element {
   const s = status.data;
   const d = decision.data;
   const r = risk.data;
-  const p = profiles.data;
   const pos = position.data;
 
   /**
@@ -186,6 +174,21 @@ export default function HomeScreen(): React.JSX.Element {
     }
     return (used + remaining).toFixed(2);
   })();
+
+  /** الحصّة المخصَّصة رقماً — للعدّ المتدرّج. نصٌّ لا يُقرأ ⇒ `null` بلا تخمين. */
+  const allocated = ((): number | null => {
+    const v = Number(r?.portfolio?.current_equity?.replace(/,/g, ''));
+    return Number.isFinite(v) ? v : null;
+  })();
+
+  /** المرجعيّ رقماً — يُقاس عليه الفرق، ولا يُعرض الفرقُ بدونه. */
+  const baselineNumber = ((): number | null => {
+    const v = Number(r?.portfolio?.baseline_equity?.replace(/,/g, ''));
+    return Number.isFinite(v) ? v : null;
+  })();
+
+  const delta =
+    allocated !== null && baselineNumber !== null ? allocated - baselineNumber : null;
 
   const riskRatio = ((): number | null => {
     if (r === null) {
@@ -278,139 +281,67 @@ export default function HomeScreen(): React.JSX.Element {
         </View>
       ) : null}
 
-      {/* ---- الشموع والمستويات: على أيّ سعرٍ كان هذا الحكم ---- */}
-      {home !== null ? (
-        <Card
-          testID="home-chart-card"
-          title={`${home.symbol} · ${t.chart.frames[home.resolution] ?? home.resolution}`}
-        >
-          <CandleChart testID="home-chart" prepared={home.prepared} height={188} />
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-            <Text variant="micro" tone="tertiary" testID="home-chart-span">
-              {spanLabel(home.prepared.bars)}
-            </Text>
-            <Text variant="micro" tone="tertiary">
-              {home.levels.length === 0 ? t.chart.noPosition : t.chart.levelsOn}
-            </Text>
-          </View>
-          <NavRow testID="nav-chart" label={t.nav.chart} hint={t.navHint.chart} href="/(app)/chart" />
-        </Card>
-      ) : null}
+      {/* ----------------------------------------------------------------
+          **الرقمُ الرئيسي — رقمٌ واحدٌ يجيب «كم عندي».**
 
-      {/* ---- المحفظة: المال قبل الحدود ---- */}
+          كانت هنا بطاقةٌ تعرض رصيدَ الوسيط والمرجعيَّ **ندّين متساويي
+          الوزن**، فلا تقول أيُّهما الجواب. وقرارُك المعتمد أنّ الحصّة
+          المخصَّصة هي المقياس، ورصيدَ الوسيط معلومةُ كفايةِ هامشٍ لا
+          مقياس — فنزل إلى «النظام»، وبقي هنا رقمٌ واحدٌ كبير كما في
+          النموذج المعتمد، وتحته ما يقيس عليه: المرجعيُّ والفرق.
+
+          والمخاطرةُ معه في البطاقة نفسها لا في بطاقةٍ تالية: «كم عندي»
+          و«كم يجوز أن أخسر اليوم» سؤالٌ واحد في النموذج.
+      ---------------------------------------------------------------- */}
       {r !== null ? (
-        <Card testID="portfolio-card" title={t.home.portfolio}>
-          <View style={{ flexDirection: 'row', gap: theme.spacing.xl }}>
-            <Metric
-              testID="portfolio-broker"
-              label={t.home.brokerEquity}
-              value={r.portfolio?.broker_equity ?? null}
-              /*
-                السبب **يُقرأ من الخادم** ولا يُفترض هنا.
-
-                كانت هذه التسمية مثبَّتة: «لم يُقرَأ — الوسيط غير متصل».
-                فعُرضت على المالكة بينما شاشة النظام تقول في اللحظة نفسها
-                إن الوسيط **متصل** — والسبب الحقيقي كان `AttributeError`
-                على ميثود لا وجود لها. شاشتان تتناقضان، وإحداهما تخمّن.
-              */
-              caption={
-                (r.portfolio?.broker_equity ?? null) === null
-                  ? (r.portfolio?.note_ar ?? t.home.brokerEquityMissing)
-                  : undefined
-              }
+        <Card testID="allocated-card" title={t.home.allocated}>
+          {allocated !== null ? (
+            <AnimatedNumber
+              value={allocated}
+              decimals={2}
+              unit="دولار"
+              variant="numericLarge"
+              testID="allocated-equity"
             />
-            <Metric
-              testID="portfolio-baseline"
-              label={t.home.baselineEquity}
-              value={r.portfolio?.baseline_equity ?? null}
-              caption={t.home.baselineEquityHint}
-            />
+          ) : (
+            <Text variant="numericLarge" tabular testID="allocated-equity">
+              {r.portfolio?.current_equity ?? '—'}
+            </Text>
+          )}
+          <View style={{ flexDirection: 'row', gap: theme.spacing.sm, flexWrap: 'wrap' }}>
+            <Text variant="caption" tone="secondary" testID="allocated-baseline">
+              {`من ${r.portfolio?.baseline_equity ?? '—'} مخصَّصة`}
+            </Text>
+            {/*
+              الفرقُ عن المرجعي يُشتقّ من رقمين على الكائن نفسه — ولا يُسمّى
+              «محقَّقاً»: هو المحقَّق وغيرُ المحقَّق معاً على الحصّة، وتسميتُه
+              محقَّقاً دعوى لا يحملها العقد.
+            */}
+            {delta !== null ? (
+              <Text
+                variant="caption"
+                tone={delta < 0 ? 'negative' : delta > 0 ? 'positive' : 'secondary'}
+                tabular
+                testID="allocated-delta"
+              >
+                {`${delta < 0 ? '−' : '+'}${Math.abs(delta).toFixed(2)} عن المرجعي`}
+              </Text>
+            ) : null}
           </View>
-          {/*
-            الخلاف يُعرض لأنه **معلومة لا خطأ**: كل الحدود تُحسب من المرجعي،
-            فاختلافه عن الرصيد الفعلي يعني أن حدودك محسوبة على رقم غير واقعي.
-            وقد بقي هذا صامتاً حتى انكشف بالمصادفة: ١٥٠ مرجعاً و١٤٠ في الحساب.
-          */}
-          {r.portfolio?.diverged ? (
-            <Banner
-              testID="baseline-drift-banner"
-              tone="caution"
-              title={t.home.baselineDrift}
-              body={r.portfolio?.note_ar ?? undefined}
-            />
+          {s !== null ? (
+            <Text variant="micro" tone="tertiary" testID="allocated-freshness">
+              {formatSince(s.last_refresh_utc)}
+            </Text>
           ) : null}
-        </Card>
-      ) : null}
 
-      {/* ---- كم بقي لي ---- */}
-      {r !== null ? (
-        <>
-        {/* ----------------------------------------------------------------
-            **ما يفكر فيه الوكيل، ثمّ أين توقّف المسار.**
+          <Divider />
 
-            موضعُهما فوق المخاطرة والحدود عمداً: السؤال «هل أتدخّل؟» يسبق
-            «كم عندي؟». وبطاقةٌ تشرح صمت النظام هي الفراغ الذي وجده بحث
-            المنافسين — لا تطبيق من ثمانية عشر يعرض «لماذا لم أتداول».
-        ---------------------------------------------------------------- */}
-        {s !== null ? (
-          <AgentCard
-            testID="agent-card"
-            tone={verdict.tone}
-            title={verdict.verdict}
-            body={
-              s.no_trade_reason_ar ??
-              d?.explanation_ar ??
-              'لا سببَ مكتوبٌ لهذه الدورة بعد.'
-            }
-            chips={
-              participation.data?.available === true &&
-              Array.isArray(participation.data.steps)
-                ? participation.data.steps
-                    .filter((step) => step.count !== '—')
-                    .map((step) => ({ label: `${step.label_ar} ${step.count}` }))
-                : []
-            }
-          />
-        ) : null}
-
-        {/* قسمٌ موجودٌ بلا خطوات ليس مساراً — ولا يُعرض هيكلاً فارغاً. */}
-        {participation.data !== null &&
-        Array.isArray(participation.data.steps) &&
-        participation.data.steps.length > 0 ? (
-          <>
-            <SectionTitle
-              testID="day-path-title"
-              title="مسار اليوم"
-              note={participation.data.available ? 'أين توقّف' : 'غير معروف'}
-              noteTone={participation.data.available ? 'tertiary' : 'caution'}
-            />
-            <DayPath
-              testID="day-path"
-              steps={participation.data.steps.map((step) => ({
-                label: step.label_ar,
-                count: step.count,
-                reached: step.reached,
-              }))}
-              stopAt={
-                participation.data.available && participation.data.collapse_in_headline
-                  ? participation.data.steps.findIndex(
-                      (step) => step.key === participation.data?.collapse_stage,
-                    )
-                  : null
-              }
-              note={participation.data.note_ar}
-            />
-          </>
-        ) : null}
-
-        <Card testID="risk-card" title={t.home.risk}>
           {/*
             **أيّ الحدّين يعمل — بنصّ الخادم لا بتفسير العميل.**
 
-            كانت هذه البطاقة تعرض حدود الملف والمحرّك ينفّذ حدود الدستور:
-            0.75 لليوم معروضة و6.00 منفَّذة. وشاشةٌ تعد بحدٍّ أشدّ من
-            العامل ليست تحفّظاً، هي طمأنينةٌ كاذبة. فالأرقام الآن هي
-            المنفَّذة، وهذا السطر يقول ذلك — والفرق يُقال ولا يُخفى.
+            كانت هذه تعرض حدود الملف والمحرّك ينفّذ حدود الدستور: 0.75
+            معروضة و6.00 منفَّذة. وشاشةٌ تعد بحدٍّ أشدّ من العامل ليست
+            تحفّظاً، هي طمأنينةٌ كاذبة.
           */}
           <Text variant="micro" tone="tertiary" testID="risk-binding">
             {r.profile_binding_ar}
@@ -426,7 +357,6 @@ export default function HomeScreen(): React.JSX.Element {
           {/*
             «الحدّ» — العنصر التوقيعي. علامته تظهر عند صفر بالمئة أيضاً،
             بخلاف المؤشّر الذي كان يختفي فتبدو الشاشة معطوبة وهي سليمة.
-            العتبتان ٦٠٪ و٨٥٪ هما حيث تُضيَّق الأحجام ثم يُمنع الدخول.
           */}
           {riskRatio !== null ? (
             <Hadd
@@ -446,101 +376,95 @@ export default function HomeScreen(): React.JSX.Element {
             <Banner tone="negative" title="قفل الخسارتين مُفعَّل" body="لا دخول جديد اليوم." />
           ) : null}
         </Card>
+      ) : null}
 
-        {/*
-          **حدودٌ يحملها العقد ولا تُعرض.**
-        
-          `RiskData` يحمل سقفَ المراكز وسقفَ أوامر الدخول اليومية والخسائر
-          المتتالية وحدَّي التراجع — ولم يكن **واحدٌ منها** معروضاً. والعيب
-          `C2` — أربعةُ مراكز مقابل سقفٍ ثلاثة — كان سيُرى على الشاشة في اليوم
-          نفسه لو عُرض حقلان موجودان في العقد أصلاً. الشاشة لا تمنع الخرق
-          (المنع في محرّك المخاطر)، لكنها كانت ستكشفه.
-        */}
-        <Card testID="limits-card" title="الحدود">
-          {/*
-            **الملفُّ ورأسُ المال المحسوب عليه.** كانا في العقد ولا موضع
-            لهما على أيّ شاشة — أمسكهما `no-limit-is-silent`. وحدٌّ بلا
-            معرفةِ أيِّ ملفٍّ أنتجه وعلى أيّ رقمٍ حُسب رقمٌ بلا سند.
-          */}
-          <Field
-            label="الملف"
-            value={r.profile_name_ar}
-            testID="limit-profile-name"
+      {/* ----------------------------------------------------------------
+          **ما يفكر فيه الوكيل، ثمّ أين توقّف المسار.**
+
+          بطاقةٌ تشرح صمت النظام هي الفراغ الذي وجده بحث المنافسين — لا
+          تطبيق من ثمانية عشر يعرض «لماذا لم أتداول».
+
+          ولم تعد مشروطةً بوصول بيانات المخاطر: كانت داخل `r !== null`،
+          فتختفي أوضحُ جملةٍ في الشاشة حين يتعذّر أقلُّ حقلٍ فيها صلةً بها.
+      ---------------------------------------------------------------- */}
+      {s !== null ? (
+        <AgentCard
+          testID="agent-card"
+          tone={verdict.tone}
+          title={verdict.verdict}
+          body={
+            s.no_trade_reason_ar ??
+            d?.explanation_ar ??
+            'لا سببَ مكتوبٌ لهذه الدورة بعد.'
+          }
+          chips={
+            participation.data?.available === true &&
+            Array.isArray(participation.data.steps)
+              ? participation.data.steps
+                  .filter((step) => step.count !== '—')
+                  .map((step) => ({ label: `${step.label_ar} ${step.count}` }))
+              : []
+          }
+        />
+      ) : null}
+
+      {/* قسمٌ موجودٌ بلا خطوات ليس مساراً — ولا يُعرض هيكلاً فارغاً. */}
+      {participation.data !== null &&
+      Array.isArray(participation.data.steps) &&
+      participation.data.steps.length > 0 ? (
+        <>
+          <SectionTitle
+            testID="day-path-title"
+            title="مسار اليوم"
+            note={participation.data.available ? 'أين توقّف' : 'غير معروف'}
+            noteTone={participation.data.available ? 'tertiary' : 'caution'}
           />
-          <Field
-            label="رأس المال المحسوب عليه"
-            value={r.equity_used}
-            testID="limit-equity-used"
-          />
-          <Divider />
-          <Field
-            label="المراكز المفتوحة"
-            value={
-              r.open_positions === null
-                ? null
-                : `${r.open_positions} من ${r.max_open_positions ?? '—'}`
+          <DayPath
+            testID="day-path"
+            steps={participation.data.steps.map((step) => ({
+              label: step.label_ar,
+              count: step.count,
+              reached: step.reached,
+            }))}
+            stopAt={
+              participation.data.available && participation.data.collapse_in_headline
+                ? participation.data.steps.findIndex(
+                    (step) => step.key === participation.data?.collapse_stage,
+                  )
+                : null
             }
-            testID="limit-open-positions"
-            tone={
-              r.open_positions !== null &&
-              r.max_open_positions !== null &&
-              r.open_positions > r.max_open_positions
-                ? 'negative'
-                : undefined
-            }
+            note={participation.data.note_ar}
           />
-          {r.open_positions !== null &&
-          r.max_open_positions !== null &&
-          r.open_positions > r.max_open_positions ? (
-            <Text variant="caption" tone="secondary" testID="limit-open-positions-breach">
-              {`مفتوحٌ فوق السقف بمقدار ${r.open_positions - r.max_open_positions}. لا يُفتَح جديد.`}
-            </Text>
-          ) : null}
-          <Field
-            label="أوامر الدخول اليوم"
-            value={
-              r.entry_orders_today === null
-                ? null
-                : `${r.entry_orders_today} من ${r.max_entry_orders_per_day ?? '—'}`
-            }
-            testID="limit-entry-orders"
-          />
-          <Field
-            label="خسائر متتالية"
-            value={r.consecutive_losses === null ? null : String(r.consecutive_losses)}
-            testID="limit-consecutive-losses"
-            tone={r.two_loss_lock_active ? 'caution' : undefined}
-          />
-          <Divider />
-          <Field
-            label="توقّف التراجع التشغيلي"
-            value={r.operational_drawdown_stop}
-            testID="limit-operational-drawdown"
-          />
-          <Field
-            label="الحدّ المطلق للخسارة"
-            value={r.absolute_loss_boundary}
-            testID="limit-absolute-loss"
-          />
-          <Divider />
-          {/*
-            **ثلاثة أرقامٍ للمحفظة لا واحد، والخلاف بينها معلومة.**
-            «قيمة المحفظة» في قائمة الخمس ثوانٍ هي `current_equity` تحديداً،
-            وهو الرقم الذي كان غائباً.
-          */}
-          <Field label="المرجعي" value={r.portfolio.baseline_equity} testID="equity-baseline" />
-          <Field label="الحالي" value={r.portfolio.current_equity} testID="equity-current" />
-          <Field label="لدى الوسيط" value={r.portfolio.broker_equity} testID="equity-broker" />
-          {r.portfolio.diverged && r.portfolio.note_ar !== null ? (
-            <Text variant="caption" tone="secondary" testID="equity-diverged">
-              {r.portfolio.note_ar}
-            </Text>
-          ) : null}
-        </Card>
         </>
       ) : null}
 
-      {/* ---- المركز: الفراغ حالة لا خطأ ---- */}
+      {/* ---- الشموع والمستويات: على أيّ سعرٍ كان هذا الحكم ---- */}
+      {home !== null ? (
+        <Card
+          testID="home-chart-card"
+          title={`${home.symbol} · ${t.chart.frames[home.resolution] ?? home.resolution}`}
+        >
+          <CandleChart testID="home-chart" prepared={home.prepared} height={188} />
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+            <Text variant="micro" tone="tertiary" testID="home-chart-span">
+              {spanLabel(home.prepared.bars)}
+            </Text>
+            <Text variant="micro" tone="tertiary">
+              {home.levels.length === 0 ? t.chart.noPosition : t.chart.levelsOn}
+            </Text>
+          </View>
+          <NavRow testID="nav-chart" label={t.nav.chart} hint={t.navHint.chart} href="/(app)/chart" />
+        </Card>
+      ) : null}
+
+      {/* ----------------------------------------------------------------
+          **وهنا تنتهي الشاشة — عند المراكز، كما في النموذج.**
+
+          كان بعد هذا الموضع عشرُ بطاقات: النظام والأسبوع والملف والقرار
+          والاستراتيجية والحدث والحدود والمركز. انتقلت إلى تبويبيها:
+          ما يخصّ التشغيل والإصدار إلى «النظام»، وما يخصّ المراكز والحدود
+          إلى «المحفظة». والشاشةُ التي كلُّ شيءٍ فيها مهمّ لا شيءَ فيها مهمّ.
+      ---------------------------------------------------------------- */}
       {pos !== null && pos.has_position === false ? (
         <Vacancy
           testID="no-position-empty"
@@ -554,239 +478,51 @@ export default function HomeScreen(): React.JSX.Element {
         />
       ) : null}
 
-      {/* ---- حالة النظام ---- */}
-      {s !== null ? (
-        <Card testID="system-card" title={t.home.systemState}>
-          <View style={{ flexDirection: 'row', gap: theme.spacing.sm, flexWrap: 'wrap' }}>
-            <StatusPill
-              testID="system-state-pill"
-              label={presentSystemPhase(s.system_state, s.system_state_ar).labelAr}
-              tone={presentSystemPhase(s.system_state, s.system_state_ar).tone}
-            />
-            {s.kill_switch.active ? (
-              <StatusPill testID="killswitch-pill" label="قاطع الطوارئ مُفعَّل" tone="negative" />
-            ) : null}
-            {/* الشارة الثانية تظهر فقط إن لم تقلها المرحلة — كانت تُعرض مرّتين. */}
-            {s.locally_paused &&
-            !presentSystemPhase(s.system_state, s.system_state_ar).labelAr.includes('موقوف') ? (
-              <StatusPill testID="paused-pill" label="موقوف محلياً" tone="caution" />
-            ) : null}
-          </View>
-
-          <Divider />
-
-          <Field
-            testID="broker-field"
-            label={t.home.brokerConnection}
-            value={`${s.broker.name} — ${presentConnection(s.broker.connected).labelAr}`}
-            tone={s.broker.connected ? 'positive' : 'negative'}
-            /* السبب يسبق النوع حين يوجد: «غير متصل» وحدها لا يُتصرَّف عليها. */
-            hint={s.broker.note_ar ?? (s.broker.is_demo ? t.system.demo : t.system.live)}
-          />
-          {/*
-            **نطاق هذه الحالة يُقال، وحالةُ كل أداةٍ تُعرض معها.**
-
-            كانت البطاقة تقول «سوق الفوركس مفتوح» عن ذهبٍ يقول الوسيط إنه
-            مقفل — والمحرّك يرفضه بـMARKET_CLOSED في اللحظة نفسها. فقرأت
-            المالكة «مفتوح» ولم تفهم لماذا لا يتداول.
-          */}
-          <Field
-            testID="market-field"
-            label={t.home.marketStatus}
-            value={presentMarket(s.market.is_open).labelAr}
-            hint={[s.market.reason_ar, s.market.scope_ar].filter(Boolean).join(' · ')}
-          />
-          {/* قراءةٌ دفاعية: العقد يعد بالحقل، والاستجابة قد تنقص —
-              وشاشةٌ تنهار على حقلٍ ناقص أسوأ من شاشةٍ بلا تفصيل.
-              (أسقطها `sparse-data.test.tsx` فور كتابتها.) */}
-          {(s.market.per_instrument ?? []).map((row) => (
-            <Field
-              key={row.symbol}
-              testID={`market-instrument-${row.symbol}`}
-              label={row.symbol}
-              value={row.status}
-              hint={row.reason_ar}
-              tone={row.tradable === false ? 'caution' : undefined}
-            />
-          ))}
-          <Field
-            testID="completeness-field"
-            label={t.home.completeness}
-            value={`${presentCompleteness(
-              s.data_completeness.complete,
-              s.data_completeness.missing.length,
-            ).labelAr} · ${formatRatio(s.data_completeness.ratio)}`}
-            tone={s.data_completeness.complete ? 'positive' : 'caution'}
-            /*
-              الناقص الإلزامي يُسمّى أولاً لأنه يمنع التداول. والاختياري
-              يُذكر بعده **مفصولاً بكلمة تقول إنه لا يمنع** — وخلطُهما هو
-              ما جعل «٦٠٪» تبدو حاجزاً وهي ليست كذلك.
-            */
-            hint={
-              [
-                s.data_completeness.missing.length > 0
-                  ? s.data_completeness.missing.join('، ')
-                  : null,
-                (s.data_completeness.optional_missing?.length ?? 0) > 0
-                  ? `${t.home.optionalMissing}: ${(s.data_completeness.optional_missing ?? []).join('، ')}`
-                  : null,
-              ]
-                .filter(Boolean)
-                .join(' · ') || undefined
-            }
-          />
-          <Field
-            testID="last-refresh-field"
-            label={t.common.lastRefresh}
-            value={formatSince(s.last_refresh_utc)}
-            hint={formatInstant(s.last_refresh_utc)}
-          />
-        </Card>
-      ) : null}
-
-      {/* ---- تفاصيل الأسبوع ---- */}
-      {r !== null ? (
-        <Card testID="risk-week-card" title="الأسبوع">
-          <Field label="المستهلَك" value={r.risk_used_week} />
-          <Field label="المتبقّي" value={r.risk_remaining_week} />
-          <Field
-            label="المسافة إلى قاطع الطوارئ"
-            value={r.distance_to_kill_switch}
-            tone="caution"
-          />
-        </Card>
-      ) : null}
-
-      {/* ---- الملف ---- */}
-      {p !== null ? (
-        <Card testID="profile-card" title={t.home.profile}>
-          <Field label={t.profiles.selected} value={p.selected_name_ar ?? p.selected_profile} />
-          <Field label={t.profiles.effective} value={p.effective_name_ar ?? p.effective_profile} />
-          {p.pending_profile !== null ? (
-            <Field
-              label={t.profiles.pending}
-              value={p.pending_profile}
-              hint={`${t.profiles.coolingRemaining}: ${formatCooling(
-                p.cooling_remaining_seconds,
-              )}`}
-              tone="caution"
-            />
-          ) : null}
-          <NavRow
-            testID="nav-profiles"
-            label={t.nav.profiles}
-            hint={t.profiles.cannotChange}
-            href="/(app)/profiles"
-          />
-        </Card>
-      ) : null}
-
-      {/* ---- القرار ---- */}
-      {d !== null ? (
-        <Card testID="decision-card" title={t.home.decision}>
-          <StatusPill
-            testID="decision-pill"
-            label={presentDecision(d.decision, d.decision_ar).labelAr}
-            tone={presentDecision(d.decision, d.decision_ar).tone}
-          />
-          <Field
-            testID="score-field"
-            label={t.home.score}
-            value={d.score === null ? null : `${d.score.total} / ${d.score.max}`}
-            large
-          />
-          <NavRow
-            testID="nav-decision"
-            label={t.nav.decision}
-            hint={t.decision.descriptiveOnly}
-            href="/(app)/decision"
-          />
-        </Card>
-      ) : null}
-
-      {/* ---- الاستراتيجية ---- */}
-      {s !== null && s.strategy_state !== null ? (
-        <Card testID="strategy-card" title={t.home.strategy}>
-          <Field label="الاستراتيجية" value={s.strategy_state.title_ar} />
-          <Field
-            label="الحالة"
-            value={s.strategy_state.state}
-            tone={s.strategy_state.live_eligible ? 'positive' : 'caution'}
-            hint={
-              s.strategy_state.live_eligible
-                ? 'مُجازة للتنفيذ على الخادم.'
-                : 'غير مُجازة للتنفيذ بعد.'
-            }
-          />
-        </Card>
-      ) : null}
-
-      {/* ---- الحدث القادم ---- */}
-      <Card testID="event-card" title={t.home.upcomingEvent}>
-        {s !== null && s.upcoming_event !== null ? (
-          <>
-            <Field label="الحدث" value={s.upcoming_event.title_ar} />
-            <Field
-              label="الوقت"
-              value={formatInstant(s.upcoming_event.at_utc)}
-              hint={s.upcoming_event.impact_ar}
-              tone={s.upcoming_event.blocks_trading ? 'caution' : 'primary'}
-            />
-          </>
-        ) : (
-          <Text variant="caption" tone="tertiary" testID="no-event">
-            {t.home.noEvent}
-          </Text>
-        )}
-      </Card>
-
-      {/* ---- المركز الحالي ---- */}
-      <Card testID="position-card" title={t.home.position}>
-        {pos !== null && pos.has_position ? (
-          <>
-            <Field label={t.position.instrument} value={pos.instrument_ar ?? pos.instrument} />
-            <Field label={t.position.direction} value={pos.direction_ar} />
-            {/*
-              الربح غير المحقّق: الرقم الوحيد في التطبيق الذي يتحرّك لحظياً.
-              يأخذ الإشارة `+` أو `−` مع اللون — فاللون يعطي السرعة، والإشارة
-              تضمن أن المعنى لا يضيع في التدرّج الرمادي ولا عند عمى الألوان.
-            */}
-            <View style={{ gap: theme.spacing.xs }}>
-              <Text variant="caption" tone="secondary">
-                {t.position.unrealised}
+      {pos !== null && pos.has_position ? (
+        <Card testID="attention-card" title={t.home.attention}>
+          <Field label={t.position.instrument} value={pos.instrument_ar ?? pos.instrument} />
+          <Field label={t.position.direction} value={pos.direction_ar} />
+          <View style={{ gap: theme.spacing.xs }}>
+            <Text variant="caption" tone="secondary">
+              {t.position.unrealised}
+            </Text>
+            {unrealised !== null ? (
+              <AnimatedNumber
+                value={unrealised}
+                decimals={2}
+                unit="دولار"
+                variant="numericLarge"
+                signed
+                testID="unrealised-pnl"
+              />
+            ) : (
+              <Text
+                variant="numericLarge"
+                tone={presentPnlTone(pos.unrealised_pnl_sign)}
+                tabular
+                testID="unrealised-pnl"
+              >
+                {pos.unrealised_pnl ?? '—'}
               </Text>
-              {unrealised !== null ? (
-                <AnimatedNumber
-                  value={unrealised}
-                  decimals={2}
-                  unit="دولار"
-                  variant="numericLarge"
-                  signed
-                  testID="unrealised-pnl"
-                />
-              ) : (
-                <Text
-                  variant="numericLarge"
-                  tone={presentPnlTone(pos.unrealised_pnl_sign)}
-                  tabular
-                  testID="unrealised-pnl"
-                >
-                  {pos.unrealised_pnl ?? '—'}
-                </Text>
-              )}
-            </View>
-            <NavRow
-              testID="nav-position"
-              label={t.nav.position}
-              hint={t.position.cannotModify}
-              href="/(app)/position"
-            />
-          </>
-        ) : (
-          <Text variant="caption" tone="tertiary" testID="no-position">
-            {t.home.noPosition}
-          </Text>
-        )}
+            )}
+          </View>
+          <NavRow
+            testID="nav-position"
+            label={t.nav.position}
+            hint={t.position.cannotModify}
+            href="/(app)/position"
+          />
+        </Card>
+      ) : null}
+
+      {/* القرارُ شرحٌ لا أمر — صفُّ انتقالٍ يكفيه، وبطاقةٌ كاملة تُثقل. */}
+      <Card testID="today-more-card" title={t.nav.more}>
+        <NavRow
+          testID="nav-decision"
+          label={t.nav.decision}
+          hint={t.decision.descriptiveOnly}
+          href="/(app)/decision"
+        />
       </Card>
 
       {/* التنقّل صار في شريط التبويبات أسفل الشاشة — لا قائمةً مرسومة كبطاقة. */}

@@ -26,9 +26,14 @@ import {
   Text,
 } from '@/components';
 import { fixtures, isPreviewMode, previewOr } from '@/fixtures';
-import { formatInstant, t } from '@/i18n';
+import { formatCooling, formatInstant, formatRatio, formatSince, t } from '@/i18n';
 import { useTheme } from '@/theme';
-import { presentConnection } from '@/utils/present';
+import {
+  presentCompleteness,
+  presentConnection,
+  presentMarket,
+  presentSystemPhase,
+} from '@/utils/present';
 
 /**
  * النظام والوسيط.
@@ -46,6 +51,18 @@ export default function SystemScreen(): React.JSX.Element {
   const { data, error, loading, refresh } = useEndpoint((c) => c.getStatus(), {
     previewData: previewOr(fixtures.status),
   });
+  /*
+    **رصيدُ الوسيط نزل من «اليوم» إلى هنا.**
+
+    القرارُ المعتمد أنّ الحصّة المخصَّصة هي المقياس، ورصيدَ الوسيط معلومةُ
+    كفايةِ هامشٍ لا مقياس. وعرضُهما ندّين في رأس «اليوم» كان يقلب المعنى.
+  */
+  const risk = useEndpoint((c) => c.getRisk(), { previewData: previewOr(fixtures.risk) });
+  const profiles = useEndpoint((c) => c.getProfiles(), {
+    previewData: previewOr(fixtures.profiles),
+  });
+  const r = risk.data;
+  const p = profiles.data;
   const verdict = client.endpointVerdict();
 
   /**
@@ -99,6 +116,48 @@ export default function SystemScreen(): React.JSX.Element {
       onRefresh={refresh}
       refreshing={loading}
     >
+      {/* ----------------------------------------------------------------
+          **حالةُ التشغيل في بطاقةٍ واحدة.**
+
+          كانت مبعثرة: القاطعُ في أسفل هذه الشاشة، والخدمةُ والإيقاف في
+          «اليوم». وسؤالُ «هل الوكيل سليم؟» يُجاب بنظرةٍ واحدة أو لا يُجاب.
+
+          ولا يُكتب هنا سطرٌ عن «مراقبة المراكز» لأنّ العقد لا يحمل له
+          حقلاً — يُقال بدلَه ما هو صحيحٌ ومعروف: أنّ الإيقاف يمنع الدخول
+          وحده. جملةُ تصميمٍ صادقة خيرٌ من قراءةٍ مخترَعة.
+      ---------------------------------------------------------------- */}
+      {data !== null ? (
+        <Card testID="operating-card" title={t.home.operating}>
+          <View style={{ flexDirection: 'row', gap: theme.spacing.sm, flexWrap: 'wrap' }}>
+            <StatusPill
+              testID="system-state-pill"
+              label={presentSystemPhase(data.system_state, data.system_state_ar).labelAr}
+              tone={presentSystemPhase(data.system_state, data.system_state_ar).tone}
+            />
+            {data.kill_switch.active ? (
+              <StatusPill testID="killswitch-pill" label="قاطع الطوارئ مُفعَّل" tone="negative" />
+            ) : null}
+          </View>
+          <Divider />
+          <Field
+            testID="operating-entry"
+            label={t.home.entryNew}
+            value={data.locally_paused ? t.home.entryPausedLocally : t.home.entryAllowed}
+            tone={data.locally_paused ? 'caution' : 'positive'}
+          />
+          <Field
+            testID="operating-killswitch"
+            label={t.system.killSwitch}
+            value={data.kill_switch.active ? t.system.active : t.system.inactive}
+            tone={data.kill_switch.active ? 'negative' : 'positive'}
+            hint={data.kill_switch.reason_ar ?? undefined}
+          />
+          <Text variant="caption" tone="secondary" testID="operating-scope">
+            {t.home.pauseScope}
+          </Text>
+        </Card>
+      ) : null}
+
       <Card testID="transport-card" title={t.system.transport}>
         <StatusPill
           testID="transport-pill"
@@ -203,6 +262,137 @@ export default function SystemScreen(): React.JSX.Element {
                   void switchTo('DEMO');
                 }}
               />
+            )}
+          </Card>
+
+          {/* ----------------------------------------------------------------
+              **المزامنة والمصدر — ومعها الجملةُ التي تمنع سوء القراءة.**
+
+              «الرصيد التجريبي ليس رأس المال» ليس زخرفاً: بدونه يُقرأ رصيدُ
+              الوسيط الضخم على أنه ما تُحسب عليه الحدود، وهو ليس كذلك.
+          ---------------------------------------------------------------- */}
+          <Card testID="source-card" title={t.system.sourceTitle}>
+            <Field
+              testID="market-field"
+              label={t.home.marketStatus}
+              value={presentMarket(data.market.is_open).labelAr}
+              hint={[data.market.reason_ar, data.market.scope_ar].filter(Boolean).join(' · ')}
+            />
+            {(data.market.per_instrument ?? []).map((row) => (
+              <Field
+                key={row.symbol}
+                testID={`market-instrument-${row.symbol}`}
+                label={row.symbol}
+                value={row.status}
+                hint={row.reason_ar}
+                tone={row.tradable === false ? 'caution' : undefined}
+              />
+            ))}
+            <Field
+              testID="completeness-field"
+              label={t.home.completeness}
+              value={`${presentCompleteness(
+                data.data_completeness.complete,
+                data.data_completeness.missing.length,
+              ).labelAr} · ${formatRatio(data.data_completeness.ratio)}`}
+              tone={data.data_completeness.complete ? 'positive' : 'caution'}
+              hint={
+                [
+                  data.data_completeness.missing.length > 0
+                    ? data.data_completeness.missing.join('، ')
+                    : null,
+                  (data.data_completeness.optional_missing?.length ?? 0) > 0
+                    ? `${t.home.optionalMissing}: ${(data.data_completeness.optional_missing ?? []).join('، ')}`
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ') || undefined
+              }
+            />
+            <Field
+              testID="last-refresh-field"
+              label={t.common.lastRefresh}
+              value={formatSince(data.last_refresh_utc)}
+              hint={formatInstant(data.last_refresh_utc)}
+            />
+            {r !== null ? (
+              <>
+                <Divider />
+                <Field label="المرجعي" value={r.portfolio.baseline_equity} testID="equity-baseline" />
+                <Field label="الحالي" value={r.portfolio.current_equity} testID="equity-current" />
+                <Field label="لدى الوسيط" value={r.portfolio.broker_equity} testID="equity-broker" />
+                {r.portfolio.diverged && r.portfolio.note_ar !== null ? (
+                  <Text variant="caption" tone="secondary" testID="equity-diverged">
+                    {r.portfolio.note_ar}
+                  </Text>
+                ) : null}
+                <Banner
+                  testID="demo-balance-note"
+                  tone="info"
+                  title={t.home.demoBalanceTitle}
+                  body={`لدى الوسيط ${r.portfolio.broker_equity ?? '—'}. وكلُّ الحدود تُحسب من الحصّة المخصَّصة ${r.portfolio.baseline_equity ?? '—'} — والفرقُ يُقال ولا يُخفى.`}
+                />
+              </>
+            ) : null}
+          </Card>
+
+          {/* ---- الملف ---- */}
+          {p !== null ? (
+            <Card testID="profile-card" title={t.home.profile}>
+              <Field label={t.profiles.selected} value={p.selected_name_ar ?? p.selected_profile} />
+              <Field label={t.profiles.effective} value={p.effective_name_ar ?? p.effective_profile} />
+              {p.pending_profile !== null ? (
+                <Field
+                  label={t.profiles.pending}
+                  value={p.pending_profile}
+                  hint={`${t.profiles.coolingRemaining}: ${formatCooling(
+                    p.cooling_remaining_seconds,
+                  )}`}
+                  tone="caution"
+                />
+              ) : null}
+              <NavRow
+                testID="nav-profiles"
+                label={t.nav.profiles}
+                hint={t.profiles.cannotChange}
+                href="/(app)/profiles"
+              />
+            </Card>
+          ) : null}
+
+          {/* ---- الاستراتيجية ---- */}
+          {data.strategy_state !== null ? (
+            <Card testID="strategy-card" title={t.home.strategy}>
+              <Field label="الاستراتيجية" value={data.strategy_state.title_ar} />
+              <Field
+                label="الحالة"
+                value={data.strategy_state.state}
+                tone={data.strategy_state.live_eligible ? 'positive' : 'caution'}
+                hint={
+                  data.strategy_state.live_eligible
+                    ? 'مُجازة للتنفيذ على الخادم.'
+                    : 'غير مُجازة للتنفيذ بعد.'
+                }
+              />
+            </Card>
+          ) : null}
+
+          {/* ---- الحدث القادم: يمنع التداول، فموضعُه حيث تُقرأ شروط التشغيل ---- */}
+          <Card testID="event-card" title={t.home.upcomingEvent}>
+            {data.upcoming_event !== null ? (
+              <>
+                <Field label="الحدث" value={data.upcoming_event.title_ar} />
+                <Field
+                  label="الوقت"
+                  value={formatInstant(data.upcoming_event.at_utc)}
+                  hint={data.upcoming_event.impact_ar}
+                  tone={data.upcoming_event.blocks_trading ? 'caution' : 'primary'}
+                />
+              </>
+            ) : (
+              <Text variant="caption" tone="tertiary" testID="no-event">
+                {t.home.noEvent}
+              </Text>
             )}
           </Card>
 

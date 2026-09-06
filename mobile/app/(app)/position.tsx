@@ -15,6 +15,7 @@ import {
   Metric,
   Screen,
   Text,
+  Trio,
   Vacancy,
 } from '@/components';
 import { fixtures, isPreviewMode, previewOr } from '@/fixtures';
@@ -35,6 +36,15 @@ export default function PositionScreen(): React.JSX.Element {
   const { data, error, loading, refresh } = useEndpoint((c) => c.getCurrentPosition(), {
     previewData: previewOr(fixtures.position),
   });
+  /*
+    **الحدود نزلت من «اليوم» إلى هنا.**
+
+    سقفُ المراكز وسقفُ أوامر الدخول والخسائرُ المتتالية وحدّا التراجع —
+    كلُّها عن المراكز والتعرّض، فموضعُها تبويبُ المحفظة. وكانت تُطيل
+    شاشةَ «اليوم» بعشر بطاقاتٍ بعد المراكز، والنموذجُ ينتهي عندها.
+  */
+  const risk = useEndpoint((c) => c.getRisk(), { previewData: previewOr(fixtures.risk) });
+  const r = risk.data;
 
   if (loading && data === null) {
     return (
@@ -136,6 +146,74 @@ export default function PositionScreen(): React.JSX.Element {
         />
       ) : null}
 
+      {/* ----------------------------------------------------------------
+          **ثلاثةُ أرقامٍ فوق القائمة — وثالثُها «الحماية».**
+
+          كان المجموع تحت القائمة، وبلا «الحماية» أصلاً: تُقال ببانرٍ يظهر
+          عند العطل وحده. وغيابُ الإجابة الموجبة ليس مثلَ حضورها — الصمتُ
+          يُقرأ اطمئناناً، و«٤ من ٤ محميّة» تُقرأ معرفة.
+
+          والناقصُ يُعلَن ناقصاً: حقلٌ فارغٌ في مركز يجعل المجموع أقلَّ من
+          الحقيقة، ويُقرَأ على أنه الحقيقة.
+      ---------------------------------------------------------------- */}
+      {data.positions.length > 0
+        ? (() => {
+            const exposure = sumOf(data.positions, 'notional_display');
+            const riskAtStop = sumOf(data.positions, 'risk_at_stop');
+            const repeated = duplicateInstruments(data.positions);
+            const guarded = data.positions.filter(
+              (position) => position.protection_held_by_broker,
+            ).length;
+            const total = data.positions.length;
+            return (
+              <>
+                <Trio
+                  testID="position-trio"
+                  tiles={[
+                    {
+                      label: 'التعرّض',
+                      value: exposure.value === null ? '—' : exposure.value.toFixed(2),
+                    },
+                    { label: 'غير محقَّق', value: data.total_unrealised ?? '—' },
+                    {
+                      label: t.home.protectedCount,
+                      value: `${guarded}/${total}`,
+                      tone: guarded === total ? 'positive' : 'negative',
+                      spoken: `${guarded} من ${total} محميّة`,
+                    },
+                  ]}
+                />
+                <Card testID="position-totals-card" title="المخاطرة المفتوحة">
+                  <Field
+                    testID="total-exposure"
+                    label="التعرّض"
+                    value={exposure.value === null ? null : exposure.value.toFixed(2)}
+                  />
+                  <Field
+                    testID="total-risk"
+                    label="المخاطرة المفتوحة عند الوقف"
+                    value={riskAtStop.value === null ? null : riskAtStop.value.toFixed(2)}
+                    tone="caution"
+                  />
+                  {exposure.missing > 0 || riskAtStop.missing > 0 ? (
+                    <Text variant="caption" tone="secondary" testID="total-incomplete">
+                      {`مجموعٌ ناقص: ${Math.max(exposure.missing, riskAtStop.missing)} من ${total} مركزاً بلا قيمة. الرقم أقلّ من الحقيقة.`}
+                    </Text>
+                  ) : null}
+                  {repeated.length > 0 ? (
+                    <Banner
+                      testID="position-duplicate-instrument"
+                      tone="negative"
+                      title="تكرارُ أداة"
+                      body={repeated.map((d) => `${d.instrument}: ${d.count} مراكز`).join(' · ')}
+                    />
+                  ) : null}
+                </Card>
+              </>
+            );
+          })()
+        : null}
+
       {data.open_count !== null && data.open_count >= 1 && data.positions.length > 0 ? (
         <Card testID="position-all-card" title={`المراكز المفتوحة (${data.open_count})`}>
           {data.positions.map((position) => (
@@ -161,55 +239,6 @@ export default function PositionScreen(): React.JSX.Element {
             <Field label="مجموع غير المحقّق" value={data.total_unrealised} />
           ) : null}
 
-        {/*
-          **التعرّض والمخاطرة المفتوحة وتكرار الأداة.**
-        
-          الشاشة كانت تملك المصفوفة كاملةً ولا تجمعها. ويوم 2026-09-04 كان على
-          GBPUSD مركزان في اليوم نفسه — ضِعفُ المخاطرة المعتمدة على أداة واحدة —
-          وسطرٌ واحد كان سيقول ذلك.
-        
-          و**المجموع الناقص يُعلَن ناقصاً**: حقلٌ فارغٌ في مركز يجعل المجموع أقلّ
-          من الحقيقة ويُقرَأ على أنه الحقيقة.
-        */}
-        {data.positions.length > 0 ? (
-          <Card testID="position-totals-card" title="المجموع">
-            {(() => {
-              const exposure = sumOf(data.positions, 'notional_display');
-              const risk = sumOf(data.positions, 'risk_at_stop');
-              const repeated = duplicateInstruments(data.positions);
-              return (
-                <>
-                  <Field
-                    testID="total-exposure"
-                    label="التعرّض"
-                    value={exposure.value === null ? null : exposure.value.toFixed(2)}
-                  />
-                  <Field
-                    testID="total-risk"
-                    label="المخاطرة المفتوحة عند الوقف"
-                    value={risk.value === null ? null : risk.value.toFixed(2)}
-                    tone="caution"
-                  />
-                  {exposure.missing > 0 || risk.missing > 0 ? (
-                    <Text variant="caption" tone="secondary" testID="total-incomplete">
-                      {`مجموعٌ ناقص: ${Math.max(exposure.missing, risk.missing)} من ${data.positions.length} مركزاً بلا قيمة. الرقم أقلّ من الحقيقة.`}
-                    </Text>
-                  ) : null}
-                  {repeated.length > 0 ? (
-                    <Banner
-                      testID="position-duplicate-instrument"
-                      tone="negative"
-                      title="تكرارُ أداة"
-                      body={repeated
-                        .map((d) => `${d.instrument}: ${d.count} مراكز`)
-                        .join(' · ')}
-                    />
-                  ) : null}
-                </>
-              );
-            })()}
-          </Card>
-        ) : null}
         </Card>
       ) : null}
 
@@ -309,6 +338,88 @@ export default function PositionScreen(): React.JSX.Element {
         ويحرسه الآن `__tests__/navigation-reach.test.tsx`: كل شاشة تحت
         `(app)` يجب أن يصل إليها تبويبٌ أو صفٌّ من شاشة تبويب.
       */}
+      {/* ----------------------------------------------------------------
+          **حدودٌ يحملها العقد ولا تُعرض.**
+
+          `RiskData` يحمل سقفَ المراكز وسقفَ أوامر الدخول اليومية والخسائرَ
+          المتتالية وحدَّي التراجع — ولم يكن **واحدٌ منها** معروضاً. والعيب
+          `C2` — أربعةُ مراكز مقابل سقفٍ ثلاثة — كان سيُرى في اليوم نفسه لو
+          عُرض حقلان موجودان في العقد أصلاً. الشاشةُ لا تمنع الخرق، لكنها
+          كانت ستكشفه.
+      ---------------------------------------------------------------- */}
+      {r !== null ? (
+        <>
+          <Card testID="limits-card" title="الحدود">
+            <Field label="الملف" value={r.profile_name_ar} testID="limit-profile-name" />
+            <Field
+              label="رأس المال المحسوب عليه"
+              value={r.equity_used}
+              testID="limit-equity-used"
+            />
+            <Divider />
+            <Field
+              label="المراكز المفتوحة"
+              value={
+                r.open_positions === null
+                  ? null
+                  : `${r.open_positions} من ${r.max_open_positions ?? '—'}`
+              }
+              testID="limit-open-positions"
+              tone={
+                r.open_positions !== null &&
+                r.max_open_positions !== null &&
+                r.open_positions > r.max_open_positions
+                  ? 'negative'
+                  : undefined
+              }
+            />
+            {r.open_positions !== null &&
+            r.max_open_positions !== null &&
+            r.open_positions > r.max_open_positions ? (
+              <Text variant="caption" tone="secondary" testID="limit-open-positions-breach">
+                {`مفتوحٌ فوق السقف بمقدار ${r.open_positions - r.max_open_positions}. لا يُفتَح جديد.`}
+              </Text>
+            ) : null}
+            <Field
+              label="أوامر الدخول اليوم"
+              value={
+                r.entry_orders_today === null
+                  ? null
+                  : `${r.entry_orders_today} من ${r.max_entry_orders_per_day ?? '—'}`
+              }
+              testID="limit-entry-orders"
+            />
+            <Field
+              label="خسائر متتالية"
+              value={r.consecutive_losses === null ? null : String(r.consecutive_losses)}
+              testID="limit-consecutive-losses"
+              tone={r.two_loss_lock_active ? 'caution' : undefined}
+            />
+            <Divider />
+            <Field
+              label="توقّف التراجع التشغيلي"
+              value={r.operational_drawdown_stop}
+              testID="limit-operational-drawdown"
+            />
+            <Field
+              label="الحدّ المطلق للخسارة"
+              value={r.absolute_loss_boundary}
+              testID="limit-absolute-loss"
+            />
+          </Card>
+
+          <Card testID="risk-week-card" title="الأسبوع">
+            <Field label="المستهلَك" value={r.risk_used_week} />
+            <Field label="المتبقّي" value={r.risk_remaining_week} />
+            <Field
+              label="المسافة إلى قاطع الطوارئ"
+              value={r.distance_to_kill_switch}
+              tone="caution"
+            />
+          </Card>
+        </>
+      ) : null}
+
       <Card testID="position-more-card" title={t.nav.more}>
         <NavRow
           testID="nav-chart"
