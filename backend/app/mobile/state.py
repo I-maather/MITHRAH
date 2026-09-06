@@ -1201,8 +1201,25 @@ def _candles(sys: Any) -> dict[str, Any]:
         key=lambda r: CHART_RESOLUTION_ORDER.index(r) if r in CHART_RESOLUTION_ORDER else 99,
     )
 
+    # **السعرُ الحيّ — من الذاكرة أيضاً، وبلا نداء.**
+    #
+    # يُقرأ من الخط الذي جلبه في دورة القرار. فهو **آخرُ ما رآه النظام**،
+    # لا بثٌّ مباشر: عمرُه دورةٌ واحدة على الأكثر، و`at_utc` يقوله بصراحة
+    # كي لا تدّعي الشاشة حداثةً ليست لها.
+    live: dict[str, Any] = {}
+    pipeline = getattr(sys, "pipeline", None)
+    for symbol, pair in dict(getattr(pipeline, "last_quotes", {}) or {}).items():
+        if not isinstance(pair, tuple) or len(pair) != 2:
+            continue
+        quote, at = pair
+        price = _price(getattr(quote, "last", None))
+        if price is None:
+            continue
+        live[str(symbol)] = {"price": price, "at_utc": _iso(at)}
+
     position = _position(sys)
     return {
+        "live": live,
         "instruments": instruments,
         "symbols": sorted(instruments),
         "resolutions": resolutions,

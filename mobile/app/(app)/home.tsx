@@ -119,6 +119,8 @@ export default function HomeScreen(): React.JSX.Element {
     resolution: string;
     prepared: NonNullable<ReturnType<typeof prepareChart>>;
     levels: ChartLevel[];
+    /** آخرُ سعرٍ رآه القرار لهذه الأداة — أو `null` إن لم يصل. */
+    live: number | null;
   } | null => {
     const cd = candles.data;
     if (cd === null) {
@@ -151,7 +153,9 @@ export default function HomeScreen(): React.JSX.Element {
             .map(({ key, label, value, color }) => ({ key, label, value, color })) as ChartLevel[])
         : [];
     const prepared = prepareChart(perFrame[resolution] ?? [], levels);
-    return prepared === null ? null : { symbol, resolution, prepared, levels };
+    const rawLive = Number(cd.live?.[symbol]?.price);
+    const live = Number.isFinite(rawLive) ? rawLive : null;
+    return prepared === null ? null : { symbol, resolution, prepared, levels, live };
   })();
 
   /** الربح غير المحقّق رقماً. نصٌّ غير قابل للتحويل ⇒ يُعرض كما هو بلا حركة. */
@@ -541,7 +545,12 @@ export default function HomeScreen(): React.JSX.Element {
           testID="home-chart-card"
           title={`${home.symbol} · ${t.chart.frames[home.resolution] ?? home.resolution}`}
         >
-          <CandleChart testID="home-chart" prepared={home.prepared} height={188} />
+          <CandleChart
+            testID="home-chart"
+            prepared={home.prepared}
+            height={188}
+            livePrice={home.live}
+          />
           <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
             <Text variant="micro" tone="tertiary" testID="home-chart-span">
               {spanLabel(home.prepared.bars)}

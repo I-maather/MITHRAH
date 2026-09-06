@@ -1,5 +1,5 @@
 import React from 'react';
-import { Dimensions, PanResponder, View, type PanResponderInstance } from 'react-native';
+import { Animated, Dimensions, PanResponder, View, type PanResponderInstance } from 'react-native';
 
 import type { Candle } from '@/api/types';
 import { useTheme } from '@/theme';
@@ -29,11 +29,19 @@ import { Text } from './Text';
  *
  * ## اللون
  *
- * **الاتجاه يُرمَز بالشكل لا باللون**: الشمعة الصاعدة مجوّفة والهابطة مصمتة —
- * وهو العرف الياباني الأصلي. وذلك لسببين: أن قاعدة النسق تحجز الأخضر للربح
- * المحقّق والأحمر للخسارة، وشمعةٌ صاعدة ليست ربحاً؛ وأن معنى يُحمَل باللون
- * وحده يسقط عند عمى الألوان. فيبقى اللون للمستويات — وهي وحدها التي تحمل
- * مخاطرة.
+ * **الاتجاه يُرمَز بالشكل واللون معاً** — وهذا **قرارٌ نُقض بطلب المالكة**
+ * في ٦ سبتمبر ٢٠٢٦، لا بصمت.
+ *
+ * وكان القرارُ السابق: رماديٌّ كلُّه، صاعدةٌ مجوّفةٌ وهابطةٌ مصمتة، بحجّة أن
+ * النسق يحجز الأخضر للربح المحقَّق والأحمر للخسارة، وشمعةٌ صاعدة ليست ربحاً.
+ *
+ * وحجّةُ النقض — بنصّها: «الشمعة الصاعدة والهابطة معناها مختلفٌ عن النتيجة
+ * النهائية حتى لو كانتا أحمر وأخضر». أي أن السياق يفصل: لونٌ داخل رسم سعرٍ
+ * يُقرأ اتجاهاً، ولونٌ بجانب رقمِ ربحٍ يُقرأ نتيجة. والعينُ لا تخلط بينهما،
+ * بينما تعجز عن قراءة اتجاهِ شمعةٍ رماديّةٍ صغيرةٍ من امتلائها وحده.
+ *
+ * ويبقى الشكلُ مع اللون — مجوّفةٌ صاعدةٌ ومصمتةٌ هابطة — فمن لا يفرّق بين
+ * الأحمر والأخضر يقرأ الاتجاه من الامتلاء. ترميزٌ مزدوجٌ لا بديل.
  *
  * ## المحوران
  *
@@ -265,6 +273,14 @@ export function spanLabel(bars: readonly Parsed[]): string {
 }
 
 interface CandleChartProps {
+  /**
+   * آخرُ سعرٍ رآه النظام — يُرسَم خطّاً نابضاً فوق الشموع.
+   *
+   * ولماذا خطٌّ مستقلٌّ لا شمعةٌ تُمدّ: مدُّ آخر شمعةٍ إلى هذا السعر يخترع
+   * قمّةً وقاعاً لم يُرسلهما الوسيط. والخطُّ يقول ما يعرفه بالضبط: **هنا
+   * السعرُ الآن**، ولا يدّعي شكلَ الشمعة التي لم تُغلق بعد.
+   */
+  livePrice?: number | null;
   prepared: PreparedChart;
   testID?: string;
   /** يُستدعى بعدد المعروض وموضعه، كي تقول الشاشة «٢٠ من ٦٠». */
@@ -294,6 +310,7 @@ export function CandleChart({
   prepared,
   testID,
   onWindow,
+  livePrice = null,
   height = CHART_HEIGHT,
 }: CandleChartProps): React.JSX.Element {
   const theme = useTheme();
@@ -339,6 +356,78 @@ export function CandleChart({
   }, [bars.length, clampedOffset]);
 
   /**
+   * **طبقةُ اللمس.** معيارُ الرسوم يوجبها بنصّه: «أضِف طبقةَ التحويم —
+   * افتراضاً». ورسمٌ يُري الشكلَ ويمنع الرقمَ نصفُ رسم: العينُ ترى أن السعر
+   * صعد، ولا تعرف من كم إلى كم.
+   *
+   * والدخولُ إليها **ضغطةٌ مُمسَكة** لا لمسةٌ عابرة، لسببين: اللمسةُ العابرة
+   * تجعل الرسمَ جداراً لا تُمرَّر الصفحةُ من فوقه، والسحبُ الأفقيُّ محجوزٌ
+   * للتمرير في الزمن. فإذا استقرّ الإصبعُ ربعَ ثانيةٍ ظهر الخطّان والقراءة،
+   * ويتبعان الإصبعَ حتى يُرفَع. وأيُّ حركةٍ قبل ذلك تُلغي الانتظار — فالنيّةُ
+   * حينها تمريرٌ لا قراءة.
+   */
+  const [cursor, setCursor] = React.useState<number | null>(null);
+  const cursorRef = React.useRef<number | null>(null);
+  const holdRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const plotWidth = React.useRef(0);
+  const downRef = React.useRef({ x: 0, y: 0 });
+  const barsCountRef = React.useRef(0);
+  barsCountRef.current = bars.length;
+
+  const dropCursor = React.useCallback(() => {
+    if (holdRef.current !== null) {
+      clearTimeout(holdRef.current);
+      holdRef.current = null;
+    }
+    if (cursorRef.current !== null) {
+      cursorRef.current = null;
+      setCursor(null);
+    }
+  }, []);
+
+  React.useEffect(() => dropCursor, [dropCursor]);
+
+  /**
+   * موضعُ الإصبع → رقمُ الشمعة.
+   *
+   * والعرضُ **يُقاس** من `onLayout` ولا يُخمَّن من عرض الشاشة ناقصَ ثوابت،
+   * لأن ثابتاً واحداً يتغيّر يزيح المؤشّر عن الشمعة التي تحتها الإصبع.
+   */
+  const indexAt = React.useCallback((x: number): number | null => {
+    const width = plotWidth.current;
+    const count = barsCountRef.current;
+    if (width <= 0 || count <= 0) return null;
+    return Math.max(0, Math.min(count - 1, Math.floor((x / width) * count)));
+  }, []);
+
+  /**
+   * **النبضة.** نقطةٌ عند طرف خطّ السعر الحيّ تخفت وتعود كلَّ تسع أعشار
+   * ثانية. وهي الفرقُ بين شاشةٍ تعمل وشاشةٍ متجمّدة: الرقمُ قد لا يتغيّر
+   * دقيقةً كاملة، والنبضةُ تقول إن النظام ما زال يقرأ.
+   *
+   * والبناء كسولٌ لا `useRef(new Animated.Value(1))`: الوسيط يُقيَّم في كل
+   * تصييرٍ وإن أُهمل مخرجه.
+   */
+  const pulseRef = React.useRef<Animated.Value | null>(null);
+  if (pulseRef.current === null) {
+    pulseRef.current = new Animated.Value(1);
+  }
+  const pulse = pulseRef.current;
+
+  React.useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 0.2, duration: 900, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1, duration: 900, useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => {
+      loop.stop();
+    };
+  }, [pulse]);
+
+  /**
    * البناء **كسولٌ داخل `ref`**، لا `useRef(PanResponder.create(...))`.
    *
    * الوسيط في `useRef` يُقيَّم في كل تصيير وإن أُهمل مخرجه — فتُبنى نسخةٌ
@@ -357,6 +446,8 @@ export function CandleChart({
       // بدأت هنا فتنتهي هنا.
       onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: () => {
+        // التمريرُ يُلغي القراءة: مؤشّرٌ باقٍ على شمعةٍ رحلت يكذب.
+        dropCursor();
         start.current = {
           visible: live.current.visible,
           offset: live.current.offset,
@@ -415,6 +506,20 @@ export function CandleChart({
     (_, i) => scale.hi - (range * i) / (PRICE_TICKS - 1),
   );
 
+  /**
+   * السعرُ الحيّ **إن وقع داخل المقياس**.
+   *
+   * وخارجَه لا يُرسَم ولا يُمدّ له المقياس: مدُّه يضغط الشموع كلّها في خيط
+   * لأجل خطٍّ واحد — وهي القاعدة نفسها المطبَّقة على وقفٍ بعيد.
+   */
+  const liveInside =
+    livePrice !== null && Number.isFinite(livePrice) && livePrice >= scale.lo && livePrice <= scale.hi
+      ? livePrice
+      : null;
+
+  const cursorIndex = cursor === null ? null : Math.min(cursor, bars.length - 1);
+  const cursorBar = cursorIndex === null || cursorIndex < 0 ? undefined : bars[cursorIndex];
+
   const last = bars.length > 0 ? bars[bars.length - 1] : undefined;
   const step = stepOf(bars);
   /** أربعة أوسمةٍ على محور الوقت — أكثر منها يتراكب على شاشة هاتف. */
@@ -434,10 +539,13 @@ export function CandleChart({
       testID={testID}
       style={{
         height,
-        borderRadius: theme.radii.md,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        backgroundColor: theme.colors.surfaceSunken,
+        /*
+          **الإطارُ يزول.** كان صندوقاً محدَّداً داخل بطاقةٍ محدَّدة — علبةٌ
+          داخل علبة، وهي أوّلُ ما يُثقل الشاشة. والرسمُ يقف بذاته: الشموعُ
+          حدُّه، وسلّمُ السعر إلى جانبه.
+        */
+        borderRadius: theme.radii.card,
+        backgroundColor: 'transparent',
         overflow: 'hidden',
       }}
     >
@@ -463,7 +571,16 @@ export function CandleChart({
                 top: topPct(tick),
                 height: 1,
                 backgroundColor: theme.colors.border,
-                opacity: index === 0 || index === ticks.length - 1 ? 0 : 0.5,
+                /*
+                  **لا شبكةَ أصلاً.** كانت ثلاثةَ خطوطٍ عند 0.5 داخل رسمٍ
+                  ارتفاعُه 188، فوقها ثلاثةُ مستويات وحدُّ إطار — تسعةُ
+                  خطوطٍ أفقية على مساحةٍ لا تحتمل ثلاثة.
+
+                  والأرقامُ إلى الجانب تحمل المقياس كاملاً، فالخطُّ تحت كل
+                  رقمٍ تكرارٌ بصريٌّ له لا إضافة. ويبقى العنصرُ ليحمل موضعَ
+                  الوسم، ولا يُرسَم.
+                */
+                opacity: 0,
               }}
             />
           ))}
@@ -472,6 +589,7 @@ export function CandleChart({
           <View style={{ flex: 1, flexDirection: 'row', alignItems: 'stretch' }}>
             {bars.map((bar, index) => {
               const rising = bar.c >= bar.o;
+              const tone = rising ? theme.colors.positive : theme.colors.negative;
               const bodyTop = Math.max(bar.o, bar.c);
               const bodyBottom = Math.min(bar.o, bar.c);
               const bodyHeightPct = Math.max(((bodyTop - bodyBottom) / range) * 100, 0.6);
@@ -485,7 +603,7 @@ export function CandleChart({
                       width: 1,
                       top: topPct(bar.h),
                       height: `${((bar.h - bar.l) / range) * 100}%`,
-                      backgroundColor: theme.colors.textTertiary,
+                      backgroundColor: tone,
                     }}
                   />
                   {/* الجسم: مجوّف صاعدٌ، مصمتٌ هابط. */}
@@ -498,8 +616,8 @@ export function CandleChart({
                       top: topPct(bodyTop),
                       height: `${bodyHeightPct}%`,
                       borderWidth: 1,
-                      borderColor: theme.colors.textSecondary,
-                      backgroundColor: rising ? 'transparent' : theme.colors.textSecondary,
+                      borderColor: tone,
+                      backgroundColor: rising ? 'transparent' : tone,
                     }}
                   />
                 </View>
@@ -519,7 +637,7 @@ export function CandleChart({
                 top: topPct(last.c),
                 height: 1,
                 backgroundColor: theme.colors.textSecondary,
-                opacity: 0.65,
+                opacity: 0.5,
               }}
             />
           ) : null}
@@ -536,7 +654,12 @@ export function CandleChart({
                 top: topPct(level.value),
                 height: level.key === 'entry' ? 1 : 2,
                 backgroundColor: level.color,
-                opacity: 0.9,
+                /*
+                  المستوياتُ تبقى — هي وحدها التي تحمل مخاطرة — لكنها
+                  تهمس: 0.45 لا 0.9. الخطُّ الصارخ فوق الشموع يسرق القراءة
+                  من السعر نفسه.
+                */
+                opacity: 0.45,
               }}
             />
           ))}
@@ -563,6 +686,148 @@ export function CandleChart({
               </Text>
             </View>
           ))}
+
+          {/* ---- السعرُ الحيّ ---- */}
+          {liveInside !== null ? (
+            <View
+              testID="chart-live"
+              pointerEvents="none"
+              style={{ position: 'absolute', left: 0, right: 0, top: topPct(liveInside) }}
+            >
+              <View
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  right: 0,
+                  height: 1,
+                  backgroundColor: theme.colors.accent,
+                  opacity: 0.7,
+                }}
+              />
+              <Animated.View
+                testID="chart-live-pulse"
+                style={{
+                  position: 'absolute',
+                  right: 0,
+                  top: -3,
+                  width: 7,
+                  height: 7,
+                  borderRadius: 4,
+                  backgroundColor: theme.colors.accent,
+                  opacity: pulse,
+                }}
+              />
+            </View>
+          ) : null}
+
+          {/* ---- الخطّان والقراءة ---- */}
+          {cursorBar !== undefined && cursorIndex !== null ? (
+            <View
+              testID="chart-crosshair"
+              pointerEvents="none"
+              style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }}
+            >
+              <View
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  bottom: 0,
+                  left: `${((cursorIndex + 0.5) / Math.max(bars.length, 1)) * 100}%` as `${number}%`,
+                  width: 1,
+                  backgroundColor: theme.colors.textSecondary,
+                  opacity: 0.4,
+                }}
+              />
+              <View
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  right: 0,
+                  top: topPct(cursorBar.c),
+                  height: 1,
+                  backgroundColor: theme.colors.textSecondary,
+                  opacity: 0.4,
+                }}
+              />
+              {/*
+                القراءةُ تعلو الرسم بأرضيّةٍ صلبة: نصٌّ فوق شموعٍ رماديّة
+                يُقرأ نصفَ قراءة. وموضعُها الأعلى ثابتٌ لا يتبع الإصبع، لأن
+                لوحةً تقفز تحت اليد أسوأ من لوحةٍ بعيدة.
+              */}
+              <View
+                testID="chart-readout"
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  paddingVertical: 4,
+                  paddingHorizontal: 7,
+                  borderRadius: 10,
+                  backgroundColor: theme.colors.background,
+                }}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
+                  <Text variant="micro" tone="tertiary">
+                    {barLabel(cursorBar, step)}
+                  </Text>
+                  <Text variant="micro">{`إغلاق ${money(cursorBar.c)}`}</Text>
+                </View>
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: 1 }}>
+                  <Text variant="micro" tone="tertiary">{`فتح ${money(cursorBar.o)}`}</Text>
+                  <Text variant="micro" tone="tertiary">{`أعلى ${money(cursorBar.h)}`}</Text>
+                  <Text variant="micro" tone="tertiary">{`أدنى ${money(cursorBar.l)}`}</Text>
+                </View>
+              </View>
+            </View>
+          ) : null}
+
+          {/*
+            ---- ملتقِطُ اللمس ----
+
+            طبقةٌ شفّافةٌ فوق الكلّ بـ`box-only`: هي هدفُ اللمسة دائماً، فتأتي
+            الإحداثيّاتُ منسوبةً إلى الرسم لا إلى الشمعة التي صادفها الإصبع.
+            ولأنها بلا مُعالِجات استجابة، تصعد المفاوضةُ إلى الأب — فيبقى
+            التمريرُ والتقريبُ كما كانا.
+          */}
+          <View
+            testID="chart-touch"
+            pointerEvents="box-only"
+            onLayout={(event) => {
+              plotWidth.current = event.nativeEvent.layout.width;
+            }}
+            onTouchStart={(event) => {
+              downRef.current = {
+                x: event.nativeEvent.locationX,
+                y: event.nativeEvent.locationY,
+              };
+              if (holdRef.current !== null) clearTimeout(holdRef.current);
+              holdRef.current = setTimeout(() => {
+                const index = indexAt(downRef.current.x);
+                if (index === null) return;
+                cursorRef.current = index;
+                setCursor(index);
+              }, 240);
+            }}
+            onTouchMove={(event) => {
+              const x = event.nativeEvent.locationX;
+              if (cursorRef.current !== null) {
+                const index = indexAt(x);
+                if (index !== null && index !== cursorRef.current) {
+                  cursorRef.current = index;
+                  setCursor(index);
+                }
+                return;
+              }
+              const moved = Math.hypot(
+                x - downRef.current.x,
+                event.nativeEvent.locationY - downRef.current.y,
+              );
+              if (moved > 6) dropCursor();
+            }}
+            onTouchEnd={dropCursor}
+            onTouchCancel={dropCursor}
+            style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }}
+          />
         </View>
 
         {/* ---- عمود السعر ---- */}

@@ -472,6 +472,19 @@ class Pipeline:
             permissions = self.broker.get_trading_permissions(balances.account_id)
             quote = self.broker.get_market_data(symbol)
             details = self.broker.get_instrument_details(symbol)
+            # **السعرُ اللحظي يُحفَظ ولا يُهدَر.**
+            #
+            # الدورةُ تجلبه أصلاً لفحص السبريد ثم تُلقيه. وحفظُه هنا يجعل
+            # شاشةَ المالكة ترى سعراً يتحرّك كلَّ دورةِ قرار **بلا نداءٍ
+            # واحدٍ إضافي على الوسيط** — وهو القيد الذي اختارته صراحةً حين
+            # فُضّل الآمنُ على الحيّ بخمس ثوانٍ.
+            #
+            # ويُحفَظ على الخط لا على حالة المخاطرة: تلك تُبنى بـ`replace`
+            # في كل دورة، فما يُكتب فيها يضيع. والخط كائنٌ واحدٌ يعيش بعمر
+            # العملية، وهو نفسه `sys.pipeline` الذي تقرأ منه حالةُ الجوال.
+            if not hasattr(self, "last_quotes"):
+                self.last_quotes = {}
+            self.last_quotes[symbol] = (quote, now)
         except BrokerNotConnected as exc:
             self.kill_switch.trigger(
                 KillSwitchTrigger.BROKER_DISCONNECTED, reason_ar=str(exc), at=now
