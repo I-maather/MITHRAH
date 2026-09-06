@@ -3,6 +3,8 @@ import { View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { TRADING_ENVIRONMENT } from '@/api/config';
+import { useEndpoint } from '@/api/useEndpoint';
+import { fixtures, previewOr } from '@/fixtures';
 import { t } from '@/i18n';
 import { useTheme } from '@/theme';
 import { fontFamilies } from '@/theme/tokens';
@@ -11,20 +13,53 @@ import { Text } from './Text';
 /**
  * رأسُ التطبيق — `.chead` في النموذج المعتمد.
  *
- * كان **غيرَ موجودٍ إطلاقاً**: تفتح الشاشة على تاريخٍ وشارةِ بيئة، فلا شيء
- * يقول اسمَ التطبيق ولا يحمل هويّته. والرأسُ في النموذج أربعةُ عناصر:
+ * ## الاسمُ ملاصقٌ للمربّع
  *
- *   · مربّعُ الشعار 36×36، استدارة 12، بتدرّج مرجان→جمر.
- *   · «مِثْراة» بخطّ Reem Kufi 18، وتحته سطرٌ 9.
- *   · حبّةُ البيئة — `DEMO` بلون الكثيب على الجمر الخافت.
- *   · صورةٌ دائرية 35 بحدٍّ دافئ.
+ * رأته المالكة متباعداً وقالت: «كلمة مثراة اللي هي اللوجو المفروض تكون جو
+ * المربع مو بعيد عنو». والسببُ لم يكن ترتيباً بل **فيضاناً**: السطرُ الصغير
+ * تحت الاسم كان شعارَ التطبيق كاملاً، فاتّسع العمودُ ودفع المجموعةَ خارج
+ * الشاشة. فصار السطرُ قصيراً، والمجموعةُ لا تفيض (`flexShrink`)، والاسمُ
+ * ملاصقٌ للمربّع كما في النموذج.
  *
- * وحبّةُ البيئة هنا لا في بطاقةٍ سادسة: سؤال «تجريبي أم حقيقي؟» هو السؤال
- * الوحيد الذي خطؤه غير قابل للاستدراك.
+ * ## البيئةُ تُقرأ من الخادم لا من البناء
+ *
+ * سألت المالكة: «لو بدّلتُه بعدين لحقيقي حيتغير؟» — وكان الجواب **لا**:
+ * الحبّةُ كانت تقرأ `TRADING_ENVIRONMENT` المخبوزةَ وقت البناء. فلو حُوِّل
+ * الخادمُ إلى الحساب الحقيقي لبقي الرأس يقول «تجريبي» حتى تُبنى نسخةٌ
+ * جديدة — وهو بالضبط السؤالُ الذي خطؤه غير قابل للاستدراك.
+ *
+ * فصارت تقرأ `broker.is_demo` من الخادم. وإن اختلف ما في البناء عمّا يقوله
+ * الخادم، **يُقال الاثنان بلونٍ سالب** ولا يُرجَّح أحدهما صامتاً: اختلافُهما
+ * نفسُه هو المعلومة.
  */
 export function AppHeader(): React.JSX.Element {
   const theme = useTheme();
-  const live = TRADING_ENVIRONMENT === 'REAL';
+  const status = useEndpoint((c) => c.getStatus(), { previewData: previewOr(fixtures.status) });
+
+  const built: 'DEMO' | 'REAL' | 'UNSET' =
+    TRADING_ENVIRONMENT === 'REAL' ? 'REAL' : TRADING_ENVIRONMENT === 'DEMO' ? 'DEMO' : 'UNSET';
+
+  /** ما يقوله الخادمُ الآن — و`null` تعني «لم يُقرأ» لا «تجريبي». */
+  const served: 'DEMO' | 'REAL' | null =
+    status.data === null ? null : status.data.broker.is_demo ? 'DEMO' : 'REAL';
+
+  const disagree = served !== null && served !== built;
+  const label = served ?? built;
+  const live = label === 'REAL';
+
+  const tone = disagree
+    ? { bg: theme.colors.negativeSoft, fg: theme.colors.negative }
+    : served === null
+      ? { bg: theme.colors.surfaceSunken, fg: theme.colors.textTertiary }
+      : live
+        ? { bg: theme.colors.negativeSoft, fg: theme.colors.negative }
+        : { bg: theme.colors.accentSoft, fg: theme.colors.caution };
+
+  const spoken = disagree
+    ? `تعارض: الخادم ${served} والبناء ${built}`
+    : served === null
+      ? 'البيئة لم تُقرأ من الخادم بعد'
+      : `بيئة التداول: ${label}`;
 
   return (
     <View
@@ -37,8 +72,10 @@ export function AppHeader(): React.JSX.Element {
         paddingBottom: theme.spacing.md,
       }}
     >
-      {/* الشعار والاسم */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+      {/* الشعار والاسم — وحدةٌ واحدة لا تتباعد ولا تفيض. */}
+      <View
+        style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 1, minWidth: 0 }}
+      >
         <LinearGradient
           colors={[theme.colors.accentGlow, theme.colors.accent]}
           start={{ x: 0, y: 0 }}
@@ -62,42 +99,47 @@ export function AppHeader(): React.JSX.Element {
             مـ
           </Text>
         </LinearGradient>
-        <View>
+        <View style={{ flexShrink: 1, minWidth: 0 }}>
           <Text
             variant="bodyStrong"
             accessibilityRole="header"
+            numberOfLines={1}
             style={{ fontFamily: fontFamilies.logo, fontSize: 18 }}
           >
             {t.gate.title}
           </Text>
-          <Text variant="micro" tone="tertiary" style={{ fontSize: 9 }}>
-            {t.app.tagline}
+          {/*
+            سطرٌ قصير — `.logo small` في النموذج 9px. وشعارُ التطبيق الكامل
+            كان هنا فأفاض الرأس، وهو مكتوبٌ أصلاً تحت عنوان الشاشة.
+          */}
+          <Text variant="micro" tone="tertiary" numberOfLines={1} style={{ fontSize: 9 }}>
+            {t.app.shortTagline}
           </Text>
         </View>
       </View>
 
       {/* البيئة ثم الحساب */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm }}>
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: theme.spacing.sm,
+          flexShrink: 0,
+        }}
+      >
         <View
           accessible
-          accessibilityLabel={`بيئة التداول: ${TRADING_ENVIRONMENT}`}
+          accessibilityLabel={spoken}
+          testID="header-environment"
           style={{
             paddingVertical: 6,
             paddingHorizontal: 9,
             borderRadius: 20,
-            backgroundColor: live ? theme.colors.negativeSoft : theme.colors.accentSoft,
+            backgroundColor: tone.bg,
           }}
         >
-          <Text
-            variant="micro"
-            tabular
-            style={{
-              fontSize: 9,
-              letterSpacing: 0.8,
-              color: live ? theme.colors.negative : theme.colors.caution,
-            }}
-          >
-            {TRADING_ENVIRONMENT}
+          <Text variant="micro" tabular style={{ fontSize: 9, letterSpacing: 0.8, color: tone.fg }}>
+            {disagree ? `${served} ≠ ${built}` : (served ?? '—')}
           </Text>
         </View>
         <View

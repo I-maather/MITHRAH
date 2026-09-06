@@ -220,7 +220,7 @@ export default function HomeScreen(): React.JSX.Element {
       // العنوان يملكه شريط التبويبات وحده. كان يُكتب ثلاث مرّات في شاشة
       // واحدة: هيدر التنقّل، وعنوان الشاشة، والتبويب.
       title={formatToday()}
-      subtitle={t.app.tagline}
+      // الشعارُ صار في الرأس، وكتابتُه هنا ثانيةً تكرارٌ رأته المالكة.
       preview={preview}
       onRefresh={refreshAll}
       refreshing={status.loading}
