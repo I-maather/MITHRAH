@@ -104,7 +104,9 @@ export function Text({
         },
         tabular ? { fontVariant: ['tabular-nums'] } : null,
         // العائلة تحمل الوزن، فيُسقَط `fontWeight` — وإلا اصطنع iOS وزناً مشوّهاً.
-        { fontFamily: numbersFace ? fontFamilies.numeric : fontFamilies.arabic[scale.weight],
+        { fontFamily: numbersFace
+            ? fontFamilies.numeric[scale.weight]
+            : fontFamilies.arabic[scale.weight],
           fontWeight: undefined },
         style,
       ]}

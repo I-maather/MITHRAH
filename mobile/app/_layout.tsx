@@ -108,6 +108,12 @@ function FontGate({ children }: { children: React.ReactNode }): React.JSX.Elemen
     'IBMPlexSansArabic-SemiBold': require('../assets/fonts/IBMPlexSansArabic-SemiBold.ttf'),
     'IBMPlexSansArabic-Bold': require('../assets/fonts/IBMPlexSansArabic-Bold.ttf'),
     Newsreader: require('../assets/fonts/Newsreader.ttf'),
+    // الأرقام — Manrope كما في النموذج المعتمد، عائلةٌ لكل وزن.
+    'Manrope-Regular': require('../assets/fonts/Manrope-Regular.ttf'),
+    'Manrope-Medium': require('../assets/fonts/Manrope-Medium.ttf'),
+    'Manrope-SemiBold': require('../assets/fonts/Manrope-SemiBold.ttf'),
+    'Manrope-Bold': require('../assets/fonts/Manrope-Bold.ttf'),
+    'Manrope-ExtraBold': require('../assets/fonts/Manrope-ExtraBold.ttf'),
     ReemKufi: require('../assets/fonts/ReemKufi.ttf'),
     Amiri: require('../assets/fonts/Amiri-Regular.ttf'),
     'Amiri-Bold': require('../assets/fonts/Amiri-Bold.ttf'),

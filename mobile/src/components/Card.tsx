@@ -2,6 +2,7 @@ import React from 'react';
 import { View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { useTheme } from '@/theme';
+import { Glass } from './Glass';
 import { Text } from './Text';
 
 interface CardProps {
@@ -14,6 +15,16 @@ interface CardProps {
   testID?: string;
   /** لون حدّ دلالي عند الحاجة (مثلاً مركز مفتوح، قاطع مُفعَّل). */
   accentBorder?: string;
+  /**
+   * **مادّةُ البطاقة.**
+   *
+   * `solid` هي `.card` في النموذج: `night-800` بحدٍّ واستدارة 18.
+   * `glass` هي `.glass`: أربعُ طبقاتٍ واستدارة 26 — وهي مادّةُ البطاقتين
+   * الحاملتين في شاشة «اليوم» (المحفظة المخصَّصة، وما يفكر فيه الوكيل).
+   */
+  variant?: 'solid' | 'glass';
+  /** لون التوهّج خلف الزجاج — `.ai:after` في النموذج. */
+  glow?: string;
 }
 
 /**
@@ -26,8 +37,34 @@ export function Card({
   style,
   testID,
   accentBorder,
+  variant = 'solid',
+  glow,
 }: CardProps): React.JSX.Element {
   const theme = useTheme();
+
+  const head =
+    title !== undefined ? (
+      <View style={{ gap: theme.spacing.xxs }}>
+        <Text variant="heading" accessibilityRole="header">
+          {title}
+        </Text>
+        {subtitle !== undefined ? (
+          <Text variant="caption" tone="secondary">
+            {subtitle}
+          </Text>
+        ) : null}
+      </View>
+    ) : null;
+
+  if (variant === 'glass') {
+    return (
+      <Glass testID={testID} glow={glow} style={style}>
+        {head}
+        {children}
+      </Glass>
+    );
+  }
+
   return (
     <View
       testID={testID}
@@ -37,25 +74,15 @@ export function Card({
           backgroundColor: theme.colors.surface,
           borderColor: accentBorder ?? theme.colors.border,
           borderWidth: accentBorder === undefined ? 1 : 1.5,
-          borderRadius: theme.radii.lg,
+          // استدارةُ `.card` في النموذج — كانت `lg = 14`، فتُقرأ «مقربعة».
+          borderRadius: theme.radii.card,
           padding: theme.spacing.lg,
           gap: theme.spacing.md,
         },
         style,
       ]}
     >
-      {title !== undefined ? (
-        <View style={{ gap: theme.spacing.xxs }}>
-          <Text variant="heading" accessibilityRole="header">
-            {title}
-          </Text>
-          {subtitle !== undefined ? (
-            <Text variant="caption" tone="secondary">
-              {subtitle}
-            </Text>
-          ) : null}
-        </View>
-      ) : null}
+      {head}
       {children}
     </View>
   );

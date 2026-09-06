@@ -8,6 +8,8 @@ import { MIN_TOUCH_TARGET } from '@/theme/tokens';
 import { Text } from './Text';
 
 interface Tab {
+  /** رمزُ التبويب كما في `.nav` بالنموذج المعتمد. */
+  icon: string;
   path: string;
   label: string;
   /** الشاشات التي تُعتبر «داخل» هذا التبويب، فيبقى نشطاً وأنتِ فيها. */
@@ -36,14 +38,14 @@ interface Tab {
 export const TABS: Tab[] = [
   {
     path: '/home',
-    label: 'اليوم',
+    label: 'اليوم', icon: '✦',
     owns: ['/home', '/decision', '/scan', '/chart', '/intelligence'],
   },
-  { path: '/position', label: 'المحفظة', owns: ['/position', '/management', '/profiles'] },
-  { path: '/history', label: 'السجل', owns: ['/history', '/performance'] },
+  { path: '/position', label: 'المحفظة', icon: '◫', owns: ['/position', '/management', '/profiles'] },
+  { path: '/history', label: 'السجل', icon: '⌁', owns: ['/history', '/performance'] },
   {
     path: '/system',
-    label: 'النظام',
+    label: 'النظام', icon: '◎',
     owns: ['/system', '/providers', '/audit', '/settings', '/notifications', '/emergency'],
   },
 ];
@@ -66,14 +68,23 @@ export function TabBar(): React.JSX.Element {
   return (
     <View
       accessibilityRole="tablist"
+      /*
+        **شريطٌ عائم، لا شريطٌ ممتدّ بحدٍّ علويّ.**
+
+        `.nav` في النموذج المعتمد: هامشٌ من الجانبين ومن الأسفل، سطحٌ شبه
+        شفّاف `rgba(26,21,18,.9)`، حدٌّ `#4A3B2E`، استدارة 20، حشو 7. وكان
+        هنا شريطٌ يمتدّ من حافةٍ إلى حافة بخلفيةٍ صلبة — وهو أوّلُ ما يفرّق
+        الشكلين عند أسفل الشاشة.
+      */
       style={{
         flexDirection: 'row',
-        borderTopWidth: 1,
-        borderTopColor: theme.colors.border,
-        backgroundColor: theme.colors.background,
-        paddingBottom: Math.max(insets.bottom, theme.spacing.sm),
-        paddingTop: theme.spacing.sm,
-        paddingHorizontal: theme.spacing.sm,
+        borderWidth: 1,
+        borderColor: theme.colors.navBorder,
+        backgroundColor: theme.colors.navSurface,
+        borderRadius: theme.radii.nav,
+        marginHorizontal: 14,
+        marginBottom: Math.max(insets.bottom, 12),
+        padding: 7,
         gap: theme.spacing.xs,
       }}
     >
@@ -97,11 +108,16 @@ export function TabBar(): React.JSX.Element {
               minHeight: MIN_TOUCH_TARGET,
               alignItems: 'center',
               justifyContent: 'center',
-              borderRadius: theme.radii.pill,
+              // أزرارُ `.nav` استدارتها 12 لا حبّة كاملة.
+              borderRadius: 12,
               paddingVertical: theme.spacing.xs,
+              gap: 2,
               backgroundColor: active ? theme.colors.accent : 'transparent',
             }}
           >
+            <Text variant="micro" tone={active ? 'onAccent' : 'tertiary'}>
+              {tab.icon}
+            </Text>
             <Text variant="micro" tone={active ? 'onAccent' : 'secondary'}>
               {tab.label}
             </Text>

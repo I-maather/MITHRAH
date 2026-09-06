@@ -42,6 +42,32 @@ export interface ColorScheme {
   info: string;
   infoSoft: string;
 
+  /*
+    **الزجاج** — منقولٌ من `.glass` في النموذج المعتمد بقيمه:
+
+        background: linear-gradient(135deg, rgba(255,255,255,.10),
+                                            rgba(255,255,255,.035));
+        border: 1px solid rgba(255,255,255,.15);
+        box-shadow: inset 0 1px rgba(255,255,255,.09);
+        :before  background: rgba(16,15,14,.55)   ← تحت الزجاج
+
+    والطبقةُ السفلى ليست زينة: هي التي تُثبّت التباين مهما كان خلف البطاقة.
+  */
+  /** أعلى التدرّج القُطري. */
+  glassTop: string;
+  /** أسفله. */
+  glassBottom: string;
+  /** حدُّ الزجاج. */
+  glassBorder: string;
+  /** الطبقة المعتمة تحت الزجاج — بها يثبت التباين. */
+  glassBacking: string;
+  /** اللمعةُ الداخلية عند الحافة العليا. */
+  glassHighlight: string;
+
+  /** `.nav` — سطح شريط التبويبات العائم. */
+  navSurface: string;
+  navBorder: string;
+
   /** طبقة إخفاء المحتوى في مبدّل التطبيقات. */
   privacyVeil: string;
   /** حاجب المودالات. */
@@ -56,6 +82,18 @@ const withAlpha = (hex: string, alpha: number): string => {
 };
 
 export const lightColors: ColorScheme = {
+  /*
+    الوضعُ الفاتح **ليس في النموذج المعتمد**: النموذج داكنٌ وحده
+    (`#0C0B0A`). فهذه القيم اجتهادٌ متّسق مع منطق الزجاج نفسه — طبقةٌ
+    فاتحةٌ شبه معتمة يعلوها تدرّجٌ أبيض — ولا تُقدَّم على أنها معتمدة.
+  */
+  navSurface: 'rgba(255,255,255,0.92)',
+  navBorder: 'rgba(20,20,19,0.10)',
+  glassTop: 'rgba(255,255,255,0.86)',
+  glassBottom: 'rgba(255,255,255,0.46)',
+  glassBorder: 'rgba(20,20,19,0.10)',
+  glassBacking: 'rgba(255,255,255,0.72)',
+  glassHighlight: 'rgba(255,255,255,0.90)',
   background: palette.paper[50],
   surface: palette.paper[0],
   surfaceSunken: palette.paper[100],
@@ -85,6 +123,15 @@ export const lightColors: ColorScheme = {
 };
 
 export const darkColors: ColorScheme = {
+  /** `.nav` في النموذج: `rgba(26,21,18,.9)` وحدٌّ `#4A3B2E`. */
+  navSurface: 'rgba(26,21,18,0.9)',
+  navBorder: '#4A3B2E',
+  /** بقيم `.glass` في النموذج المعتمد حرفاً بحرف. */
+  glassTop: 'rgba(255,255,255,0.10)',
+  glassBottom: 'rgba(255,255,255,0.035)',
+  glassBorder: 'rgba(255,255,255,0.15)',
+  glassBacking: 'rgba(16,15,14,0.55)',
+  glassHighlight: 'rgba(255,255,255,0.09)',
   background: palette.night[950],
   surface: palette.night[900],
   surfaceSunken: palette.night[800],

@@ -61,7 +61,19 @@ export function ThemeProvider({
     };
   }, [forcedReduceMotion]);
 
-  const mode: 'light' | 'dark' = forcedMode ?? (systemScheme === 'dark' ? 'dark' : 'light');
+  /*
+    **الداكنُ افتراضاً، لا تبعاً للنظام.**
+
+    النموذج المعتمد داكنٌ وحده (`#0C0B0A`)، ولا لوحَ فاتحٌ معتمدٌ له. وكان
+    الوضعُ يتبع إعداد الجهاز، فمن كان جهازُها على الفاتح ترى لوحاً لم
+    يُصمَّم قطّ — وهو سببُ «لا تطابق التصميم المعتمد» قبل أيّ استدارةٍ
+    أو زجاج.
+
+    والفاتحُ باقٍ ويعمل: يُطلَب بـ`forcedMode`، ومُنتقيه في الإعدادات
+    خطوةٌ تالية مُعلَنة لا منسيّة.
+  */
+  void systemScheme;
+  const mode: 'light' | 'dark' = forcedMode ?? 'dark';
 
   const value = useMemo<Theme>(
     () => ({

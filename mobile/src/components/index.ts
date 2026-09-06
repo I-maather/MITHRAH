@@ -1,5 +1,6 @@
 export { Banner, OfflineBanner, PreviewBanner, StaleBanner } from './Banner';
 export { Button, ConfirmButton } from './Button';
+export { Glass } from './Glass';
 export { Card, Divider } from './Card';
 export { AgentCard, type AgentCardProps, type AgentChip } from './AgentCard';
 export { DayPath, type DayPathProps, type PathStep } from './DayPath';

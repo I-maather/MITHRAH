@@ -111,6 +111,22 @@ export const radii = {
   lg: 14,
   xl: 20,
   pill: 999,
+  /*
+    **أنصافُ أقطارِ النموذج المعتمد** — منقولةٌ من `qareeb-2026-09-04.html`
+    بقيمها، لا بتقديرٍ قريبٍ منها. كانت البطاقاتُ كلُّها على `lg = 14`
+    (وبعضُها `md = 10`)، والنموذجُ يتراوح بين 15 و26. والفرقُ يُقرأ
+    «مقربعة»، وهو أوّلُ ما يُلحَظ بالعين قبل أيّ محتوى.
+  */
+  /** `.tile` — بلاطة الثلاثي. */
+  tile: 15,
+  /** `.row` — صفُّ مركزٍ قابل للنقر. */
+  row: 16,
+  /** `.card` — البطاقة الصلبة، وقمعُ اليوم معها. */
+  card: 18,
+  /** `.nav` — شريط التبويبات العائم. */
+  nav: 20,
+  /** `.glass` — البطاقة الزجاجية. */
+  glass: 26,
 } as const;
 
 /**
@@ -158,8 +174,23 @@ export const fontFamilies = {
     '600': 'IBMPlexSansArabic-SemiBold',
     '700': 'IBMPlexSansArabic-Bold',
   } as Record<string, string>,
-  /** الأرقام — سيريفي. أوضح في الفصل بين 0 و8 و6 و9 على الشاشة الصغيرة. */
-  numeric: 'Newsreader',
+  /**
+   * الأرقام — **Manrope**، كما في النموذج المعتمد (`--num`).
+   *
+   * كان `Newsreader` — وهو خطٌّ مشجَّر. والتطبيق تسعون بالمئة منه أرقام،
+   * فاختلافُ وجهِ الرقم ليس تفصيلة: هو أوّلُ ما تراه العين وأكثرُه تكراراً.
+   *
+   * وعائلةٌ لكل وزنٍ للسبب نفسه المشروح أعلاه: على iOS تُهمَل `fontWeight`
+   * مع العائلات المخصّصة أو يُصطنع وزنٌ مشوّه.
+   */
+  numeric: {
+    '300': 'Manrope-Regular',
+    '400': 'Manrope-Regular',
+    '500': 'Manrope-Medium',
+    '600': 'Manrope-SemiBold',
+    '700': 'Manrope-Bold',
+    '800': 'Manrope-ExtraBold',
+  } as Record<string, string>,
   /** العلامة وشاشة البداية فقط. لا يُستعمل في نصّ الواجهة. */
   /** العناوين وجُمل الحكم. نسخيٌّ مفتوح الحروف، عربيٌّ لا مترجَم. */
   display: 'Amiri',
@@ -169,7 +200,7 @@ export const fontFamilies = {
 
 export const fonts = {
   arabic: fontFamilies.arabic['400'],
-  numeric: fontFamilies.numeric,
+  numeric: fontFamilies.numeric['400'],
 } as const;
 
 export type TypographyKey = keyof typeof typography;

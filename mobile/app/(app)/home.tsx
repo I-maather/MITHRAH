@@ -294,7 +294,11 @@ export default function HomeScreen(): React.JSX.Element {
           و«كم يجوز أن أخسر اليوم» سؤالٌ واحد في النموذج.
       ---------------------------------------------------------------- */}
       {r !== null ? (
-        <Card testID="allocated-card" title={t.home.allocated}>
+        <Card
+          testID="allocated-card"
+          title={t.home.allocated}
+          variant="glass"
+        >
           {allocated !== null ? (
             <AnimatedNumber
               value={allocated}
