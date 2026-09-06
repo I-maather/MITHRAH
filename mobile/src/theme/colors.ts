@@ -64,6 +64,11 @@ export interface ColorScheme {
   /** اللمعةُ الداخلية عند الحافة العليا. */
   glassHighlight: string;
 
+  /** قمّةُ تدرّج الخلفية — `linear-gradient(160deg, …)` في النموذج. */
+  backdropWarm: string;
+  /** الطرفُ الفاتح في تدرّجات الشعار والحرارة — المرجان. */
+  accentGlow: string;
+
   /** `.nav` — سطح شريط التبويبات العائم. */
   navSurface: string;
   navBorder: string;
@@ -87,6 +92,8 @@ export const lightColors: ColorScheme = {
     (`#0C0B0A`). فهذه القيم اجتهادٌ متّسق مع منطق الزجاج نفسه — طبقةٌ
     فاتحةٌ شبه معتمة يعلوها تدرّجٌ أبيض — ولا تُقدَّم على أنها معتمدة.
   */
+  backdropWarm: palette.paper[0],
+  accentGlow: palette.jamr.light,
   navSurface: 'rgba(255,255,255,0.92)',
   navBorder: 'rgba(20,20,19,0.10)',
   glassTop: 'rgba(255,255,255,0.86)',
@@ -123,6 +130,10 @@ export const lightColors: ColorScheme = {
 };
 
 export const darkColors: ColorScheme = {
+  /** `#1A1512` — قمّةُ التدرّج القُطريّ في `.screen`. */
+  backdropWarm: '#1A1512',
+  /** المرجان `#E09A6B` — طرفُ التدرّج الفاتح. */
+  accentGlow: '#E09A6B',
   /** `.nav` في النموذج: `rgba(26,21,18,.9)` وحدٌّ `#4A3B2E`. */
   navSurface: 'rgba(26,21,18,0.9)',
   navBorder: '#4A3B2E',

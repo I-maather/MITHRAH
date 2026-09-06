@@ -3,6 +3,8 @@ import { View } from 'react-native';
 
 import { useTheme } from '@/theme';
 import { toneOf, type ToneName } from '@/theme/colors';
+import { LinearGradient } from 'expo-linear-gradient';
+
 import { Glass } from './Glass';
 import { Text } from './Text';
 
@@ -70,10 +72,42 @@ export function AgentCard({
       // والعنوانُ اختياريّ، فلا يُنطَق «undefined» حين يقوله ما فوقها.
       accessibilityLabel={[title, body].filter(Boolean).join('. ')}
     >
-      {title !== undefined ? <Text variant="bodyStrong">{title}</Text> : null}
-      <Text variant="caption" tone="secondary">
-        {body}
-      </Text>
+      {/*
+        `.aist` — مربّعُ أيقونةٍ 36 بتدرّج مرجان→جمر إلى جانب النصّ. وكان
+        النصُّ وحده، فلا شيء يميّز البطاقةَ التي تشرح صمت النظام عن بقيّة
+        الصناديق. والفقرةُ 10.5 بارتفاع سطرٍ 1.75 كما في `.ai p`.
+      */}
+      <View style={{ flexDirection: 'row', gap: 11, alignItems: 'flex-start' }}>
+        <LinearGradient
+          colors={[theme.colors.accentGlow, theme.colors.accent]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: 12,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Text variant="micro" style={{ fontSize: 15, color: theme.colors.textOnAccent }}>
+            ✦
+          </Text>
+        </LinearGradient>
+        <View style={{ flex: 1, gap: 5 }}>
+          {title !== undefined ? (
+            <Text variant="bodyStrong" style={{ fontSize: 13 }}>
+              {title}
+            </Text>
+          ) : null}
+          <Text
+            variant="caption"
+            style={{ fontSize: 10.5, lineHeight: 18, color: theme.colors.textSecondary }}
+          >
+            {body}
+          </Text>
+        </View>
+      </View>
       {chips.length > 0 ? (
         <View
           accessible={false}
@@ -91,12 +125,15 @@ export function AgentCard({
                 key={chip.label}
                 style={{
                   backgroundColor: c.bg,
-                  borderRadius: theme.radii.pill,
-                  paddingVertical: theme.spacing.xxs,
-                  paddingHorizontal: theme.spacing.sm,
+                  // `.chip` في النموذج: مستطيلٌ محدَّدٌ باستدارة 10، لا حبّة.
+                  borderRadius: 10,
+                  borderWidth: 1,
+                  borderColor: c.fg,
+                  paddingVertical: 5,
+                  paddingHorizontal: 9,
                 }}
               >
-                <Text variant="micro" style={{ color: c.fg }}>
+                <Text variant="micro" style={{ fontSize: 9.5, color: c.fg }}>
                   {chip.label}
                 </Text>
               </View>

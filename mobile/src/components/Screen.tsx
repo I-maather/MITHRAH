@@ -6,8 +6,10 @@ import { useRouter } from 'expo-router';
 import { useSession } from '@/auth/SessionProvider';
 import { t } from '@/i18n';
 import { useTheme } from '@/theme';
+import { AppHeader } from './AppHeader';
 import { PreviewBanner } from './Banner';
 import { EnvironmentBadge } from './EnvironmentBadge';
+import { ScreenBackdrop } from './ScreenBackdrop';
 import { Text } from './Text';
 
 interface ScreenProps {
@@ -50,9 +52,17 @@ export function Screen({
   const { registerActivity } = useSession();
 
   return (
-    <ScrollView
+    /*
+      **الخلفيةُ خلف كلّ شيء، لا لونٌ على العنصر.**
+
+      `.screen` في النموذج طبقتان: توهّجٌ عنبريّ فوق تدرّجٍ قُطريّ. وكان
+      هنا `backgroundColor` مصمت — فتُقرأ الشاشةُ قائمةَ صناديقَ على سواد.
+    */
+    <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
+      <ScreenBackdrop />
+      <ScrollView
       testID={testID}
-      style={{ flex: 1, backgroundColor: theme.colors.background }}
+      style={{ flex: 1, backgroundColor: 'transparent' }}
       contentContainerStyle={{
         padding: theme.spacing.lg,
         /*
@@ -86,11 +96,16 @@ export function Screen({
       }
     >
       {/*
-        **البيئة قبل كل شيء.** الشارة في رأس كل شاشة لا تُمرَّر ولا تُطوى:
-        سؤال «تجريبي أم حقيقي؟» هو السؤال الوحيد الذي خطؤه غير قابل
-        للاستدراك، وكان جوابه تلميحاً بحجم 11pt في البطاقة السادسة.
+        **الرأس في الشاشات الجذرية.**
+
+        `.chead` في النموذج: شعارٌ واسمٌ وحبّةُ بيئةٍ وصورة. وكان التطبيق
+        يفتح على تاريخٍ وشارة — بلا اسمٍ ولا هوية. والحبّةُ داخل الرأس
+        تُغني عن الشارة المستقلّة، فلا تُقال البيئةُ مرّتين.
+
+        وفي الشاشات الداخلية تبقى الشارةُ كما كانت: سؤال «تجريبي أم
+        حقيقي؟» خطؤه غير قابل للاستدراك، فلا يُطوى في أيّ شاشة.
       */}
-      <EnvironmentBadge />
+      {root ? <AppHeader /> : <EnvironmentBadge />}
 
       {/*
         **العنوان مرّةً واحدة.** كان هيدرُ التنقّل يكتبه ثم تكتبه الشاشة،
@@ -148,6 +163,7 @@ export function Screen({
       {preview ? <PreviewBanner /> : null}
 
       {children}
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }

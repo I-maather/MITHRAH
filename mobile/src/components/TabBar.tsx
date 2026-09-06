@@ -112,13 +112,32 @@ export function TabBar(): React.JSX.Element {
               borderRadius: 12,
               paddingVertical: theme.spacing.xs,
               gap: 2,
-              backgroundColor: active ? theme.colors.accent : 'transparent',
+              /*
+                **النشطُ لونُ نصٍّ لا كتلةٌ ممتلئة.**
+
+                كان مستطيلاً برتقالياً مصمتاً خلف التبويب، فيثقل الشريط
+                ويجعله يبدو رخيصاً. وفي النموذج: الرمزُ والاسمُ بلون الجمر،
+                وما عداهما رماديّ — بلا خلفيةٍ إطلاقاً.
+              */
+              backgroundColor: 'transparent',
             }}
           >
-            <Text variant="micro" tone={active ? 'onAccent' : 'tertiary'}>
+            <Text
+              variant="micro"
+              style={{
+                fontSize: 13,
+                color: active ? theme.colors.accent : theme.colors.textTertiary,
+              }}
+            >
               {tab.icon}
             </Text>
-            <Text variant="micro" tone={active ? 'onAccent' : 'secondary'}>
+            <Text
+              variant="micro"
+              style={{
+                fontSize: 10,
+                color: active ? theme.colors.accent : theme.colors.textSecondary,
+              }}
+            >
               {tab.label}
             </Text>
           </Pressable>

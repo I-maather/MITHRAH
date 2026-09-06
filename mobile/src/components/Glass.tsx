@@ -148,10 +148,13 @@ export function Glass({
             position: 'absolute',
             top: 0,
             bottom: 0,
-            // التطبيق يُقلَب RTL على مستوى العملية (`applyRtl()`)، فحافّةُ
-            // البداية هي اليمين الفيزيائيّ. وRN لا تعرف `insetInlineEnd`.
-            right: 0,
-            width: 4,
+            /*
+              `.ai` في النموذج: `border-inline-end: 3px`. والتطبيق يُقلَب
+              RTL على مستوى العملية، فحافّةُ **النهاية** هي اليسار
+              الفيزيائيّ — وكان الشريطُ على اليمين، أي على الجانب الخطأ.
+            */
+            left: 0,
+            width: 3,
             backgroundColor: rail,
           }}
         />
