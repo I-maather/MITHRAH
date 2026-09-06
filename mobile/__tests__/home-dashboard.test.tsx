@@ -38,7 +38,6 @@ const REQUIRED_CARDS = [
   'allocated-card', // الرقم الرئيسي: الحصّة المخصَّصة، ومعها مخاطرةُ اليوم
   'agent-card', // ما يفكر فيه الوكيل — الفراغ الذي لا يملؤه أحد
   'home-chart-card', // على أيّ سعرٍ كان هذا الحكم
-  'today-more-card', // القرارُ شرحٌ لا أمر: صفُّ انتقالٍ يكفيه
 ];
 
 /**
@@ -92,10 +91,27 @@ describe('محتوى اللوحة', () => {
     expect(screen.getByTestId('day-path')).toBeTruthy();
   });
 
-  it('تعرض سبب الامتناع بنصّ الخادم', () => {
-    expect(screen.getByTestId('no-trade-reason')).toHaveTextContent(
-      fixtures.status.no_trade_reason_ar!,
-    );
+  it('**سببُ الامتناع يُعرض مرّةً واحدة لا ثلاثاً**', () => {
+    /*
+      رُئي على الجهاز يوم ٦ سبتمبر: «فتحُ المراكز موقوفٌ بقرارك…» ثلاثَ
+      مرّات في شاشةٍ واحدة — سطراً تحت الحكم، ثم متناً في بطاقة الوكيل،
+      والحكمُ نفسه مرّتين. وتكرارُ الجملة لا يؤكّدها: يجعل الشاشة تبدو
+      معطوبة، وهو أوّلُ ما يُفقد الثقة في واجهةٍ يُفترض أن تكون هادئة.
+    */
+    const reason = fixtures.status.no_trade_reason_ar!;
+    expect(screen.queryAllByText(reason)).toHaveLength(1);
+    expect(screen.getByTestId('agent-card')).toBeTruthy();
+    expect(screen.queryByTestId('no-trade-reason')).toBeNull();
+  });
+
+  it('**والحكمُ يُقال مرّةً واحدة** — في التحية وحدها', () => {
+    const verdictNodes = screen.queryAllByText(/مراكز مفتوحة|لا شيء يحتاجكِ|لم أتداول/);
+    expect(verdictNodes.length).toBeLessThanOrEqual(1);
+  });
+
+  it('لا بطاقةَ داخل بطاقة — صفُّ القرار سطرٌ لا علبة', () => {
+    expect(screen.queryByTestId('today-more-card')).toBeNull();
+    expect(screen.getByTestId('nav-decision')).toBeTruthy();
   });
 
   it('**رسم الرئيسية على إطار القرار وحده** — لا منتقيات ولا إيحاء بغيره', () => {

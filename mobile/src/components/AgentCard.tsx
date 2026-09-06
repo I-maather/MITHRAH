@@ -3,6 +3,7 @@ import { View } from 'react-native';
 
 import { useTheme } from '@/theme';
 import { toneOf, type ToneName } from '@/theme/colors';
+import { Glass } from './Glass';
 import { Text } from './Text';
 
 /**
@@ -28,8 +29,14 @@ export interface AgentChip {
 }
 
 export interface AgentCardProps {
-  /** عنوان الحالة — «لم أدخل اليوم» · «انقطع اتصالي بالخادم». */
-  title: string;
+  /**
+   * عنوان الحالة — **اختياريّ**.
+   *
+   * كان إلزامياً، فكانت الشاشة تكتب الحكم مرّتين: في `Welcome` أعلاها وفي
+   * هذا العنوان. ورُئي على الجهاز: «٥ مراكز مفتوحة.» مرّتين، وسببُها
+   * ثلاثاً. فحين يقوله ما فوقها، لا تقوله هي.
+   */
+  title?: string;
   /** الفقرة التي تشرح، بأرقامها. */
   body: string;
   /** لون الشريط الجانبي — يحمل الحالة قبل القراءة. */
@@ -49,23 +56,21 @@ export function AgentCard({
   const rail = toneOf(theme.colors, tone);
 
   return (
-    <View
+    /*
+      `.ai` في النموذج المعتمد **زجاجٌ** لا بطاقةٌ صلبة، ومعه توهّجٌ بلون
+      الشريط. وكانت هنا بطاقةً صلبةً بحدٍّ جانبيّ — فتُقرأ كبقيّة الصناديق،
+      ولا شيء يقول إنها الجملةُ التي تشرح صمت النظام.
+    */
+    <Glass
       testID={testID}
+      rail={rail.fg}
+      glow={rail.fg}
       accessible
-      accessibilityLabel={`${title}. ${body}`}
-      style={{
-        backgroundColor: theme.colors.surface,
-        borderColor: theme.colors.border,
-        borderWidth: 1,
-        // الشريط على حافة البداية — يقلبها RTL تلقائياً.
-        borderStartWidth: 4,
-        borderStartColor: rail.fg,
-        borderRadius: theme.radii.lg,
-        padding: theme.spacing.lg,
-        gap: theme.spacing.sm,
-      }}
+      // العنصرُ يُقرأ جملةً واحدة، فلا يُفرَّق نصُّه على قارئ الشاشة.
+      // والعنوانُ اختياريّ، فلا يُنطَق «undefined» حين يقوله ما فوقها.
+      accessibilityLabel={[title, body].filter(Boolean).join('. ')}
     >
-      <Text variant="bodyStrong">{title}</Text>
+      {title !== undefined ? <Text variant="bodyStrong">{title}</Text> : null}
       <Text variant="caption" tone="secondary">
         {body}
       </Text>
@@ -99,6 +104,6 @@ export function AgentCard({
           })}
         </View>
       ) : null}
-    </View>
+    </Glass>
   );
 }

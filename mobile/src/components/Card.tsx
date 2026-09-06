@@ -77,7 +77,8 @@ export function Card({
           // استدارةُ `.card` في النموذج — كانت `lg = 14`، فتُقرأ «مقربعة».
           borderRadius: theme.radii.card,
           padding: theme.spacing.lg,
-          gap: theme.spacing.md,
+          // فراغُ النموذج بين صفوف البطاقة أضيق — 8 لا 12.
+          gap: theme.spacing.sm,
         },
         style,
       ]}

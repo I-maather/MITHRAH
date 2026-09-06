@@ -35,8 +35,16 @@ export interface GlassProps {
   children: React.ReactNode;
   /** لون التوهّج — يُترك فارغاً فلا توهّج. */
   glow?: string;
+  /** شريطٌ ملوّن على حافة البداية — `--rail` في النموذج. */
+  rail?: string;
   radius?: number;
   padding?: number;
+  /*
+    **النطق يمرّ.** حين صارت بطاقةُ الوكيل زجاجاً فقدت وصفَها لقارئ الشاشة،
+    فأمسكه `qareeb-components`: بطاقةٌ تُقرأ جملةً واحدة صارت شظايا.
+  */
+  accessible?: boolean;
+  accessibilityLabel?: string;
   style?: StyleProp<ViewStyle>;
   testID?: string;
 }
@@ -52,10 +60,13 @@ const GLOW_RINGS = [
 export function Glass({
   children,
   glow,
+  rail,
   radius,
   padding,
   style,
   testID,
+  accessible,
+  accessibilityLabel,
 }: GlassProps): React.JSX.Element {
   const theme = useTheme();
   const r = radius ?? theme.radii.glass;
@@ -63,7 +74,8 @@ export function Glass({
   return (
     <View
       testID={testID}
-      accessible={false}
+      accessible={accessible ?? false}
+      accessibilityLabel={accessibilityLabel}
       style={[
         {
           borderRadius: r,
@@ -127,6 +139,23 @@ export function Glass({
           backgroundColor: theme.colors.glassHighlight,
         }}
       />
+
+      {/* الشريطُ الملوّن — الحدُّ الوحيد الملوّن في الشاشة. */}
+      {rail !== undefined ? (
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            top: 0,
+            bottom: 0,
+            // التطبيق يُقلَب RTL على مستوى العملية (`applyRtl()`)، فحافّةُ
+            // البداية هي اليمين الفيزيائيّ. وRN لا تعرف `insetInlineEnd`.
+            right: 0,
+            width: 4,
+            backgroundColor: rail,
+          }}
+        />
+      ) : null}
 
       {children}
     </View>

@@ -55,8 +55,18 @@ export function Screen({
       style={{ flex: 1, backgroundColor: theme.colors.background }}
       contentContainerStyle={{
         padding: theme.spacing.lg,
+        /*
+          **المسافةُ العليا كانت مفقودة.** الحشوُ من الجهات الأربع بمقدارٍ
+          واحد، فيمرّ أوّلُ سطرٍ تحت الساعة والشبكة والبطارية. ورُئي ذلك
+          على الجهاز: أرقامُ الرسم تتداخل مع شريط الحالة.
+        */
+        paddingTop: insets.top + theme.spacing.sm,
         paddingBottom: insets.bottom + theme.spacing.huge,
-        gap: theme.spacing.lg,
+        /*
+          إيقاعُ النموذج أضيق: بطاقاتُه تتلاصق بفراغٍ نحو 10–12، وكان
+          عندنا 16. والفراغُ الزائد يجعل الشاشة تبدو مبعثرةً لا هادئة.
+        */
+        gap: theme.spacing.md,
       }}
       onScrollBeginDrag={registerActivity}
       onTouchStart={registerActivity}
@@ -112,7 +122,20 @@ export function Screen({
             </Text>
           </Pressable>
         )}
-        <Text variant="display" accessibilityRole="header">
+        {/*
+          **العنوانُ في الشاشات الجذرية سطرٌ هادئ لا صيحة.**
+
+          كان التاريخُ يُرسم بحجم 30 فيصير أعلى صوتٍ في «اليوم» — والنموذج
+          المعتمد لا يضع تاريخاً كبيراً أصلاً: يفتح بالتحية ثم الحكم.
+          واسمُ الشاشة يقوله شريطُ التبويبات أسفلها.
+
+          ويبقى دورُه عنواناً لقارئ الشاشة كما كان.
+        */}
+        <Text
+          variant={root ? 'micro' : 'display'}
+          tone={root ? 'tertiary' : 'primary'}
+          accessibilityRole="header"
+        >
           {title}
         </Text>
         {subtitle !== undefined ? (

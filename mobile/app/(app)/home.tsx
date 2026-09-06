@@ -253,15 +253,14 @@ export default function HomeScreen(): React.JSX.Element {
             greeting={verdict.greeting}
             verdict={verdict.verdict}
           />
-          {s !== null && s.no_trade_reason_ar !== null ? (
-            <Text variant="body" tone="secondary" testID="no-trade-reason">
-              {s.no_trade_reason_ar}
-            </Text>
-          ) : d !== null && d.explanation_ar !== null ? (
-            <Text variant="body" tone="secondary" testID="decision-explanation">
-              {d.explanation_ar}
-            </Text>
-          ) : null}
+          {/*
+            **السببُ يُقال مرّةً واحدة — في بطاقة الوكيل.**
+
+            كان يُكتب هنا نصّاً، ثم يُكتب متناً في البطاقة نفسها بعد سطور.
+            ورُئي على الجهاز يوم ٦ سبتمبر: الجملةُ ذاتها **ثلاثَ مرّات** في
+            شاشةٍ واحدة، والحكمُ مرّتين. وتكرارُ الجملة لا يؤكّدها — يجعل
+            الشاشة تبدو معطوبة.
+          */}
           {d?.blocking_reasons_ar.map((reason, index) => (
             <View
               key={`${index}-${reason}`}
@@ -392,24 +391,26 @@ export default function HomeScreen(): React.JSX.Element {
           فتختفي أوضحُ جملةٍ في الشاشة حين يتعذّر أقلُّ حقلٍ فيها صلةً بها.
       ---------------------------------------------------------------- */}
       {s !== null ? (
-        <AgentCard
-          testID="agent-card"
-          tone={verdict.tone}
-          title={verdict.verdict}
-          body={
-            s.no_trade_reason_ar ??
-            d?.explanation_ar ??
-            'لا سببَ مكتوبٌ لهذه الدورة بعد.'
-          }
-          chips={
-            participation.data?.available === true &&
-            Array.isArray(participation.data.steps)
-              ? participation.data.steps
-                  .filter((step) => step.count !== '—')
-                  .map((step) => ({ label: `${step.label_ar} ${step.count}` }))
-              : []
-          }
-        />
+        <>
+          <SectionTitle title="ما يفكر فيه الوكيل" note="مباشر" noteTone="tertiary" />
+          <AgentCard
+            testID="agent-card"
+            tone={verdict.tone}
+            body={
+              s.no_trade_reason_ar ??
+              d?.explanation_ar ??
+              'لا سببَ مكتوبٌ لهذه الدورة بعد.'
+            }
+            chips={
+              participation.data?.available === true &&
+              Array.isArray(participation.data.steps)
+                ? participation.data.steps
+                    .filter((step) => step.count !== '—')
+                    .map((step) => ({ label: `${step.label_ar} ${step.count}` }))
+                : []
+            }
+          />
+        </>
       ) : null}
 
       {/* قسمٌ موجودٌ بلا خطوات ليس مساراً — ولا يُعرض هيكلاً فارغاً. */}
@@ -519,15 +520,18 @@ export default function HomeScreen(): React.JSX.Element {
         </Card>
       ) : null}
 
-      {/* القرارُ شرحٌ لا أمر — صفُّ انتقالٍ يكفيه، وبطاقةٌ كاملة تُثقل. */}
-      <Card testID="today-more-card" title={t.nav.more}>
-        <NavRow
-          testID="nav-decision"
-          label={t.nav.decision}
-          hint={t.decision.descriptiveOnly}
-          href="/(app)/decision"
-        />
-      </Card>
+      {/*
+        **صفٌّ لا بطاقةٌ داخل بطاقة.**
+
+        كان صفُّ الانتقال ملفوفاً ببطاقةٍ عنوانُها «بقيّة هذا القسم» — علبةٌ
+        حول علبةٍ حول سطر. ورُئي على الجهاز فبدا حشواً.
+      */}
+      <NavRow
+        testID="nav-decision"
+        label={t.nav.decision}
+        hint={t.decision.descriptiveOnly}
+        href="/(app)/decision"
+      />
 
       {/* التنقّل صار في شريط التبويبات أسفل الشاشة — لا قائمةً مرسومة كبطاقة. */}
 
