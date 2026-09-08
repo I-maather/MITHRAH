@@ -199,9 +199,27 @@ def _sum_realised(rows) -> tuple[Decimal, int]:
     return total, unknown
 
 
-def _consecutive_losses(session: Session) -> int:
+#: **نافذةُ عدّاد الخسائر المتتالية — قرار المالكة ٢٠٢٦-٠٩-٠٨.**
+#:
+#: كان العدّاد يقرأ ذيلَ الدفتر **بلا نافذةٍ زمنية إطلاقاً**: خسارةُ الأسبوع
+#: الماضي تُعَدّ كخسارة اليوم. وأثرُه مقيسٌ لا مفترَض — ثلاثةُ إغلاقاتٍ خاسرة
+#: بين ٧ و٨ سبتمبر أقفلت النظام، ولا شيء في الكود كلّه يفكّ القفل: العدّاد
+#: لا ينزل إلا بإغلاقٍ رابح، والإغلاقُ الرابح يحتاج صفقةً، والصفقةُ ممنوعةٌ
+#: بالعدّاد. حلقةٌ مغلقةٌ لا تنفكّ من داخلها.
+#:
+#: وقاعدةُ المشروع صريحة: «لا تجعل خسارتين متتاليتين سببًا لإيقاف النظام إلى
+#: أجل غير محدد… يستمرّ التداول بعد اجتياز الفحوص». فالتهدئةُ يجب أن تنتهي.
+#:
+#: أربعٌ وعشرون ساعةً متدحرجة: تبقى التهدئةُ فاعلةً حيث تنفع — داخل اليوم،
+#: حين يكون الظرفُ السوقيُّ نفسُه ما زال قائماً — وتزول حين يتبدّل.
+CONSECUTIVE_LOSS_WINDOW_HOURS = 24
+
+
+def _consecutive_losses(session: Session, *, at: Optional[datetime] = None) -> int:
     """
-    الخسائرُ المتتالية في ذيل الدفتر — تتوقّف عند أوّل ربح.
+    الخسائرُ المتتالية في ذيل الدفتر — **داخل نافذةٍ متدحرجة**.
+
+    تتوقّف عند أوّل ربح، وعند أوّل مجهول، **وعند حافّة النافذة**.
 
     وتتوقّف أيضاً عند أوّل **مجهول**: صفقةٌ لا نعرف نتيجتها لا تُعَدّ خسارةً
     ولا تُعَدّ ربحاً يقطع السلسلة.
@@ -210,12 +228,16 @@ def _consecutive_losses(session: Session) -> int:
     تهدئةِ مخاطر، ورأسُ المال لا يسأل عن سبب الخسارة. والاستبعادُ موضعُه
     إحصاءُ أداء الاستراتيجية، وهو عدّادٌ آخر.
     """
+    since = (at or now_utc()) - timedelta(hours=CONSECUTIVE_LOSS_WINDOW_HOURS)
     rows = session.execute(
         select(PositionBookRow.realised_pnl)
         .where(
             PositionBookRow.state == STATE_CLOSED,
             PositionBookRow.reconciliation == RECON_CONFIRMED,
             PositionBookRow.closed_at_utc.is_not(None),
+            # حافّةُ النافذة: ما أُغلق قبلها لا يُعَدّ. وهي شرطٌ في الاستعلام
+            # لا في الحلقة، فلا يقف العدُّ عند صفقةٍ قديمةٍ بل يتجاهلها.
+            PositionBookRow.closed_at_utc >= since,
         )
         .order_by(PositionBookRow.closed_at_utc.desc())
         .limit(50)
@@ -298,7 +320,7 @@ def load_session_state(
         unrealized_pnl=unrealised,
         open_positions=len(open_symbols),
         entry_orders_today=entries_today,
-        consecutive_losses=_consecutive_losses(session),
+        consecutive_losses=_consecutive_losses(session, at=at),
         open_symbols=open_symbols,
         unknown_realised_closes=max(unknown_today, unknown_week, unknown_total),
         equity_known=known,
