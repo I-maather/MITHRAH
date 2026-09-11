@@ -143,6 +143,15 @@ class ModeSpec:
     purpose_ar: str
     #: أقصى عدد مراكز مفتوحة على **مصدر تعرّض واحد**. انظر `EXPOSURE_BUCKETS`.
     max_positions_per_exposure_bucket: int = 1
+    #: **سقفُ حرارة المحفظة** — نسبةً من رأس المال المرجعي.
+    #:
+    #: مجموعُ ما تخسره المراكزُ المفتوحة **كلُّها** لو ضُربت وقوفُها معاً.
+    #: حدُّ العدد يقول «ثلاثة مراكز» ولا يقول كم تخسر الثلاثة مجتمعةً؛
+    #: وثلاثةُ مراكزَ كلٌّ منها عند السقف الصلب تخسر ٤٫٥٠ ولا شيءَ كان
+    #: يمنع ذلك قبل وقوعه.
+    #:
+    #: `None` = لا سقف (الأوضاع التي تسمح بمركزٍ واحد لا تحتاجه).
+    max_portfolio_risk_pct: Optional[Decimal] = None
 
 
 _IBKR_COMMISSIONING_QUANTITY = BrokerQuantityPolicy(
@@ -181,8 +190,19 @@ DISCOVERED_FOUR: frozenset[str] = frozenset({"EURUSD", "GBPUSD", "USDJPY", "GOLD
 #: ولا يُختلق معامل ارتباط: قياسه يحتاج تاريخاً مشتركاً للأربع لم يُجمَع بعد.
 #: فيُعلَن النقص ويُحدّ أثره (مركز واحد لكل مصدر)، ولا يُموَّه برقم مخترع.
 EXPOSURE_BUCKETS: dict[str, str] = {
-    "EURUSD": "EUR",
-    "GBPUSD": "GBP",
+    # **اليورو والجنيه دلوٌ واحد.**
+    #
+    # كانا دلوَين منفصلَين، فكان النظام يفتح مركزاً في كلٍّ منهما ويحسبهما
+    # فرصتَين. وهما يتحرّكان بالسبب نفسه في معظم الجلسات (أوروبا مقابل
+    # الدولار)، فالمركزان **رهانٌ واحدٌ بضِعفَي الحجم** — وحدودُ المخاطرة
+    # تحسبه رهانَين فتكذب بالضِّعف.
+    #
+    # والثمنُ مُعلَن: مركزٌ في اليورو يمنع الجنيه. هذا مقصودٌ لا أثرٌ جانبي.
+    #
+    # ولا يُدّعى قياسُ ارتباط: لم يُجمع تاريخٌ مشترك بعد. هذا **فصلٌ على
+    # المنطقة الاقتصادية** — أضعفُ من معامل ارتباطٍ مقيس، وأقوى من لا شيء.
+    "EURUSD": "USD_MAJORS",
+    "GBPUSD": "USD_MAJORS",
     "USDJPY": "JPY",
     "GOLD": "XAU",
 }
@@ -221,6 +241,9 @@ MODE_SPECS: dict[RiskMode, ModeSpec] = {
         gap_slippage_reserve_usd=None,
         target_risk_usd=None,
         max_open_positions=3,
+        # ٢٫٢٥ على مرجع ٣٠٠ = ثلاثةُ مراكزَ بالمخاطرة المستهدفة (٣ × ٠٫٧٥).
+        # متّسقٌ مع حدّ المراكز الثلاثة، وأقلُّ من حدّ اليوم (٦٫٠٠) بهامش.
+        max_portfolio_risk_pct=D("0.0075"),
         max_entry_orders_per_day=6,
         consecutive_losses_pause=2,
         pause_scope=PauseScope.LOCKED_REVIEW,
@@ -444,6 +467,8 @@ class RiskLimits:
     allowed_instruments: frozenset[str]
     quantity_policy: BrokerQuantityPolicy
     max_positions_per_exposure_bucket: int = 1
+    #: سقفُ حرارة المحفظة بالدولار. `None` = لا سقف.
+    max_portfolio_risk: Optional[Decimal] = None
 
     @property
     def allocated_margin_per_position(self) -> Decimal:
@@ -491,6 +516,16 @@ class RiskLimits:
             )
         if self.max_positions_per_exposure_bucket < 1:
             raise IncoherentRiskLimits("سقف مصدر التعرّض لا يقلّ عن واحد.")
+        # سقفُ حرارةٍ أصغرُ من المخاطرة المستهدفة يمنع **أوّلَ** صفقةٍ ولا
+        # يحمي شيئاً: يُرفَض عند البناء لا عند أوّل إشارةٍ تُردّ بلا سبب مفهوم.
+        if (
+            self.max_portfolio_risk is not None
+            and self.max_portfolio_risk < self.target_risk_per_trade
+        ):
+            raise IncoherentRiskLimits(
+                f"سقف حرارة المحفظة {self.max_portfolio_risk} أصغر من المخاطرة "
+                f"المستهدفة {self.target_risk_per_trade} — يمنع أول صفقة."
+            )
 
     # --- توافق مع 0.1.0 (تُستعمل في مسار IBKR فقط) ---------------------
     @property
@@ -552,6 +587,11 @@ class RiskLimits:
             allowed_instruments=spec.allowed_instruments_by_broker.get(broker, frozenset()),
             quantity_policy=policy,
             max_positions_per_exposure_bucket=spec.max_positions_per_exposure_bucket,
+            max_portfolio_risk=(
+                base * spec.max_portfolio_risk_pct
+                if spec.max_portfolio_risk_pct is not None
+                else None
+            ),
         )
 
     @staticmethod

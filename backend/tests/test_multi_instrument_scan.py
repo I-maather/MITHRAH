@@ -95,10 +95,21 @@ def test_an_incoherent_configuration_refuses_to_be_built():
 # ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize("symbol,bucket", [
-    ("EURUSD", "EUR"), ("GBPUSD", "GBP"), ("USDJPY", "JPY"), ("GOLD", "XAU"),
-    ("eurusd", "EUR"),
+    ("EURUSD", "USD_MAJORS"), ("GBPUSD", "USD_MAJORS"),
+    ("USDJPY", "JPY"), ("GOLD", "XAU"),
+    ("eurusd", "USD_MAJORS"),
 ])
-def test_each_instrument_maps_to_its_non_dollar_leg(symbol, bucket):
+def test_each_instrument_maps_to_its_exposure_source(symbol, bucket):
+    """
+    **تغيّر القرارُ لا القاعدة.**
+
+    كان كلُّ أداةٍ في دلوِ طرفها غير الدولاري (EUR · GBP · JPY · XAU).
+    وصار اليورو والجنيه دلواً واحداً `USD_MAJORS`: هما يتحرّكان بالسبب
+    نفسه في معظم الجلسات، فمركزان فيهما **رهانٌ واحدٌ بضِعفَي الحجم**
+    وحدودُ المخاطرة تحسبه رهانَين فتكذب بالضِّعف.
+
+    وهذا الاختبارُ أمسك بالتغيير حين وقع ولم يدعه يمرّ بصمت — وهو عملُه.
+    """
     assert exposure_bucket(symbol) == bucket
 
 
@@ -112,9 +123,20 @@ def test_an_unknown_instrument_gets_its_own_bucket_not_a_shared_one():
 
 
 def test_the_four_do_not_collapse_into_one_bucket():
-    """ولو انهارت في دلو واحد لصار سقف «مركز لكل مصدر» يعني مركزاً واحداً."""
+    """
+    الحارسُ باقٍ، وحدُّه تغيّر.
+
+    لو انهارت الأربعُ في دلوٍ واحد لصار سقفُ «مركزٌ لكلّ مصدر» يعني مركزاً
+    واحداً في النظام كلِّه — وهذا ما يمنعه هذا الاختبار، وما زال يمنعه.
+
+    والثلاثةُ هي القرارُ المقصود: `USD_MAJORS` (اليورو والجنيه) · `JPY` ·
+    `XAU`. فبقي حدُّ المراكز الثلاثة قابلاً للبلوغ، ولم يَعُد اليورو
+    والجنيه يُحسبان فرصتَين مستقلّتَين.
+    """
     buckets = {exposure_bucket(s) for s in ("EURUSD", "GBPUSD", "USDJPY", "GOLD")}
-    assert len(buckets) == 4
+    assert len(buckets) == 3
+    assert exposure_bucket("EURUSD") == exposure_bucket("GBPUSD")
+    assert exposure_bucket("USDJPY") != exposure_bucket("GOLD")
 
 
 # ---------------------------------------------------------------------------

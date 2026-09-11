@@ -86,6 +86,13 @@ class SessionRiskState:
     #: رموز المراكز المفتوحة الآن. `open_positions` يعدّها ولا يسمّيها —
     #: والعدد وحده لا يكفي لمنع ثلاثة مراكز على مصدر تعرّض واحد.
     open_symbols: tuple[str, ...] = ()
+    #: **حرارةُ المحفظة** — مجموعُ ما تخسره المراكزُ المفتوحة عند وقوفها.
+    open_risk_at_stop: Decimal = Decimal("0")
+    #: مراكزُ مفتوحةٌ لا وقفَ معروفاً لها. **ليست خطراً صفراً.**
+    #:
+    #: مجموعٌ فيه مجهولٌ ليس مجموعاً؛ فوجودُ واحدٍ منها يجعل الحرارة غير
+    #: قابلةٍ للحساب، ويُغلق البابُ حتى تُعرَف — الجهلُ يُعلَن ولا يُحسب صفراً.
+    open_risk_unknown: int = 0
     #: صفقاتٌ مغلقةٌ لا نعرف نتيجتها. **ليست ربحاً صفراً.**
     #:
     #: `realized_pnl_today` تجمع المعلوم وحده، فوجودُ مجهولٍ يعني أنّ
@@ -149,6 +156,24 @@ class RiskEngine:
     def remaining_weekly_budget(self, state: SessionRiskState) -> Decimal:
         return max(Decimal("0"), self.limits.weekly_loss - state.week_loss)
 
+    def remaining_portfolio_heat(self, state: SessionRiskState) -> Decimal:
+        """
+        ما تبقّى تحت سقف حرارة المحفظة.
+
+        **لا بوّابةَ رفضٍ جديدة**: هذا طرفٌ في `hard_risk_ceiling`، فيضيق
+        السقفُ ويبحث سلّمُ الأحجام عن حجمٍ يدخل تحته. ولا يُرفَض إلا إن
+        أثبت السلّمُ أنّ أصغرَ حجمٍ ممكنٍ عند الوسيط ما زال فوقه — وهو نصُّ
+        فلسفة المشاركة: الحارسُ يضيّق المساحة ولا يغلق الباب.
+
+        والاستثناءُ الوحيد مقصود: مركزٌ مفتوحٌ بلا وقفٍ معروف ⇒ صفر.
+        """
+        cap = self.limits.max_portfolio_risk
+        if cap is None:
+            return Decimal("Infinity")
+        if state.open_risk_unknown > 0:
+            return Decimal("0")
+        return max(Decimal("0"), cap - state.open_risk_at_stop)
+
     def hard_risk_ceiling(self, state: SessionRiskState) -> Decimal:
         """
         **السقف الذي لا يُتجاوَز** — لا التفضيل.
@@ -164,6 +189,7 @@ class RiskEngine:
             self.remaining_daily_budget(state),
             self.remaining_weekly_budget(state),
             self.remaining_total_budget(state),
+            self.remaining_portfolio_heat(state),
         )
 
     def target_risk_for_next_trade(self, state: SessionRiskState) -> Decimal:

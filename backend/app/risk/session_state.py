@@ -290,11 +290,28 @@ def load_session_state(
 
     # الأسماءُ لا العددُ وحده: بوابةُ مصدر التعرّض تحتاج أن تعرف **ماذا** فُتح
     # لا **كم**. ويصحّحها `heartbeat` باتحادها مع لقطة الوسيط.
-    open_symbols = tuple(
-        session.execute(
-            select(PositionBookRow.symbol).where(PositionBookRow.state == STATE_OPEN)
-        ).scalars().all()
-    )
+    # الأسماءُ والحرارةُ معاً من القراءة نفسها: قراءتان تفتحان بابَ اختلافٍ
+    # بين ما يُعَدّ وما يُقاس.
+    open_rows = session.execute(
+        select(
+            PositionBookRow.symbol,
+            PositionBookRow.entry_price,
+            PositionBookRow.stop_price,
+            PositionBookRow.quantity,
+        ).where(PositionBookRow.state == STATE_OPEN)
+    ).all()
+    open_symbols = tuple(row[0] for row in open_rows)
+
+    # **حرارةُ المحفظة.** تقديرٌ صريح: فرقُ السعر × الحجم، بلا تحويل عملة
+    # ولا رسوم — وهو نفسُ تقدير `PositionRecord.risk_at_stop`. ومركزٌ بلا
+    # وقفٍ أو بلا سعرِ دخولٍ **يُعَدّ مجهولاً** ولا يُحسب صفراً.
+    open_risk_at_stop = D("0")
+    open_risk_unknown = 0
+    for _symbol, entry_price, stop_price, quantity in open_rows:
+        if entry_price is None or stop_price is None or quantity is None:
+            open_risk_unknown += 1
+            continue
+        open_risk_at_stop += abs(D(stop_price) - D(entry_price)) * abs(D(quantity))
 
     # **محاولاتُ الدخول لا المراكزُ الناتجة.**
     entries_today = len(
@@ -322,6 +339,8 @@ def load_session_state(
         entry_orders_today=entries_today,
         consecutive_losses=_consecutive_losses(session, at=at),
         open_symbols=open_symbols,
+        open_risk_at_stop=open_risk_at_stop,
+        open_risk_unknown=open_risk_unknown,
         unknown_realised_closes=max(unknown_today, unknown_week, unknown_total),
         equity_known=known,
         broker_equity=(equity.broker_equity if equity else None),
