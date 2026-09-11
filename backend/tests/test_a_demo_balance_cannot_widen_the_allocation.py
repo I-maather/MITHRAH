@@ -93,23 +93,27 @@ def decide(*, stop_pips: str, broker_cash: str):
 def test_the_ceiling_is_the_allocation_divided_by_the_positions():
     lim = limits()
     assert lim.baseline_equity == D("300")
-    assert lim.max_open_positions == 3
-    assert lim.allocated_margin_per_position == D("100")
+    assert lim.max_open_positions == 2
+    # ٣٠٠ ÷ ٢ = ١٥٠. صار مركزان بعد رفع المخاطرة (١١ سبتمبر): سقفٌ صلبٌ
+    # ٦٫٠٠ × ٣ مراكز = ١٨ يتجاوز حدَّ اليوم ١٥، فيُرفض الإعدادُ عند البناء.
+    assert lim.allocated_margin_per_position == D("150")
 
 
 def test_a_ninety_one_thousand_balance_does_not_widen_the_position():
     """
     **الفحص الذي يعضّ.** الرصيد التجريبي ٩١ ألفاً، والوقف ست نقاط — وهو
-    ما يجعل السلّم يطلب كمياتٍ كبيرة لبلوغ الهدف ٠٫٧٥.
+    ما يجعل السلّم يطلب كمياتٍ كبيرة لبلوغ الهدف (٥٫٠٠ بعد الرفع).
     """
     decision = decide(stop_pips="6", broker_cash="91000")
     if decision.approved:
         # لو مرّت، فالهامش لا يتجاوز المخصَّص ÷ المراكز.
         margin = decision.notional * (D("3.333333") / D("100"))
-        assert margin <= D("100"), (
-            f"هامش {margin} يتجاوز سقف المخصَّص — الرصيد الكبير وسّع التخصيص."
+        # يُقرأ من الحدود لا يُكتب رقماً: المخصَّص ÷ المراكز، أيّاً كانا.
+        ceiling = limits().allocated_margin_per_position
+        assert margin <= ceiling, (
+            f"هامش {margin} يتجاوز سقف المخصَّص {ceiling} — الرصيد الكبير وسّع التخصيص."
         )
-        assert decision.notional <= D("3000")
+        assert decision.notional <= ceiling / (D("3.333333") / D("100"))
     else:
         assert decision.reason_code == MARGIN_EXCEEDS_AVAILABLE, decision.reason_ar
 

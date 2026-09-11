@@ -78,20 +78,26 @@ def test_validation_mode_dollar_limits():
     ⚠️ **اتّسع وضع التحقّق يوم 2026-09-01 بقرارٍ معلَن** — وهو الوضع الورقي
     وحده: لا مال حقيقي ولا إرسال أوامر (`test_..._paper_only` أدناه يفرض ذلك).
 
-        الحاجز 5٪ ⇐ 10٪ · اليومي 1٪ ⇐ 2٪ · الأسبوعي 3٪ ⇐ 5٪
-        مركز واحد ⇐ ثلاثة · أمر واحد ⇐ ستة · EURUSD ⇐ الأربع المكتشفة
+        الحاجز 5٪ ⇐ 10٪ ⇐ 15٪ · اليومي 1٪ ⇐ 2٪ ⇐ 5٪ · الأسبوعي 3٪ ⇐ 5٪ ⇐ 10٪
+        مركز واحد ⇐ ثلاثة ⇐ **اثنان** · أمر واحد ⇐ ستة · EURUSD ⇐ الأربع
+
+    والرجوعُ من ثلاثة مراكز إلى اثنين ليس تراجعاً: السقف الصلب صار 6.00،
+    و6 × 3 = 18 تتجاوز حدَّ اليوم 15 ⇒ إعدادٌ يرفضه البناء نفسه.
 
     السبب: هدف المالكة أن يرصد النظام فرصاً على أكثر من أداة. وهذا هو
     المكان الوحيد الذي يُختبَر فيه ذلك بلا ثمن. **والوضعان الحقيقيان لم
     يُمَسّا** — يفرضه `test_the_hard_barrier_holds_for_every_mode_that_can_touch_real_money`.
     """
     L = RiskLimits.for_mode(RiskMode.VALIDATION, broker=Broker.CAPITAL_COM)
-    assert L.hard_total_loss == D("15.00")
-    assert L.daily_loss == D("3.00")
-    assert L.weekly_loss == D("7.50")
-    assert L.max_risk_per_trade == D("0.75")
-    assert f"{L.target_risk_per_trade:.2f}" == "0.38"
-    assert L.max_open_positions == 3
+    # ⚠️ رُفعت المخاطرة يوم ٢٠٢٦-٠٩-١١ **بقرار المالكة المعلَن**، في
+    # التجريبي وحده. القيم على المرجع الافتراضي ١٥٠؛ وعلى ٣٠٠ تصير:
+    # ٤٥ · ١٥ · ٣٠ · ٦٫٠٠ · ٥٫٠٠ — ومركزان لا ثلاثة.
+    assert L.hard_total_loss == D("22.50")
+    assert L.daily_loss == D("7.50")
+    assert L.weekly_loss == D("15.00")
+    assert L.max_risk_per_trade == D("3.00")
+    assert f"{L.target_risk_per_trade:.2f}" == "2.50"
+    assert L.max_open_positions == 2
     assert L.max_entry_orders_per_day == 6
     assert L.max_positions_per_exposure_bucket == 1
     assert L.consecutive_losses_pause == 2
@@ -183,7 +189,7 @@ def test_validation_widened_but_stayed_paper_only():
     assert RiskMode.VALIDATION not in REAL_MONEY_MODES, (
         "وضع التحقّق دخل أوضاع المال الحقيقي وحدوده واسعة — هذا هو الخطر بعينه"
     )
-    assert spec.max_open_positions == 3
+    assert spec.max_open_positions == 2
     assert spec.max_entry_orders_per_day == 6
     assert spec.daily_loss_pct >= spec.max_risk_pct * spec.max_open_positions, (
         "الحدّ اليومي لا يستوعب ثلاثة وقوف تُضرب معاً — يُخترق قبل أن يعمل"

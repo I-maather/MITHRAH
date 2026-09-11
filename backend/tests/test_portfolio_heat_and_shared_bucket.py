@@ -57,9 +57,13 @@ def test_an_unknown_symbol_gets_its_own_bucket() -> None:
 
 # ── ٢ · قيمةُ السقف ──────────────────────────────────────────────────
 
-def test_the_validation_cap_is_three_trades_at_target() -> None:
-    assert VALIDATION_300.max_portfolio_risk == D("2.25")
-    assert VALIDATION_300.max_portfolio_risk == VALIDATION_300.target_risk_per_trade * 3
+def test_the_validation_cap_is_one_trade_per_allowed_position() -> None:
+    """السقفُ = عددُ المراكز المسموح × المخاطرة المستهدفة — لا رقمٌ مستقلّ."""
+    assert VALIDATION_300.max_portfolio_risk == D("10.00")
+    assert (
+        VALIDATION_300.max_portfolio_risk
+        == VALIDATION_300.target_risk_per_trade * VALIDATION_300.max_open_positions
+    )
 
 
 def test_the_cap_scales_with_the_reference_capital() -> None:
@@ -73,7 +77,7 @@ def test_the_cap_scales_with_the_reference_capital() -> None:
 def test_an_empty_book_leaves_the_ceiling_to_the_per_trade_limit() -> None:
     engine = RiskEngine(VALIDATION_300)
     state = make_state(baseline_equity=D("300.00"), current_equity=D("300.00"))
-    assert engine.remaining_portfolio_heat(state) == D("2.25")
+    assert engine.remaining_portfolio_heat(state) == D("10.00")
     assert engine.hard_risk_ceiling(state) == VALIDATION_300.effective_max_risk(D("300.00"))
 
 
@@ -81,24 +85,24 @@ def test_open_heat_narrows_the_ceiling_instead_of_rejecting() -> None:
     """
     **هذا هو جوهرُ الحارس.**
 
-    حرارةٌ مفتوحة 2.00 تترك 0.25 — فيصير السقفُ 0.25 لا 1.50. والإشارةُ
+    حرارةٌ مفتوحة 9.50 تترك 0.50 — فيصير السقفُ 0.50 لا 6.00. والإشارةُ
     لا تُرفَض هنا: تُمرَّر إلى سلّم الأحجام بسقفٍ أضيق.
     """
     engine = RiskEngine(VALIDATION_300)
     state = make_state(
         baseline_equity=D("300.00"), current_equity=D("300.00"),
-        open_positions=2, open_symbols=("EURUSD", "GOLD"),
-        open_risk_at_stop=D("2.00"),
+        open_positions=1, open_symbols=("EURUSD",),
+        open_risk_at_stop=D("9.50"),
     )
-    assert engine.remaining_portfolio_heat(state) == D("0.25")
-    assert engine.hard_risk_ceiling(state) == D("0.25")
+    assert engine.remaining_portfolio_heat(state) == D("0.50")
+    assert engine.hard_risk_ceiling(state) == D("0.50")
 
 
 def test_a_full_book_leaves_no_room_and_says_so_as_zero() -> None:
     engine = RiskEngine(VALIDATION_300)
     state = make_state(
         baseline_equity=D("300.00"), current_equity=D("300.00"),
-        open_positions=3, open_risk_at_stop=D("2.25"),
+        open_positions=2, open_risk_at_stop=D("10.00"),
     )
     assert engine.remaining_portfolio_heat(state) == D("0")
     assert engine.hard_risk_ceiling(state) == D("0")
@@ -109,7 +113,7 @@ def test_heat_above_the_cap_never_goes_negative() -> None:
     engine = RiskEngine(VALIDATION_300)
     state = make_state(
         baseline_equity=D("300.00"), current_equity=D("300.00"),
-        open_positions=3, open_risk_at_stop=D("9.99"),
+        open_positions=2, open_risk_at_stop=D("99.99"),
     )
     assert engine.remaining_portfolio_heat(state) == D("0")
 
@@ -137,7 +141,7 @@ def test_the_unknown_wins_even_when_measured_heat_is_tiny() -> None:
     engine = RiskEngine(VALIDATION_300)
     state = make_state(
         baseline_equity=D("300.00"), current_equity=D("300.00"),
-        open_positions=2, open_risk_at_stop=D("0.10"), open_risk_unknown=1,
+        open_positions=2, open_risk_at_stop=D("0.50"), open_risk_unknown=1,
     )
     assert engine.remaining_portfolio_heat(state) == D("0")
 
@@ -175,3 +179,47 @@ def test_a_cap_below_the_target_is_refused_at_build_not_at_first_signal() -> Non
 def test_the_shipped_validation_limits_are_coherent() -> None:
     """البناءُ نفسُه هو الاختبار: فحصُ الاتّساق يعمل عند الإنشاء."""
     assert RiskLimits.for_mode(RiskMode.VALIDATION, D("300.00"), Broker.CAPITAL_COM)
+
+
+# ── ٧ · أرقامُ الرفع، مقروءةً من الدستور لا مكتوبةً هنا مرّتين ────────
+
+def test_the_raised_risk_is_what_the_owner_approved() -> None:
+    """
+    **قرارُ المالكة ١١ سبتمبر، في التجريبي وحده.**
+
+    اختبارٌ يثبّت القيم المعتمدة كي لا تنزلق بصمت. وهو تشديدٌ لا تخفيف:
+    تغييرُ أيٍّ منها يجب أن يكسر هذا الاختبار فيُرى، لا أن يمرّ في مراجعة.
+    """
+    assert VALIDATION_300.target_risk_per_trade == D("5.00")
+    assert VALIDATION_300.max_risk_per_trade == D("6.00")
+    assert VALIDATION_300.daily_loss == D("15.00")
+    assert VALIDATION_300.weekly_loss == D("30.00")
+    assert VALIDATION_300.hard_total_loss == D("45.00")
+    assert VALIDATION_300.max_open_positions == 2
+    assert VALIDATION_300.max_portfolio_risk == D("10.00")
+
+
+def test_the_daily_cap_still_absorbs_every_stop_at_once() -> None:
+    """
+    الثابتُ الذي فرض «مركزان لا ثلاثة»: 6.00 × 2 = 12.00 ≤ 15.00.
+
+    ولو صارت ثلاثة لبلغت 18.00 وتجاوزت حدَّ اليوم ⇒ حدٌّ يُخترَق قبل أن
+    يعمل، ويرفضه البناءُ نفسه.
+    """
+    worst = VALIDATION_300.max_risk_per_trade * VALIDATION_300.max_open_positions
+    assert worst <= VALIDATION_300.daily_loss
+
+
+def test_three_positions_at_this_risk_would_be_refused_at_build() -> None:
+    fields = {f: getattr(VALIDATION_300, f) for f in VALIDATION_300.__dataclass_fields__}
+    fields["max_open_positions"] = 3
+    with pytest.raises(IncoherentRiskLimits):
+        RiskLimits(**fields)
+
+
+def test_the_real_modes_were_not_touched() -> None:
+    """الرفعُ في التجريبي وحده — والأوضاعُ التي تلمس مالاً حقيقياً كما كانت."""
+    live = RiskLimits.for_mode(RiskMode.LIVE_COMMISSIONING, D("300.00"), Broker.CAPITAL_COM)
+    assert live.max_open_positions == 1
+    assert live.max_entry_orders_per_day == 1
+    assert live.max_risk_per_trade == D("1.50")

@@ -88,7 +88,9 @@ def test_viable_trade_on_adequate_capital(assumptions, schedule, now):
     )
     assert d.approved, d.reason_ar
     assert d.quantity > 0
-    assert d.expected_risk_usd <= D("5000") * D("0.005")
+    # يُقرأ من الحدود: رقمٌ مثبَّتٌ هنا يمرّ لو غُيّر الحدُّ في الدستور وفي
+    # الاختبار معاً — وتلك طريقةُ إلغاء حدٍّ بصمت.
+    assert d.expected_risk_usd <= big_engine().limits.max_risk_per_trade
     assert d.constitution_fingerprint == constitution_fingerprint(
         RiskMode.VALIDATION, Broker.IBKR
     )

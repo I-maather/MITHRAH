@@ -38,6 +38,12 @@ from app.contracts import (
 from app.execution.orders import ExecutionService, IdempotencyGuard
 from app.killswitch.engine import KillSwitch
 from app.money import D
+from app.risk.constitution import RiskLimits, RiskMode
+
+#: الحدودُ تُقرأ مرّةً وتُستعمل — لا أرقامٌ مكتوبةٌ في الاختبار. رقمٌ
+#: مثبَّتٌ هنا يمرّ لو غُيّر الحدُّ في الدستور وفي الاختبار معاً، وتلك
+#: هي الطريقة التي يُلغى بها حدٌّ بصمت.
+LIMITS_300 = RiskLimits.for_mode(RiskMode.VALIDATION, D("300"), Broker.CAPITAL_COM)
 from app.risk.size_ladder import BROKER_MIN_QUANTITY_RISK_EXCEEDED
 from app.pipeline.runner import (
     INSTRUMENT_ECONOMICS_UNMEASURED,
@@ -260,9 +266,9 @@ def test_the_ladder_picks_the_step_closest_to_target():
             stop_distance_pips=D("20.0") / D("0.1"),
             take_profit_distance_pips=D("100.0") / D("0.1"),
         )
-        if e.all_in_risk > D("1.50"):
+        if e.all_in_risk > LIMITS_300.max_risk_per_trade:
             break
-        gap = abs(e.all_in_risk - D("0.75"))
+        gap = abs(e.all_in_risk - LIMITS_300.target_risk_per_trade)
         if best_gap is None or gap < best_gap:
             best, best_gap = size, gap
     assert result.risk_decision.quantity == best, (
@@ -317,20 +323,23 @@ def test_a_dollar_of_risk_under_the_hard_cap_is_not_refused_for_missing_the_targ
     `{"unit":"PERCENTAGE","value":0.01}` — أي ٠٫٠١٪ من السعر = **١٫١٦
     نقطة**. فالمقدّمة كانت خطأ وحدةٍ لا حقيقةَ سوق.
 
-    ويبقى الرقم الثاني صحيحاً: أرخص صفقة على ١٠٠ وحدة بوقف ١٠٠ نقطة تكلّف
-    نحو ١٫٠٢ دولار، وهي **فوق الهدف ٠٫٧٥ ودون الحدّ الصلب ١٫٥٠**. وقرار
-    المالكة صريح: الهدف تفضيلٌ لا سقف رفض. فتُقبل الصفقة، ويُقال في سببها
-    أنها تجاوزت الهدف.
+    ويبقى الرقم الثاني صحيحاً بمسافةٍ أخرى: بعد رفع ١١ سبتمبر صار الهدف
+    ٥٫٠٠ والسقف ٦٫٠٠، فوقفُ ١٠٠ نقطة (نحو ١٫٠٢$) نزل **تحت** الهدف. ووقفُ
+    ٥٠٠ نقطة على الكمية الدنيا يكلّف نحو ٥٫٠٢$ — فوق الهدف ودون السقف.
+    فأُعيد اشتقاق المسافة من الحدود الجديدة لا من ذاكرة الأرقام القديمة.
+
+    وقرارُ المالكة كما هو: الهدف تفضيلٌ لا سقفُ رفض. فتُقبل الصفقة، ويُقال
+    في سببها أنها تجاوزت الهدف.
     """
     pipeline, state, _ = build(
-        symbol="EURUSD", entry="1.16000", stop="1.15000", target="1.18000",
+        symbol="EURUSD", entry="1.16000", stop="1.11000", target="1.24000",
         baseline="300", bid="1.15993", ask="1.16000",
     )
     result = run(pipeline, state, "EURUSD")
     assert result.risk_decision is not None, result.reason_ar
     assert result.risk_decision.approved, result.reason_ar
     risk = result.risk_decision.expected_risk_usd
-    assert D("0.75") < risk <= D("1.50"), (
+    assert LIMITS_300.target_risk_per_trade < risk <= LIMITS_300.max_risk_per_trade, (
         f"الفحص فقد معناه: المخاطرة {risk} ليست في النطاق الذي يفصل الهدف عن الحدّ."
     )
     assert "الهدف" in result.risk_decision.reason_ar
@@ -342,7 +351,10 @@ def test_a_risk_above_the_hard_cap_is_still_refused():
     ويُسمّى الرفض باسمه — لا «لا فرصة».
     """
     pipeline, state, _ = build(
-        symbol="EURUSD", entry="1.16000", stop="1.14000", target="1.20000",
+        # ٧٠٠ نقطة لا ٢٠٠: بعد رفع السقف الصلب إلى ٦٫٠٠ صارت ٢٠٠ نقطة
+        # (نحو ٢٫٠٢$ على الكمية الدنيا) **تحت** السقف. أُعيد اشتقاق المسافة
+        # من الحدّ الجديد لا من ذاكرة الحدّ القديم.
+        symbol="EURUSD", entry="1.16000", stop="1.09000", target="1.28000",
         baseline="300", bid="1.15993", ask="1.16000",
     )
     result = run(pipeline, state, "EURUSD")
@@ -365,7 +377,7 @@ def test_gold_fits_the_same_three_hundred_dollars():
     assert result.risk_decision is not None and result.risk_decision.approved, (
         result.reason_ar
     )
-    assert result.risk_decision.expected_risk_usd <= D("1.50")
+    assert result.risk_decision.expected_risk_usd <= D("6.00")
 
 
 def test_a_two_to_one_target_is_not_two_to_one_after_the_gold_spread():

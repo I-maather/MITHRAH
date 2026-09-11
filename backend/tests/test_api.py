@@ -55,11 +55,14 @@ def test_today_shows_riyadh_12_hour_times(client):
     # `test_multi_instrument_scan.py::test_the_daily_cap_can_absorb_every_stop_at_once`.
     #
     # والأوضاع الحقيقية **لم تُمَسّ** — وهو ما يفحصه الاختبار التالي لهذا مباشرةً.
-    assert r["limits"]["total"] == "15.00"
-    assert r["limits"]["daily"] == "3.00"
-    assert r["limits"]["weekly"] == "7.50"
-    assert r["limits"]["target_risk_per_trade"] == "0.38"
-    assert r["limits"]["max_risk_per_trade"] == "0.75"
+    # ⚠️ تغيّرت خمسُ قيمٍ يوم ٢٠٢٦-٠٩-١١ **بقرار المالكة المعلَن** (رفعُ
+    # المخاطرة في التجريبي وحده)، لا سهواً. القيم أدناه على مرجع ١٥٠ —
+    # وعلى ٣٠٠ تصير: ٤٥ · ١٥ · ٣٠ · ٥٫٠٠ · ٦٫٠٠.
+    assert r["limits"]["total"] == "22.50"
+    assert r["limits"]["daily"] == "7.50"
+    assert r["limits"]["weekly"] == "15.00"
+    assert r["limits"]["target_risk_per_trade"] == "2.50"
+    assert r["limits"]["max_risk_per_trade"] == "3.00"
     assert r["equity"]["baseline"] == "150.00"
     assert r["risk_mode"] == "VALIDATION"
 

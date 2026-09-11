@@ -180,10 +180,25 @@ def test_cfd_preview_never_claims_an_order_was_submitted(client):
 
 
 def test_cfd_preview_reports_cap_compliance(client):
-    within = client.get("/api/cfd-preview?stop_pips=25").json()["caps"]
-    outside = client.get("/api/cfd-preview?stop_pips=75").json()["caps"]
-    assert within["within_absolute"] is True
-    assert outside["within_absolute"] is False
+    """
+    **يقيس أن السقف يربط، لا أن الرقم كذا.**
+
+    كان الفحص يثبّت وقفَين بعينهما (٢٥ داخل · ٧٥ خارج)، فكُسر حين رُفع
+    السقفُ الصلب يوم ١١ سبتمبر وصارت ٧٥ داخله. والمعنى المقصود ليس «٧٥
+    خارج» بل **«يوجد وقفٌ يخرج، والخروج لا يعود دخولاً»** — فيُفحص ذلك
+    مباشرةً، ولا يحتاج تعديلاً عند كلّ تغيير حدّ.
+    """
+    steps = [10, 25, 75, 150, 300, 600, 1200, 2400]
+    flags = [
+        client.get(f"/api/cfd-preview?stop_pips={s}").json()["caps"]["within_absolute"]
+        for s in steps
+    ]
+    assert flags[0] is True, "أصغرُ وقفٍ يجب أن يكون داخل السقف."
+    assert False in flags, f"لا وقفَ يخرج عن السقف في {steps} — السقفُ لا يربط."
+    first_out = flags.index(False)
+    assert all(f is False for f in flags[first_out:]), (
+        f"الخروجُ عاد دخولاً: {list(zip(steps, flags))} — الخسارةُ لا تنقص بوقفٍ أوسع."
+    )
 
 
 def test_cfd_preview_refuses_a_zero_stop(client):

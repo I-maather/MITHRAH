@@ -3,8 +3,12 @@
 
 ## القرار المكتوب
 
-* `Target Risk` = 0.75$ — **المخاطرة المفضّلة**.
-* `Hard Maximum` = 1.50$ — **السقف الذي لا يُتجاوَز**.
+* `Target Risk` = 5.00$ — **المخاطرة المفضّلة**.
+* `Hard Maximum` = 6.00$ — **السقف الذي لا يُتجاوَز**.
+
+(كانا 0.75 و1.50 حتى ١١ سبتمبر ٢٠٢٦، ثم رفعتهما المالكة في التجريبي
+وحده. **والقاعدة التي يحرسها هذا الملف لم تتغيّر**: الهدف يُختار به
+الحجم ولا يُرفض به. تغيّرت الأرقامُ وحدها.)
 
 ونصُّ المالكة: «لا تعامل 0.75 USD كسقف رفض مطلقاً. إذا كان أصغر حجم قابل
 للتنفيذ يعرض 1.00 USD للخسارة، وكان الحد الصلب 1.50 ولم تُخالف بقية
@@ -119,18 +123,19 @@ def decide(sig: Signal, *, st: SessionRiskState | None = None, cash: str = "300"
 
 def test_the_two_numbers_are_what_the_owner_approved():
     lim = limits()
-    assert lim.target_risk_per_trade == D("0.75")
-    assert lim.max_risk_per_trade == D("1.50")
-    assert lim.daily_loss == D("6.00")
-    assert lim.weekly_loss == D("15.00")
-    assert lim.hard_total_loss == D("30.00")
+    assert lim.target_risk_per_trade == D("5.00")
+    assert lim.max_risk_per_trade == D("6.00")
+    assert lim.daily_loss == D("15.00")
+    assert lim.weekly_loss == D("30.00")
+    assert lim.hard_total_loss == D("45.00")
+    assert lim.max_open_positions == 2
 
 
 def test_the_ceiling_and_the_preference_are_two_different_numbers():
     engine = RiskEngine(limits())
     st = state()
-    assert engine.target_risk_for_next_trade(st) == D("0.75")
-    assert engine.hard_risk_ceiling(st) == D("1.50")
+    assert engine.target_risk_for_next_trade(st) == D("5.00")
+    assert engine.hard_risk_ceiling(st) == D("6.00")
 
 
 # ---------------------------------------------------------------------------
@@ -141,17 +146,29 @@ def test_risk_below_the_target_is_accepted():
     """وقفٌ قصير ⇒ خسارةٌ دون الهدف. تُقبل، ويُختار أقرب حجمٍ إلى الهدف."""
     d = decide(signal(entry="1.16000", stop="1.15800", target="1.16600"))
     assert d.approved, d.reason_ar
-    assert d.expected_risk_usd <= D("1.50")
+    # يُقرأ من الحدود لا يُكتب رقماً: رقمٌ مثبَّتٌ هنا يمرّ لو غُيّر الحدّ
+    # في الدستور وفي الاختبار معاً — وتلك طريقةُ إلغاء حدٍّ بصمت.
+    assert d.expected_risk_usd <= limits().max_risk_per_trade
 
 
 def test_risk_between_the_target_and_the_hard_cap_is_accepted():
     """
-    **الحالة التي كانت تُرفض.** أرخص كميةٍ (١٠٠ وحدة) بوقف ١٠٠ نقطة تخسر
-    ١٫٠٢ دولار — فوق الهدف ٠٫٧٥ ودون السقف ١٫٥٠.
+    **الحالة التي كانت تُرفض.** أرخص كميةٍ (١٠٠ وحدة) بوقف ٥٠٠ نقطة تخسر
+    نحو ٥٫٠٢ دولار — فوق الهدف ٥٫٠٠ ودون السقف ٦٫٠٠. ولا حجمَ أصغر: الكمية
+    الدنيا عند الوسيط ١٠٠.
+
+    (كانت ١٠٠ نقطة تكفي حين كان الهدف ٠٫٧٥؛ وبعد الرفع صارت تلك الحالة
+    **دون** الهدف، فأُعيد اشتقاق المسافة من الحدود الجديدة لا من ذاكرة
+    الأرقام القديمة.)
     """
-    d = decide(signal(entry="1.16000", stop="1.15000", target="1.18000"))
+    # الهدفُ ٨٠٠ نقطة لا ٧٥٠: النسبةُ المشروطة **صافيةٌ بعد التكاليف**،
+    # و٧٥٠ تعطي 1.49 فتُرفض عند حدّ 1.5. التكلفةُ تُحسب لا تُهمَل.
+    d = decide(signal(entry="1.16000", stop="1.11000", target="1.24000"))
     assert d.approved, d.reason_ar
-    assert D("0.75") < d.expected_risk_usd <= D("1.50"), d.expected_risk_usd
+    lim = limits()
+    assert lim.target_risk_per_trade < d.expected_risk_usd <= lim.max_risk_per_trade, (
+        d.expected_risk_usd
+    )
     assert d.reason_code is None
 
 
@@ -174,7 +191,8 @@ def test_risk_exactly_at_the_hard_cap_is_accepted():
 
 
 def test_risk_above_the_hard_cap_is_refused_by_its_own_name():
-    d = decide(signal(entry="1.16000", stop="1.13000", target="1.22000"))
+    # ٧٠٠ نقطة على الكمية الدنيا ⇒ نحو ٧٫٠٢ دولار، فوق السقف ٦٫٠٠.
+    d = decide(signal(entry="1.16000", stop="1.09000", target="1.26500"))
     assert d.decision is Decision.NO_TRADE
     assert d.reason_code == BROKER_MIN_QUANTITY_RISK_EXCEEDED, d.reason_ar
     assert "السقف الصلب" in d.reason_ar
@@ -240,7 +258,7 @@ def test_the_trace_names_every_size_it_tried():
 
 @pytest.mark.parametrize(
     "day_loss,week_loss,expected_ceiling",
-    [("0", "0", "1.50"), ("5.20", "5.20", "0.80"), ("0", "14.30", "0.70")],
+    [("0", "0", "6.00"), ("10.20", "10.20", "4.80"), ("0", "27.30", "2.70")],
 )
 def test_the_ceiling_shrinks_with_what_is_left_of_the_day_and_week(
     day_loss, week_loss, expected_ceiling
@@ -251,7 +269,7 @@ def test_the_ceiling_shrinks_with_what_is_left_of_the_day_and_week(
 
 
 def test_a_spent_day_refuses_even_a_cheap_trade():
-    st = state(day_loss="6.00", week_loss="6.00")
+    st = state(day_loss="15.00", week_loss="15.00")
     d = decide(signal(entry="1.16000", stop="1.15800", target="1.16600"), st=st)
     assert d.decision is Decision.NO_TRADE
     assert d.reason_code is not None
