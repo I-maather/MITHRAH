@@ -7,14 +7,12 @@ import { ApiError } from '@/api/client';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   AgentCard,
-  AnimatedNumber,
   Banner,
   CandleChart,
   Card,
   DayPath,
   ErrorState,
   Glass,
-  Field,
   LoadingState,
   NavRow,
   OfflineBanner,
@@ -58,6 +56,28 @@ import {
  *
  * كل قيمة معروضة تأتي من الخادم. ما لم يصل يُقال «غير متاح» ولا يُخترع.
  */
+/**
+ * عنوانُ بطاقة المراكز — بالعدد لا بعبارةٍ عامّة.
+ *
+ * «مراكز تحتاج انتباهك» لا تقول كم، والعددُ أوّلُ ما يُسأل عنه.
+ * و`null` تعني «تعذّرت القراءة» لا «صفر» — فتُقال كما هي.
+ */
+function openPositionsTitle(count: number | null): string {
+  if (count === null) {
+    return 'المراكزُ المفتوحة — تعذّرت القراءة';
+  }
+  if (count === 1) {
+    return 'مركزٌ واحدٌ مفتوح';
+  }
+  if (count === 2) {
+    return 'مركزان مفتوحان';
+  }
+  if (count >= 3 && count <= 10) {
+    return count + ' مراكزَ مفتوحة';
+  }
+  return count + ' مركزاً مفتوحاً';
+}
+
 export default function HomeScreen(): React.JSX.Element {
   const theme = useTheme();
   const preview = isPreviewMode();
@@ -156,12 +176,6 @@ export default function HomeScreen(): React.JSX.Element {
     const rawLive = Number(cd.live?.[symbol]?.price);
     const live = Number.isFinite(rawLive) ? rawLive : null;
     return prepared === null ? null : { symbol, resolution, prepared, levels, live };
-  })();
-
-  /** الربح غير المحقّق رقماً. نصٌّ غير قابل للتحويل ⇒ يُعرض كما هو بلا حركة. */
-  const unrealised = ((): number | null => {
-    const v = Number(pos?.unrealised_pnl?.replace(/[,\s+]/g, '').replace('−', '-'));
-    return Number.isFinite(v) ? v : null;
   })();
 
   /** حدّ اليوم = المستهلَك + المتبقّي. لا حقل له في العقد، فيُشتقّ لا يُخترع. */
@@ -584,34 +598,79 @@ export default function HomeScreen(): React.JSX.Element {
         />
       ) : null}
 
+      {/* ----------------------------------------------------------------
+          **كلُّ المراكز، لا أوّلُها.**
+
+          كانت هذه البطاقة تقرأ الحقولَ المفردة `pos.instrument_ar` و
+          `pos.direction_ar` و`pos.unrealised_pnl`. وعقدُ الخادم يقول عنها
+          صراحةً إنها **تصف أوّل مركزٍ مفتوح — للشاشة القديمة**. فبمركزَين
+          مفتوحَين كانت الشاشة تعرض واحداً وتصمت عن الثاني، ولا تقول العدد
+          أصلاً. وهو ما قالته المالكة بالحرف: «ما اعرف كم صفقة مفتوحة وايش
+          وضعهم».
+
+          الآن: العددُ في العنوان، والإجماليُّ رقماً كبيراً، ثمّ صفٌّ لكلّ
+          مركزٍ بحاله — وما يستحقّ الانتباه (وقفٌ غير مثبَّتٍ عند الوسيط،
+          أو مركزٌ لم يُؤكَّد في القراءة الأخيرة) يُقال في مكانه لا يُطوى.
+      ---------------------------------------------------------------- */}
       {pos !== null && pos.has_position ? (
-        <Card testID="attention-card" title={t.home.attention}>
-          <Field label={t.position.instrument} value={pos.instrument_ar ?? pos.instrument} />
-          <Field label={t.position.direction} value={pos.direction_ar} />
+        <Card testID="attention-card" title={openPositionsTitle(pos.open_count)}>
           <View style={{ gap: theme.spacing.xs }}>
             <Text variant="caption" tone="secondary">
               {t.position.unrealised}
             </Text>
-            {unrealised !== null ? (
-              <AnimatedNumber
-                value={unrealised}
-                decimals={2}
-                unit="دولار"
-                variant="numericLarge"
-                signed
-                testID="unrealised-pnl"
-              />
-            ) : (
-              <Text
-                variant="numericLarge"
-                tone={presentPnlTone(pos.unrealised_pnl_sign)}
-                tabular
-                testID="unrealised-pnl"
-              >
-                {pos.unrealised_pnl ?? '—'}
-              </Text>
-            )}
+            <Text
+              variant="numericLarge"
+              tone={presentPnlTone(pos.unrealised_pnl_sign)}
+              tabular
+              testID="unrealised-pnl"
+            >
+              {pos.total_unrealised ?? pos.unrealised_pnl ?? '—'}
+            </Text>
           </View>
+
+          {(pos.positions ?? []).map((row, index) => (
+            <View
+              key={row.id ?? `${row.instrument ?? 'x'}-${index}`}
+              style={{ gap: 2 }}
+              testID={`open-position-${index}`}
+            >
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'baseline',
+                  justifyContent: 'space-between',
+                  gap: theme.spacing.sm,
+                }}
+              >
+                <Text variant="body">{row.instrument_ar ?? row.instrument ?? '—'}</Text>
+                <Text variant="numeric" tone={presentPnlTone(row.unrealised_pnl_sign)} tabular>
+                  {row.unrealised_pnl ?? '—'}
+                </Text>
+              </View>
+              <Text variant="caption" tone="tertiary">
+                {[
+                  row.direction_ar,
+                  row.size_display,
+                  row.entry_price !== null ? `دخول ${row.entry_price}` : null,
+                  row.stop_price !== null ? `وقف ${row.stop_price}` : null,
+                  row.risk_at_stop !== null ? `مخاطرة ${row.risk_at_stop}` : null,
+                ]
+                  .filter((part) => part !== null && part !== undefined && part !== '')
+                  .join(' · ')}
+              </Text>
+              {!row.protection_held_by_broker ? (
+                <Text variant="caption" tone="negative">
+                  الوقفُ غير مثبَّتٍ عند الوسيط.
+                </Text>
+              ) : null}
+              {row.reconciliation === 'STALE' ? (
+                <Text variant="caption" tone="caution">
+                  لم يُؤكَّد في آخر قراءة — يُعرَض من الدفتر.
+                </Text>
+              ) : null}
+            </View>
+          ))}
+
           <NavRow
             testID="nav-position"
             label={t.nav.position}
