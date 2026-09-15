@@ -62,7 +62,11 @@ API_TOKEN_NAME = "MATHRAH_API_TOKEN"
 #: و`/api/health` الكامل **ليس** منها: فيه حالةُ الوسيط وقاطع الطوارئ
 #: والمجدول، وتلك معلوماتٌ عن الحساب.
 EXEMPT_PREFIXES: tuple[str, ...] = ("/api/mobile/",)
-EXEMPT_EXACT: frozenset[str] = frozenset({"/api/health/live"})
+#: و`/api/health/ops` معه: حياةُ الآلة (كوميت، مدّةُ تشغيل، عمرُ آخر
+#: دورةِ قرار) بلا أيّ معلومةٍ عن الحساب — لا وسيط ولا رصيد ولا مركز.
+EXEMPT_EXACT: frozenset[str] = frozenset(
+    {"/api/health/live", "/api/health/ops"}
+)
 
 #: ما ليس تحت `/api` أصلاً لا يعني هذا الحارس (`/docs` مثلاً معطّلة إنتاجاً).
 GUARDED_PREFIX = "/api"

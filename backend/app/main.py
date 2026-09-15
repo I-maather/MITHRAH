@@ -19,6 +19,8 @@ from .audit.log import Actor, AuditAction, verify_chain
 from .api import auth as _api_auth
 from .api.state import SystemState, build_system
 from .clock import format_riyadh, now_utc, forex_market_status
+from .db.session import get_session
+from sqlalchemy import text as _sa_text
 from .config import get_settings
 from .eligibility.allowlist import ALLOWLIST, CFD_ALLOWLIST, IBKR_EXPLICIT_DENYLIST
 from .killswitch.engine import TRIGGER_LABELS_AR, KillSwitchTrigger
@@ -391,6 +393,57 @@ def health_live():
     `/api/health` وهي محروسة.
     """
     return {"ok": True}
+
+
+@app.get("/api/health/ops")
+def health_ops():
+    """
+    **حياةُ الآلة، لا حالُ الحساب.** معفىً من الرمز عمداً.
+
+    ## لماذا وُجد
+
+    `/api/health/live` يقول `{"ok": true}` ما دامت الخدمة تردّ — وهو يكفي
+    لإثبات أنّ الطريق كلَّه سالك (منفذٌ مفتوح وشهادةٌ صالحة وخدمةٌ تعمل).
+    ولا يكفي لسؤالٍ ثانٍ: **أما زالت دورةُ القرار تدور؟** فخدمةٌ تردّ
+    وحلقتُها ميتة تبدو سليمةً وهي لا تقرّر شيئاً.
+
+    ## وما لا يقوله
+
+    لا وسيط، ولا رصيد، ولا مركز، ولا ربح، ولا حدود، ولا عددَ إشارات. من
+    قرأه من الخارج لا يعرف أنّ هناك حساباً ولا ماذا يفعل. وهذا هو الشرط
+    الذي أباح إعفاءه: حياةُ آلةٍ لا معلومةُ حساب — وهو نفسُ الخطّ الذي
+    أبقى `/api/health` الكامل محروساً.
+    """
+    now = now_utc()
+    last_cycle = None
+    try:
+        with get_session() as s:
+            row = s.execute(
+                _sa_text(
+                    "select max(timestamp_utc) from audit_events "
+                    "where action = 'PIPELINE_RUN'"
+                )
+            ).scalar()
+        if row:
+            parsed = datetime.fromisoformat(str(row))
+            last_cycle = parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    except Exception:  # noqa: BLE001 — العجزُ عن القراءة يُصرَّح به لا يُخفى
+        last_cycle = None
+
+    age = int((now - last_cycle).total_seconds()) if last_cycle else None
+    return {
+        "ok": True,
+        "commit": _BOOT_COMMIT,
+        "started_utc": _BOOT_TIME.isoformat(),
+        "uptime_seconds": int((now - _BOOT_TIME).total_seconds()),
+        "decision_loop": {
+            "last_cycle_utc": last_cycle.isoformat() if last_cycle else None,
+            "age_seconds": age,
+            # الدورةُ كلَّ ٦٠ ثانية؛ خمسُ دقائق سماحٌ واسع.
+            # و`None` تعني «لم أقرأ» لا «سليم».
+            "healthy": (age is not None and age <= 300),
+        },
+    }
 
 
 @app.get("/api/health")

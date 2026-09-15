@@ -92,7 +92,33 @@ def test_the_exemption_list_is_small_and_written_here():
     يتسلّل إعفاءٌ في مراجعةٍ عابرة.
     """
     assert EXEMPT_PREFIXES == ("/api/mobile/",)
-    assert EXEMPT_EXACT == frozenset({"/api/health/live"})
+    # أُضيف `/api/health/ops` في ٢٠٢٦-٠٩-١٥ **بتحديثٍ واعٍ لهذا السطر** —
+    # وهو بالضبط ما وُجد هذا الاختبار لأجله: لا يتسلّل إعفاءٌ بصمت.
+    # يحمل حياةَ الآلة وحدها (كوميت، مدّةُ تشغيل، عمرُ آخر دورةِ قرار)،
+    # ولا يحمل وسيطاً ولا رصيداً ولا مركزاً — يفحص ذلك الاختبارُ التالي.
+    assert EXEMPT_EXACT == frozenset({"/api/health/live", "/api/health/ops"})
+
+
+def test_the_ops_route_carries_no_account_information():
+    """
+    شرطُ الإعفاء ليس صِغَرَ القائمة بل **خلوّ المسار من معلومة حساب**.
+    فلو أُضيف حقلٌ يوماً يذكر رصيداً أو مركزاً أو وسيطاً، يسقط هذا هنا.
+    """
+    from app.main import health_ops
+
+    payload = health_ops()
+    assert set(payload) == {
+        "ok", "commit", "started_utc", "uptime_seconds", "decision_loop",
+    }
+    assert set(payload["decision_loop"]) == {
+        "last_cycle_utc", "age_seconds", "healthy",
+    }
+    flat = repr(payload).lower()
+    for forbidden in (
+        "balance", "equity", "position", "pnl", "broker", "account",
+        "risk", "symbol", "eurusd", "gbpusd", "gold", "capital",
+    ):
+        assert forbidden not in flat, f"مسارُ التشغيل سرّب «{forbidden}»"
 
 
 def test_the_risk_increasing_routes_are_not_exempt():
