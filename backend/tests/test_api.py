@@ -57,12 +57,12 @@ def test_today_shows_riyadh_12_hour_times(client):
     # والأوضاع الحقيقية **لم تُمَسّ** — وهو ما يفحصه الاختبار التالي لهذا مباشرةً.
     # ⚠️ تغيّرت خمسُ قيمٍ يوم ٢٠٢٦-٠٩-١١ **بقرار المالكة المعلَن** (رفعُ
     # المخاطرة في التجريبي وحده)، لا سهواً. القيم أدناه على مرجع ١٥٠ —
-    # وعلى ٣٠٠ تصير: ٤٥ · ١٥ · ٣٠ · ٥٫٠٠ · ٦٫٠٠.
-    assert r["limits"]["total"] == "22.50"
-    assert r["limits"]["daily"] == "7.50"
-    assert r["limits"]["weekly"] == "15.00"
-    assert r["limits"]["target_risk_per_trade"] == "2.50"
-    assert r["limits"]["max_risk_per_trade"] == "3.00"
+    # وعلى ٣٠٠ تصير: ٧٢ · ٢٤ · ٤٨ · ١٠٫٠٠ · ١٢٫٠٠ (رفعُ ١٥ سبتمبر).
+    assert r["limits"]["total"] == "36.00"
+    assert r["limits"]["daily"] == "12.00"
+    assert r["limits"]["weekly"] == "24.00"
+    assert r["limits"]["target_risk_per_trade"] == "5.00"
+    assert r["limits"]["max_risk_per_trade"] == "6.00"
     assert r["equity"]["baseline"] == "150.00"
     assert r["risk_mode"] == "VALIDATION"
 

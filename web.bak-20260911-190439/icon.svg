@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="مِثْراة">
+  <!-- ── العلامة ──────────────────────────────────────────────
+       نواةٌ واحدةٌ وثلاثُ موجاتٍ تتّسع عنها. المعنى من الاسم:
+       المِثْراة ما تُنمّى فيه القليل — فالعلامةُ مصدرٌ ثمّ زيادةٌ
+       تخرج منه، لا رسمُ أسهمٍ صاعدة.
+       النقطةُ في الزاوية السفلى اليمنى والاتّساعُ نحو اليسار الأعلى:
+       اتّجاهُ القراءة العربية نفسُه.
+
+       ولمَ لا كلمة؟ أيقونةُ الشاشة تُرى بحجم الظُفر، والكلمةُ العربيةُ
+       هناك تصير خربشة. مكانُ الكلمةِ داخل التطبيق حيث يرسمها خطُّ
+       الجهاز على حقّه.
+
+       واختُبرت ضدّ قراءةٍ خاطئة: لا عينَين ولا فمّ — لا شكلَ وجهٍ فيها. -->
+  <defs>
+    <linearGradient id="field" x1="0" y1="0" x2="0.35" y2="1">
+      <stop offset="0" stop-color="#1A1E24"/>
+      <stop offset="1" stop-color="#07080B"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="1" y1="1" x2="0" y2="0">
+      <stop offset="0"   stop-color="#F2E0B6"/>
+      <stop offset="0.55" stop-color="#CDAE71"/>
+      <stop offset="1"   stop-color="#8E6E34"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="512" height="512" rx="115" fill="url(#field)"/>
+  <rect x="1" y="1" width="510" height="510" rx="114" fill="none"
+        stroke="#C9AB6D" stroke-opacity="0.18" stroke-width="2"/>
+
+  <!-- الأوزانُ مضبوطةٌ على أصغر حجمٍ تُرى فيه (٦٤ بكسلاً) لا على ٥١٢:
+       الموجةُ الخارجيةُ عند 0.34 كانت تختفي هناك تماماً. -->
+  <g stroke="url(#gold)" fill="none" stroke-linecap="round">
+    <path d="M340 362 A 104 104 0 0 0 236 258" stroke-width="32" opacity="1"/>
+    <path d="M340 362 A 176 176 0 0 0 164 186" stroke-width="32" opacity="0.74"/>
+    <path d="M340 362 A 248 248 0 0 0  92 114" stroke-width="32" opacity="0.48"/>
+  </g>
+
+  <circle cx="340" cy="362" r="27" fill="url(#gold)"/>
+</svg>

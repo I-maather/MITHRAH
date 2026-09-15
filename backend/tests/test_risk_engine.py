@@ -76,8 +76,20 @@ def test_small_account_always_no_trade(risk_engine, assumptions, schedule, now):
         schedule=schedule, assumptions=assumptions, fractional_allowed=True,
         kill_switch_active=False, now=now,
     )
-    assert not d.approved
-    assert d.decision is Decision.NO_TRADE
+    # ⚠️ **تغيّر المعنى برفع ١٥ سبتمبر (التجريبي وحده).**
+    #
+    # كان هذا الاختبار يثبّت أنّ ١٥٠ دولاراً تُرفض دائماً. وبعد أن صارت
+    # ميزانيةُ `VALIDATION` ٦٫٠٠ بدل ٣٫٠٠، صار القبولُ ممكناً — فادّعاءُ
+    # «دائماً لا» صار كذباً، وحذفُ الاختبار يترك فجوة.
+    #
+    # فبقي يحرس ما **لم** يتغيّر: مهما اتّسع المقبول، لا تتجاوز المخاطرةُ
+    # السقفَ الصلب، ولا يُقبل قرارٌ بلا كمية. والضمانُ على المال الحقيقي
+    # مكانُه `test_150_dollar_account_cannot_produce_a_viable_trade`.
+    if d.approved:
+        assert d.quantity > 0
+        assert d.expected_risk_usd <= risk_engine.limits.max_risk_per_trade
+    else:
+        assert d.decision is Decision.NO_TRADE
 
 
 def test_viable_trade_on_adequate_capital(assumptions, schedule, now):

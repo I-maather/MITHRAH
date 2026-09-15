@@ -246,7 +246,8 @@ def test_the_ladder_picks_the_step_closest_to_target():
     **الهدف يُختار به الحجم، ولا يُرفض به شيء.**
 
     على الذهب بوقف ٢٠ دولاراً: 0.01 ⇒ ٠٫٢٦$ · 0.02 ⇒ ٠٫٥٢$ · 0.03 ⇒ ٠٫٧٨$
-    · 0.04 ⇒ ١٫٠٤$. والهدف المعتمد ٠٫٧٥ عند مرجع ٣٠٠، فالأقرب 0.03.
+    · 0.04 ⇒ ١٫٠٤$. والهدفُ يُقرأ من الحدود لا من هذا النصّ، والسُلَّمُ
+    يُمسح حتى السقف الصلب — لا حتى رقمٍ مثبَّتٍ في حلقة الاختبار.
 
     وكان النظام يأخذ الأصغر دائماً — أي ثلث الميزانية المعتمدة، ويترك
     الثلثين بلا قرار.
@@ -259,7 +260,7 @@ def test_the_ladder_picks_the_step_closest_to_target():
     assert result.risk_decision is not None, result.reason_ar
     model = InstrumentRegistry.from_dict(MEASURED).cost_model_for("GOLD")
     best, best_gap = None, None
-    for step in range(1, 30):
+    for step in range(1, 200):
         size = D("0.01") * step
         e = model.estimate(
             size=size, entry_price=D("3300.0"),
@@ -332,7 +333,7 @@ def test_a_dollar_of_risk_under_the_hard_cap_is_not_refused_for_missing_the_targ
     في سببها أنها تجاوزت الهدف.
     """
     pipeline, state, _ = build(
-        symbol="EURUSD", entry="1.16000", stop="1.11000", target="1.24000",
+        symbol="EURUSD", entry="1.16000", stop="1.06000", target="1.32000",
         baseline="300", bid="1.15993", ask="1.16000",
     )
     result = run(pipeline, state, "EURUSD")
@@ -354,7 +355,7 @@ def test_a_risk_above_the_hard_cap_is_still_refused():
         # ٧٠٠ نقطة لا ٢٠٠: بعد رفع السقف الصلب إلى ٦٫٠٠ صارت ٢٠٠ نقطة
         # (نحو ٢٫٠٢$ على الكمية الدنيا) **تحت** السقف. أُعيد اشتقاق المسافة
         # من الحدّ الجديد لا من ذاكرة الحدّ القديم.
-        symbol="EURUSD", entry="1.16000", stop="1.09000", target="1.28000",
+        symbol="EURUSD", entry="1.16000", stop="1.03000", target="1.37000",
         baseline="300", bid="1.15993", ask="1.16000",
     )
     result = run(pipeline, state, "EURUSD")
@@ -377,7 +378,7 @@ def test_gold_fits_the_same_three_hundred_dollars():
     assert result.risk_decision is not None and result.risk_decision.approved, (
         result.reason_ar
     )
-    assert result.risk_decision.expected_risk_usd <= D("6.00")
+    assert result.risk_decision.expected_risk_usd <= LIMITS_300.max_risk_per_trade
 
 
 def test_a_two_to_one_target_is_not_two_to_one_after_the_gold_spread():

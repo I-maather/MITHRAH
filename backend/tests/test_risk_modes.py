@@ -91,12 +91,12 @@ def test_validation_mode_dollar_limits():
     L = RiskLimits.for_mode(RiskMode.VALIDATION, broker=Broker.CAPITAL_COM)
     # ⚠️ رُفعت المخاطرة يوم ٢٠٢٦-٠٩-١١ **بقرار المالكة المعلَن**، في
     # التجريبي وحده. القيم على المرجع الافتراضي ١٥٠؛ وعلى ٣٠٠ تصير:
-    # ٤٥ · ١٥ · ٣٠ · ٦٫٠٠ · ٥٫٠٠ — ومركزان لا ثلاثة.
-    assert L.hard_total_loss == D("22.50")
-    assert L.daily_loss == D("7.50")
-    assert L.weekly_loss == D("15.00")
-    assert L.max_risk_per_trade == D("3.00")
-    assert f"{L.target_risk_per_trade:.2f}" == "2.50"
+    # ٧٢ · ٢٤ · ٤٨ · ١٢٫٠٠ · ١٠٫٠٠ — ومركزان لا ثلاثة (رفعُ ١٥ سبتمبر).
+    assert L.hard_total_loss == D("36.00")
+    assert L.daily_loss == D("12.00")
+    assert L.weekly_loss == D("24.00")
+    assert L.max_risk_per_trade == D("6.00")
+    assert f"{L.target_risk_per_trade:.2f}" == "5.00"
     assert L.max_open_positions == 2
     assert L.max_entry_orders_per_day == 6
     assert L.max_positions_per_exposure_bucket == 1

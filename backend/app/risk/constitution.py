@@ -262,17 +262,17 @@ MODE_SPECS: dict[RiskMode, ModeSpec] = {
         # تصنع حافّة. العيّنةُ (١ رابحة / ٥ خاسرة) أصغرُ من أن تُثبت حافّة
         # أو تنفيها — وهذا مُعلَنٌ لا مطموس.
         # ═══════════════════════════════════════════════════════════
-        hard_total_loss_pct=D("0.15"),          # 45.00 — ورقيّ، لا مال
-        daily_loss_pct=D("0.05"),               # 15.00 — يتّسع لوقفَين معاً بهامش
-        weekly_loss_pct=D("0.10"),              # 30.00
+        hard_total_loss_pct=D("0.24"),          # 72.00 — ورقيّ، لا مال
+        daily_loss_pct=D("0.08"),               # 24.00 — يتّسع لوقفَين معاً بهامش
+        weekly_loss_pct=D("0.16"),              # 48.00
         target_risk_pct=D("0.0025"),            # مُتجاوَزٌ بالقيمة الدولارية أدناه
-        max_risk_pct=D("0.02"),                 # 6.00
+        max_risk_pct=D("0.04"),                 # 12.00
         max_risk_pct_of_current_equity=None,
         operational_drawdown_stop_usd=None,
         gap_slippage_reserve_usd=None,
-        target_risk_usd=D("2.50"),              # ⇒ 5.00 على مرجع 300
+        target_risk_usd=D("5.00"),              # ⇒ 10.00 على مرجع 300
         max_open_positions=2,
-        max_portfolio_risk_usd=D("5.00"),       # ⇒ 10.00 = مركزان بالمستهدفة
+        max_portfolio_risk_usd=D("10.00"),      # ⇒ 20.00 = مركزان بالمستهدفة
         max_entry_orders_per_day=6,
         consecutive_losses_pause=2,
         pause_scope=PauseScope.LOCKED_REVIEW,

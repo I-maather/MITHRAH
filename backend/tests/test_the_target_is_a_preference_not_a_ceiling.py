@@ -3,8 +3,8 @@
 
 ## القرار المكتوب
 
-* `Target Risk` = 5.00$ — **المخاطرة المفضّلة**.
-* `Hard Maximum` = 6.00$ — **السقف الذي لا يُتجاوَز**.
+* `Target Risk` = 10.00$ — **المخاطرة المفضّلة**.
+* `Hard Maximum` = 12.00$ — **السقف الذي لا يُتجاوَز**.
 
 (كانا 0.75 و1.50 حتى ١١ سبتمبر ٢٠٢٦، ثم رفعتهما المالكة في التجريبي
 وحده. **والقاعدة التي يحرسها هذا الملف لم تتغيّر**: الهدف يُختار به
@@ -123,19 +123,19 @@ def decide(sig: Signal, *, st: SessionRiskState | None = None, cash: str = "300"
 
 def test_the_two_numbers_are_what_the_owner_approved():
     lim = limits()
-    assert lim.target_risk_per_trade == D("5.00")
-    assert lim.max_risk_per_trade == D("6.00")
-    assert lim.daily_loss == D("15.00")
-    assert lim.weekly_loss == D("30.00")
-    assert lim.hard_total_loss == D("45.00")
+    assert lim.target_risk_per_trade == D("10.00")
+    assert lim.max_risk_per_trade == D("12.00")
+    assert lim.daily_loss == D("24.00")
+    assert lim.weekly_loss == D("48.00")
+    assert lim.hard_total_loss == D("72.00")
     assert lim.max_open_positions == 2
 
 
 def test_the_ceiling_and_the_preference_are_two_different_numbers():
     engine = RiskEngine(limits())
     st = state()
-    assert engine.target_risk_for_next_trade(st) == D("5.00")
-    assert engine.hard_risk_ceiling(st) == D("6.00")
+    assert engine.target_risk_for_next_trade(st) == D("10.00")
+    assert engine.hard_risk_ceiling(st) == D("12.00")
 
 
 # ---------------------------------------------------------------------------
@@ -192,7 +192,7 @@ def test_risk_exactly_at_the_hard_cap_is_accepted():
 
 def test_risk_above_the_hard_cap_is_refused_by_its_own_name():
     # ٧٠٠ نقطة على الكمية الدنيا ⇒ نحو ٧٫٠٢ دولار، فوق السقف ٦٫٠٠.
-    d = decide(signal(entry="1.16000", stop="1.09000", target="1.26500"))
+    d = decide(signal(entry="1.16000", stop="1.03000", target="1.39000"))
     assert d.decision is Decision.NO_TRADE
     assert d.reason_code == BROKER_MIN_QUANTITY_RISK_EXCEEDED, d.reason_ar
     assert "السقف الصلب" in d.reason_ar
@@ -258,7 +258,7 @@ def test_the_trace_names_every_size_it_tried():
 
 @pytest.mark.parametrize(
     "day_loss,week_loss,expected_ceiling",
-    [("0", "0", "6.00"), ("10.20", "10.20", "4.80"), ("0", "27.30", "2.70")],
+    [("0", "0", "12.00"), ("16.00", "16.00", "8.00"), ("0", "43.50", "4.50")],
 )
 def test_the_ceiling_shrinks_with_what_is_left_of_the_day_and_week(
     day_loss, week_loss, expected_ceiling
@@ -269,7 +269,7 @@ def test_the_ceiling_shrinks_with_what_is_left_of_the_day_and_week(
 
 
 def test_a_spent_day_refuses_even_a_cheap_trade():
-    st = state(day_loss="15.00", week_loss="15.00")
+    st = state(day_loss="24.00", week_loss="24.00")
     d = decide(signal(entry="1.16000", stop="1.15800", target="1.16600"), st=st)
     assert d.decision is Decision.NO_TRADE
     assert d.reason_code is not None

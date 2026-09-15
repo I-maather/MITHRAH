@@ -116,7 +116,15 @@ def test_150_dollar_account_cannot_produce_a_viable_trade(schedule, assumptions)
     برأس مال 150 دولاراً، أي صفقة على SPY تُرفض لأن الاحتكاك يسيطر على المخاطرة.
     هذا الاختبار يوثّق النتيجة ويمنع أي تخفيف صامت لمعايير الأمان لاحقاً.
     """
-    for mode in (RiskMode.VALIDATION, RiskMode.CONSERVATIVE_LIVE):
+    # ⚠️ **أثرٌ حقيقيٌّ لرفع ١٥ سبتمبر، مذكورٌ لا مطموس.**
+    #
+    # قبل الرفع كانت ميزانيةُ `VALIDATION` عند مرجع ١٥٠ تساوي ٣٫٠٠ فلا
+    # تتجاوز الاحتكاك. وبعده صارت ٦٫٠٠ فتتجاوزه عند ستوب ١٫٥٪ — أي أنّ
+    # ١٥٠ دولاراً **صارت تُنتج صفقةً** في التجريبي.
+    #
+    # والضمانُ الذي يحمي المال الحقيقي لم يتغيّر، وهو ما يُفحَص هنا.
+    # والتغيُّرُ في التجريبي يفحصه الاختبارُ التالي مباشرةً كي يُرى.
+    for mode in (RiskMode.CONSERVATIVE_LIVE,):
         limits = RiskLimits.for_mode(mode, D("150.00"), Broker.IBKR)
         for stop_pct in (D("0.01"), D("0.015"), D("0.02")):
             res = size_position(
@@ -131,6 +139,30 @@ def test_150_dollar_account_cannot_produce_a_viable_trade(schedule, assumptions)
                 REJECT_COST_DOMINATED, REJECT_BELOW_MIN_ORDER, "ACCOUNT_SIZE_INSUFFICIENT",
                 "BREAKEVEN_MOVE_TOO_FAR",
             )
+
+
+def test_validation_at_the_raised_limits_does_admit_a_trade_at_150(schedule, assumptions):
+    """
+    **يُثبّت الأثرَ بدل أن يخفيه.**
+
+    هذا ليس احتفاءً بالنتيجة: هو تسجيلٌ أنّ رفعَ المخاطرة وسّع ما يُقبَل،
+    وأنّ التوسيع بلا مالٍ حقيقيّ. فإن عاد الرفضُ يوماً، يجب أن يُكسر هذا
+    الاختبار فيُسأل: أتغيّر الاحتكاك أم الحدّ؟
+    """
+    limits = RiskLimits.for_mode(RiskMode.VALIDATION, D("150.00"), Broker.IBKR)
+    res = size_position(
+        entry_price=D("640"),
+        stop_price=D("640") * (Decimal("1") - D("0.015")),
+        risk_budget=limits.max_risk_per_trade,
+        schedule=schedule, assumptions=assumptions,
+        fractional_allowed=True, available_cash=D("150"), limits=limits,
+    )
+    assert res.approved, res.reason_code
+    assert res.quantity > 0
+    # والسقفُ الصلب يبقى صلباً مهما اتّسع المقبول — بالمخاطرة الكاملة
+    # بعد التكاليف، لا بمخاطرة السعر وحدها.
+    assert res.estimate is not None
+    assert res.estimate.total_risk <= limits.max_risk_per_trade
 
 
 def test_commissioning_mode_allows_the_single_integration_trade(schedule, assumptions):

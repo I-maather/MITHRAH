@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<title>مِثْراة</title>
+<meta name="theme-color" content="#0A0C0F">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="مِثْراة">
+<meta name="robots" content="noindex, nofollow">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/icon-180.png">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+
+<!-- ── بوّابةُ الاقتران ─────────────────────────────────────── -->
+<div class="gate" id="gate" hidden>
+  <div class="box">
+    <div class="mark" style="margin:0 auto;width:72px;height:72px;border-radius:20px;font-size:17px">مِثْراة</div>
+    <h1>اقتران الجهاز</h1>
+    <p>الصقي حمولةَ الاقتران التي يولّدها الخادم. عمرُها دقيقتان وتُستهلَك مرّةً واحدة، ولا تحمل أيَّ سرّ.
+       الرمزان الناتجان يبقيان في هذا المتصفّح وحده ولا يظهران في أيّ سجل.</p>
+    <textarea id="code" rows="3" spellcheck="false" autocomplete="off"
+      placeholder='{"v":1,"b":"…","c":"…","e":…}'></textarea>
+    <button class="btn" id="pair">اقتران</button>
+    <div id="gate-msg" style="font-size:12.5px;color:var(--ink-3);min-height:18px"></div>
+  </div>
+</div>
+
+<!-- ── التطبيق ─────────────────────────────────────────────── -->
+<div id="app" hidden>
+
+  <header class="top">
+    <!-- الاسمُ مرّةً واحدة: هو داخل المربّع، فلا يُكرَّر بجانبه. -->
+    <div class="mark">مِثْراة</div>
+    <div class="who">
+      <span id="env">—</span>
+    </div>
+    <div class="chip" id="conn"><span class="dot"></span><span id="conn-t">يتّصل…</span></div>
+  </header>
+
+  <main>
+    <!-- اليوم -->
+    <section id="v-today">
+      <div class="card verdict" id="verdict">
+        <h2>حكمُ اليوم</h2>
+        <div class="line skeleton">——————————</div>
+        <div class="why skeleton">————————</div>
+      </div>
+
+      <div class="card flush">
+        <div class="figures" id="figures">
+          <div class="fig"><span class="k">المحقَّق</span><span class="v num skeleton">—</span></div>
+          <div class="fig"><span class="k">مفتوحة</span><span class="v num skeleton">—</span></div>
+          <div class="fig"><span class="k">ربح / خسارة</span><span class="v num skeleton">—</span></div>
+        </div>
+      </div>
+
+      <div class="card flush">
+        <div class="sym-tabs" id="symtabs"></div>
+        <div class="readout">
+          <span class="price num" id="px">—</span>
+          <span class="delta num" id="dx"></span>
+          <span class="res" id="res"></span>
+        </div>
+        <div class="chartwrap"><svg id="chart" role="img" aria-label="رسمُ الشموع"></svg></div>
+        <p class="note" id="chart-note"></p>
+      </div>
+
+      <div class="card flush" id="positions">
+        <div class="empty">…</div>
+      </div>
+    </section>
+
+    <!-- المخاطرة -->
+    <section id="v-risk" hidden>
+      <div class="card" id="riskbox"><h2>سياسةُ المخاطرة</h2><div class="empty">…</div></div>
+      <div class="card" id="funnel"><h2>مسارُ الفرص</h2><div class="empty">…</div></div>
+    </section>
+
+    <!-- الصفقات -->
+    <section id="v-trades" hidden>
+      <div class="card flush" id="trades"><div class="empty">…</div></div>
+    </section>
+
+    <!-- السجل -->
+    <section id="v-log" hidden>
+      <div class="card flush" id="log"><div class="empty">…</div></div>
+      <div class="card">
+        <h2>الجهاز</h2>
+        <p style="font-size:13px;color:var(--ink-2);margin:6px 0 14px">
+          هذه الواجهةُ تُخدَم من الخادم مباشرةً: لا تحتاج VPN، ولا تحتاج الماك، ولا تنتهي صلاحيتُها.
+        </p>
+        <button class="btn ghost" id="theme">تبديل السمة</button>
+        <div style="height:10px"></div>
+        <button class="btn ghost" id="unpair" style="color:var(--neg)">فكُّ الاقتران</button>
+      </div>
+    </section>
+  </main>
+
+  <nav class="tabs">
+    <button data-v="today" aria-current="page">
+      <svg viewBox="0 0 24 24"><path d="M3 13h4l3 7 4-16 3 9h4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>اليوم</span>
+    </button>
+    <button data-v="risk">
+      <svg viewBox="0 0 24 24"><path d="M12 3l8 4v5c0 5-3.4 8.2-8 9-4.6-.8-8-4-8-9V7z" stroke-linejoin="round"/></svg>
+      <span>المخاطرة</span>
+    </button>
+    <button data-v="trades">
+      <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h10M4 17h13" stroke-linecap="round"/></svg>
+      <span>الصفقات</span>
+    </button>
+    <button data-v="log">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2" stroke-linecap="round"/></svg>
+      <span>السجل</span>
+    </button>
+  </nav>
+</div>
+
+<script type="module" src="/app.js"></script>
+</body>
+</html>
