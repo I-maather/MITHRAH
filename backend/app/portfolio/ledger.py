@@ -115,6 +115,19 @@ def _attribute(session: Session, *, deal_id: str, deal_reference: Optional[str])
             select(BrokerOrderRow).where(BrokerOrderRow.deal_reference == deal_reference)
         ).scalar_one_or_none()
 
+    # **البحثُ الثالث — وهو الذي كان ناقصاً.**
+    #
+    # كابيتال يعطي المركزَ معرّفاً غير معرّف الصفقة، فالبحثان أعلاه يخطئان
+    # دائماً ويبقى كلُّ مركزٍ `UNATTRIBUTED`. والهويّاتُ كلُّها محفوظةٌ الآن
+    # في `position_deal_ids` كما أعطاها الوسيط — فالمطابقةُ هنا هويّةٌ
+    # أيضاً، لا رمزٌ ولا توقيت.
+    if order is None:
+        order = session.execute(
+            select(BrokerOrderRow).where(
+                BrokerOrderRow.position_deal_ids.like(f"%,{deal_id},%")
+            )
+        ).scalars().first()
+
     if order is None:
         return _Attribution(
             notes=[f"لا أمرَ لدينا يحمل هويّة المركز {deal_id} — لا يُنسَب."]

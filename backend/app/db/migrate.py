@@ -30,6 +30,9 @@ ADDITIONS: tuple[tuple[str, str, str], ...] = (
     ("position_book", "assessed_at_utc", "DATETIME"),
     # 2026-09-05: قرارُ المخاطر بلا أداةٍ لا يُقرأ.
     ("risk_decisions", "symbol", "VARCHAR(24) DEFAULT ''"),
+    # 2026-09-15: المركزُ لم يكن يُنسَب إلى قراره لأنّ هويّته عند الوسيط
+    # غيرُ هويّة الصفقة. تُحفَظ الهويّاتُ كلُّها هنا ويُبحَث فيها.
+    ("broker_orders", "position_deal_ids", "VARCHAR(512)"),
 )
 
 

@@ -1151,13 +1151,6 @@ class CapitalComAdapter(BrokerAdapter):
             average_fill_price=confirmation.level,
             status=OrderStatus.FILLED,
             updated_at_utc=at,
-            # `position_ids_of` كانت تُحسَب لتتحقّق من الوقف ثمّ تُرمى.
-            # وهي الجسرُ الوحيد بين الأمر والمركز، فتُحفَظ الآن.
-            position_deal_ids=tuple(
-                dict.fromkeys(
-                    tuple(self.position_ids_of(confirmation)) + (str(position.deal_id),)
-                )
-            ),
         )
 
     @staticmethod

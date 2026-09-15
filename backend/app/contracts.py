@@ -468,6 +468,10 @@ class BrokerOrder(Base):
     status: OrderStatus
     parent_order_id: Optional[str] = None
     updated_at_utc: datetime
+    #: كلّ الهويّات التي قد يحملها المركزُ الناتج عن هذا الأمر، كما أعطاها
+    #: الوسيط: `affectedDeals` ومعرّف التأكيد ومعرّف المركز المتحقَّق منه.
+    #: تُحفَظ كي يُنسَب المركزُ إلى قراره **بالهويّة وحدها** لا بالرمز والتوقيت.
+    position_deal_ids: tuple[str, ...] = ()
 
 
 class Execution(Base):

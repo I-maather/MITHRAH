@@ -368,6 +368,10 @@ def _upsert_broker_order(session, intent: OrderIntent, order) -> None:
             broker_order_id=broker_order_id,
             deal_reference=reference,
             broker_deal_id=broker_order_id,
+            # محاطةٌ بفواصل كي تكون المطابقةُ تامّة لا جزئية.
+            position_deal_ids=("," + ",".join(getattr(order, "position_deal_ids", ()) or ()) + ",")
+            if getattr(order, "position_deal_ids", ())
+            else None,
             client_order_id=intent.client_order_id,
             symbol=intent.symbol,
             side=getattr(intent.side, "value", str(intent.side)),
@@ -382,6 +386,11 @@ def _upsert_broker_order(session, intent: OrderIntent, order) -> None:
     else:
         row.deal_reference = reference or row.deal_reference
         row.broker_deal_id = broker_order_id
+        row.position_deal_ids = (
+            ("," + ",".join(getattr(order, "position_deal_ids", ()) or ()) + ",")
+            if getattr(order, "position_deal_ids", ())
+            else row.position_deal_ids
+        )
         row.filled_quantity = filled
         row.average_fill_price = getattr(order, "average_fill_price", None)
         row.status = status

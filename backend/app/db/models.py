@@ -199,6 +199,10 @@ class BrokerOrderRow(Base):
     broker_order_id: Mapped[str] = mapped_column(String(64), unique=True)
     deal_reference: Mapped[str | None] = mapped_column(String(64), index=True)
     broker_deal_id: Mapped[str | None] = mapped_column(String(64), index=True)
+    #: هويّاتُ المركز الناتج، مفصولةً بفواصل ومحاطةً بها: `,a,b,`.
+    #: كابيتال يعطي للمركز معرّفاً غير معرّف الصفقة، فالبحثُ بواحدٍ يخطئ
+    #: دائماً. والإحاطةُ بالفواصل تجعل `LIKE '%,x,%'` مطابقةً تامّة لا جزئية.
+    position_deal_ids: Mapped[str | None] = mapped_column(String(512), index=True)
     broker_confirmation_state: Mapped[str] = mapped_column(String(24), default="PENDING")
     reconciliation_state: Mapped[str] = mapped_column(String(24), default="UNRECONCILED")
     execution_uncertainty: Mapped[str] = mapped_column(String(24), default="NONE")
