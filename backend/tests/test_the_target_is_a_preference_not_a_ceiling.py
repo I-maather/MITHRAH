@@ -123,8 +123,8 @@ def decide(sig: Signal, *, st: SessionRiskState | None = None, cash: str = "300"
 
 def test_the_two_numbers_are_what_the_owner_approved():
     lim = limits()
-    assert lim.target_risk_per_trade == D("10.00")
-    assert lim.max_risk_per_trade == D("12.00")
+    assert lim.target_risk_per_trade == D("5.00")
+    assert lim.max_risk_per_trade == D("10.00")
     assert lim.daily_loss == D("24.00")
     assert lim.weekly_loss == D("48.00")
     assert lim.hard_total_loss == D("72.00")
@@ -134,8 +134,8 @@ def test_the_two_numbers_are_what_the_owner_approved():
 def test_the_ceiling_and_the_preference_are_two_different_numbers():
     engine = RiskEngine(limits())
     st = state()
-    assert engine.target_risk_for_next_trade(st) == D("10.00")
-    assert engine.hard_risk_ceiling(st) == D("12.00")
+    assert engine.target_risk_for_next_trade(st) == D("5.00")
+    assert engine.hard_risk_ceiling(st) == D("10.00")
 
 
 # ---------------------------------------------------------------------------
@@ -258,7 +258,7 @@ def test_the_trace_names_every_size_it_tried():
 
 @pytest.mark.parametrize(
     "day_loss,week_loss,expected_ceiling",
-    [("0", "0", "12.00"), ("16.00", "16.00", "8.00"), ("0", "43.50", "4.50")],
+    [("0", "0", "10.00"), ("16.00", "16.00", "8.00"), ("0", "43.50", "4.50")],
 )
 def test_the_ceiling_shrinks_with_what_is_left_of_the_day_and_week(
     day_loss, week_loss, expected_ceiling

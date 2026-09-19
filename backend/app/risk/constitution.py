@@ -55,7 +55,7 @@ from typing import Optional
 from ..contracts import Broker
 from ..money import D
 
-CONSTITUTION_VERSION = "0.3.0"
+CONSTITUTION_VERSION = "0.6.0"
 CONSTITUTION_EFFECTIVE_DATE = "2026-09-03"
 
 INITIAL_CAPITAL_USD = D("150.00")
@@ -79,6 +79,11 @@ class PauseScope(str, Enum):
     NEXT_SESSION = "NEXT_SESSION"
     REST_OF_WEEK = "REST_OF_WEEK"
     LOCKED_REVIEW = "LOCKED_REVIEW"
+    #: **تهدئةٌ تنتهي بنفسها.** `CONSECUTIVE_LOSS_WINDOW_HOURS` المتدحرجة
+    #: تُسقط العدّاد وحدها فيعود الدخول بلا إذنٍ جديد. كُتبت لأنّ
+    #: `LOCKED_REVIEW` كانت تُطبَع على الوضع التجريبي وهي تَعِد بقفلٍ
+    #: **لا ينفّذه كود** — ورسالةٌ تَعِد بما لا تفعله أسوأُ من القفل.
+    COOLDOWN_WINDOW = "COOLDOWN_WINDOW"
 
 
 #: الأوضاع التي تلمس مالاً حقيقياً. كلها تتطلب أقفال Live كاملة.
@@ -156,6 +161,10 @@ class ModeSpec:
     #:
     #: `None` = لا سقف (الأوضاع التي تسمح بمركزٍ واحد لا تحتاجه).
     max_portfolio_risk_usd: Optional[Decimal] = None
+    #: **سقفُ خسارةِ الصفقة بالدولار** — يُقاس تناسبياً كأخواته.
+    #: 10 ÷ 300 كسرٌ دوري لا يُمثَّل بدقّة، فالقيمةُ الدولارية هي
+    #: المقصودة حرفياً. `None` = يحكمُ السقفَ `max_risk_pct` كما كان.
+    max_risk_usd: Optional[Decimal] = None
 
 
 _IBKR_COMMISSIONING_QUANTITY = BrokerQuantityPolicy(
@@ -245,8 +254,14 @@ MODE_SPECS: dict[RiskMode, ModeSpec] = {
         # و**بعد** حارسَي المحفظة (الدلو المشترك وسقف الحرارة — منشوران).
         #
         # الأرقام على مرجع ٣٠٠ دولار:
-        #   المستهدفة 5.00 · السقف الصلب 6.00 · اليوم 15.00 ·
-        #   الأسبوع 30.00 · الإجمالي 45.00 · الحرارة 10.00 · المراكز 2
+        # **الأرقامُ النافذة على مرجع ٣٠٠ (مقيسةٌ لا موصوفة — 0.6.0):**
+        #   المستهدفة 5.00 · السقفُ الصلب 10.00 · اليوم 24.00 ·
+        #   الأسبوع 48.00 · الإجمالي 72.00 · الحرارة 20.00 · المراكز 2
+        #
+        # وكان هذا التعليقُ يقول «السقف 6.00 · اليوم 15.00 · الإجمالي
+        # 45.00» بينما الكودُ ينفّذ 12.00 و24.00 و72.00 — نصفُ الحقيقة.
+        # والسقفُ صار 10.00 صريحاً بالدولار بقرار المالكة، لا 12.00
+        # المستنتَجة من نسبةٍ لم يقصدها أحد.
         #
         # **ولماذا مركزان لا ثلاثة:** الثابتُ في `__post_init__` يمنع حدّاً
         # يومياً أصغر من (السقف الصلب × عدد المراكز). و6 × 3 = 18 يتجاوز
@@ -270,12 +285,15 @@ MODE_SPECS: dict[RiskMode, ModeSpec] = {
         max_risk_pct_of_current_equity=None,
         operational_drawdown_stop_usd=None,
         gap_slippage_reserve_usd=None,
-        target_risk_usd=D("5.00"),              # ⇒ 10.00 على مرجع 300
+        # القيمُ الدولارية مُعطاةٌ عند المرجع 150 وتُضاعَف على 300،
+        # فالمكتوبُ نصفُ النافذ. ويحرسُ المحسوبَ اختبارٌ على ٣٠٠ صريحاً.
+        target_risk_usd=D("2.50"),   # ⇒ 5.00  المخاطرة المفضّلة
+        max_risk_usd=D("5.00"),      # ⇒ 10.00 السقفُ الصلب — قرار المالكة ١٩ سبتمبر ٢٠٢٦              # ⇒ 10.00 على مرجع 300
         max_open_positions=2,
         max_portfolio_risk_usd=D("10.00"),      # ⇒ 20.00 = مركزان بالمستهدفة
         max_entry_orders_per_day=6,
         consecutive_losses_pause=2,
-        pause_scope=PauseScope.LOCKED_REVIEW,
+        pause_scope=PauseScope.COOLDOWN_WINDOW,
         consecutive_losses_kill=3,
         min_reward_risk_ratio=D("1.5"),
         enforce_economic_viability=True,
@@ -593,7 +611,11 @@ class RiskLimits:
                 if spec.target_risk_usd is not None
                 else base * spec.target_risk_pct
             ),
-            max_risk_per_trade=base * spec.max_risk_pct,
+            max_risk_per_trade=(
+                _scaled(base, spec.max_risk_usd)
+                if spec.max_risk_usd is not None
+                else base * spec.max_risk_pct
+            ),
             max_risk_pct_of_current_equity=spec.max_risk_pct_of_current_equity,
             operational_drawdown_stop=_scaled(base, spec.operational_drawdown_stop_usd),
             gap_slippage_reserve=_scaled(base, spec.gap_slippage_reserve_usd),

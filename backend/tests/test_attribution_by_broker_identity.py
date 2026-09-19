@@ -48,7 +48,7 @@ def _seed(session, *, position_ids: str | None):
         spread_estimate=Decimal("0.30"), stop_kind="NORMAL",
         stop_distance=Decimal("42.12"), gsl_premium=Decimal("0"),
         slippage_reserve=Decimal("0.10"), strategy_name="BREAKOUT_RETEST",
-        strategy_version="1.0.0", risk_constitution_version="0.3.0",
+        strategy_version="1.0.0", risk_constitution_version="0.6.0",
         risk_mode="VALIDATION", owner_authorization_reference="",
         market_data_timestamp_utc=NOW, risk_decision_id=None,
         symbol="GOLD", side="SELL", order_type="LMT", quantity=Decimal("0.12"),

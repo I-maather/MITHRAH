@@ -52,7 +52,7 @@ def test_broker_endpoint_reports_the_locks_truthfully(client):
         assert body["environment"] in body["base_url"] or body["is_demo"]
     # يبقى شرطاً قاطعاً بلا استثناء: قفل التنفيذ مغلق.
     assert body["execution_lock"]["unlocked"] is False
-    assert body["risk_constitution_version"] == "0.3.0"
+    assert body["risk_constitution_version"] == "0.6.0"
 
 
 def test_broker_endpoint_never_returns_a_credential_value(client):

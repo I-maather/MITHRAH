@@ -302,6 +302,10 @@ class RiskEngine:
             scope_ar = {
                 PauseScope.NEXT_SESSION: "حتى الجلسة التالية",
                 PauseScope.REST_OF_WEEK: "لبقية الأسبوع",
+                PauseScope.COOLDOWN_WINDOW: (
+                    "تهدئةً مؤقّتة — يعود الدخولُ تلقائياً بعد انقضاء نافذة "
+                    "الأربع والعشرين ساعة أو بعد أوّل إغلاقٍ رابح، بلا إذنٍ جديد"
+                ),
                 PauseScope.LOCKED_REVIEW: (
                     "والانتقال إلى LOCKED_REVIEW — لا استئناف تلقائي غداً، "
                     "ويلزم مراجعة مكتملة وتفويض صريح من المالكة"

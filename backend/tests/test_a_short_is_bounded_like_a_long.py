@@ -219,7 +219,7 @@ def test_the_flag_was_opened_deliberately_and_the_version_says_so():
     from app.risk.constitution import CFD_ALLOW_SHORT, CONSTITUTION_VERSION
 
     assert CFD_ALLOW_SHORT is True
-    assert CONSTITUTION_VERSION == "0.3.0", (
+    assert CONSTITUTION_VERSION == "0.6.0", (
         "الراية تغيّرت والإصدار لم يتغيّر — سياسةٌ تنزلق بلا سجل"
     )
 

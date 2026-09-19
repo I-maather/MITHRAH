@@ -61,12 +61,12 @@ def state(**kw):
 
 # --- الأرقام النهائية --------------------------------------------------------
 
-def test_constitution_is_version_0_3_0():
+def test_constitution_is_version_0_6_0():
     """
     رقمٌ مثبَّتٌ عمداً: تغييرُ سياسةٍ بلا رفع إصدارٍ هو انحرافٌ صامت.
     0.2.0 ← 0.3.0 يوم 2026-09-03 بفتح `CFD_ALLOW_SHORT` بتفويض المالكة.
     """
-    assert CONSTITUTION_VERSION == "0.3.0"
+    assert CONSTITUTION_VERSION == "0.6.0"
 
 
 def test_capital_is_exactly_150():
@@ -95,13 +95,13 @@ def test_validation_mode_dollar_limits():
     assert L.hard_total_loss == D("36.00")
     assert L.daily_loss == D("12.00")
     assert L.weekly_loss == D("24.00")
-    assert L.max_risk_per_trade == D("6.00")
-    assert f"{L.target_risk_per_trade:.2f}" == "5.00"
+    assert L.max_risk_per_trade == D("5.00")
+    assert f"{L.target_risk_per_trade:.2f}" == "2.50"
     assert L.max_open_positions == 2
     assert L.max_entry_orders_per_day == 6
     assert L.max_positions_per_exposure_bucket == 1
     assert L.consecutive_losses_pause == 2
-    assert L.pause_scope is PauseScope.LOCKED_REVIEW
+    assert L.pause_scope is PauseScope.COOLDOWN_WINDOW
     assert L.consecutive_losses_kill == 3
     assert L.allowed_instruments == frozenset({"EURUSD", "GBPUSD", "USDJPY", "GOLD"})
 
@@ -301,13 +301,23 @@ def test_conservative_live_still_says_no_trade_on_ibkr_equities_at_150(schedule,
     )
 
 
-def test_two_consecutive_losses_move_to_locked_review_not_tomorrow(schedule, assumptions):
+def test_two_consecutive_losses_stop_now_not_tomorrow(schedule, assumptions):
     for mode in (RiskMode.VALIDATION, RiskMode.CONSERVATIVE_LIVE):
         d = evaluate(mode, state(consecutive_losses=2), schedule=schedule, assumptions=assumptions)
         assert not d.approved, mode
         assert d.reason_code == CONSECUTIVE_LOSS_PAUSE, mode
-        assert "LOCKED_REVIEW" in d.reason_ar, mode
-        assert "لا استئناف تلقائي" in d.reason_ar, mode
+        # بعد الدستور 0.6.0 تفترق الرسالتان لأنّ المُنفَّذ افترق:
+        # التجريبيُّ تهدئةٌ تُسقِطُها نافذةُ الأربع والعشرين ساعة
+        # وحدَها أو أوّلُ إغلاقٍ رابح، والحقيقيُّ وحده قفلٌ لا يُفتح
+        # إلّا بمراجعةٍ وتفويضٍ من المالكة. ويجب أن تَعِدَ كلُّ رسالةٍ
+        # بما ينفّذه كودُها، لا بأكثر منه ولا بأقلّ.
+        if RiskMode(mode) is RiskMode.VALIDATION:
+            assert "تهدئة" in d.reason_ar, d.reason_ar
+            assert "تلقائياً" in d.reason_ar, d.reason_ar
+            assert "لا استئناف تلقائي" not in d.reason_ar, d.reason_ar
+        else:
+            assert "LOCKED_REVIEW" in d.reason_ar, d.reason_ar
+            assert "لا استئناف تلقائي" in d.reason_ar, d.reason_ar
 
 
 def test_one_loss_ends_commissioning_mode(schedule, assumptions):

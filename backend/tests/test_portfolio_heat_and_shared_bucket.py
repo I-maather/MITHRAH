@@ -58,11 +58,20 @@ def test_an_unknown_symbol_gets_its_own_bucket() -> None:
 # ── ٢ · قيمةُ السقف ──────────────────────────────────────────────────
 
 def test_the_validation_cap_is_one_trade_per_allowed_position() -> None:
-    """السقفُ = عددُ المراكز المسموح × المخاطرة المستهدفة — لا رقمٌ مستقلّ."""
+    """حرارةُ المحفظة = عددُ المراكز المسموح × **السقف الصلب**.
+
+    كان مكتوباً هنا «× المخاطرة المستهدفة»، وصحَّ ذلك حين تساوى
+    الهدفُ والسقف. وبعد دستور 0.6.0 افترقا: الهدف ٥٫٠٠ والسقف
+    ١٠٫٠٠. فلو قِيست الحرارةُ بالهدف لصارت ١٠٫٠٠، ولَما استطاع
+    مركزان أن يكونا عند سقفهما معاً — أي لَمَنعَ الحارسُ ما
+    تُجيزه الحدودُ الصلبة، وذلك نقيضُ فلسفة المشاركة. والهدفُ
+    تفضيلٌ لا سقفُ رفض، فالحرارةُ تُقاس بما قد تُكلّفه المراكزُ
+    فعلاً: ١٠٫٠٠ × ٢ = ٢٠٫٠٠. ويغطّيها الحدُّ اليوميُّ ٢٤٫٠٠.
+    """
     assert VALIDATION_300.max_portfolio_risk == D("20.00")
     assert (
         VALIDATION_300.max_portfolio_risk
-        == VALIDATION_300.target_risk_per_trade * VALIDATION_300.max_open_positions
+        == VALIDATION_300.max_risk_per_trade * VALIDATION_300.max_open_positions
     )
 
 
@@ -185,13 +194,16 @@ def test_the_shipped_validation_limits_are_coherent() -> None:
 
 def test_the_raised_risk_is_what_the_owner_approved() -> None:
     """
-    **قرارُ المالكة ١١ سبتمبر، في التجريبي وحده.**
+    **قرارُ المالكة ١٩ سبتمبر ٢٠٢٦، في التجريبي وحده.**
+
+    الهدف ٥٫٠٠ والسقفُ الصلب ١٠٫٠٠ — وهما ينسخان أرقامَ رفعِ
+    ١١ سبتمبر (١٠٫٠٠ و١٢٫٠٠) بقرارٍ معلَنٍ لا سهواً.
 
     اختبارٌ يثبّت القيم المعتمدة كي لا تنزلق بصمت. وهو تشديدٌ لا تخفيف:
     تغييرُ أيٍّ منها يجب أن يكسر هذا الاختبار فيُرى، لا أن يمرّ في مراجعة.
     """
-    assert VALIDATION_300.target_risk_per_trade == D("10.00")
-    assert VALIDATION_300.max_risk_per_trade == D("12.00")
+    assert VALIDATION_300.target_risk_per_trade == D("5.00")
+    assert VALIDATION_300.max_risk_per_trade == D("10.00")
     assert VALIDATION_300.daily_loss == D("24.00")
     assert VALIDATION_300.weekly_loss == D("48.00")
     assert VALIDATION_300.hard_total_loss == D("72.00")
