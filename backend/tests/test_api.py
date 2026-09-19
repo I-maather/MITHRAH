@@ -60,8 +60,8 @@ def test_today_shows_riyadh_12_hour_times(client):
     # وعلى ٣٠٠ النافذ تصير: ٧٢ · ٢٤ · ٤٨ · ٥٫٠٠ · ١٠٫٠٠ بدستور 0.6.0،
     # ويقيسها `test_the_deployed_reference_is_three_hundred.py` مستقلّاً.
     assert r["limits"]["total"] == "36.00"
-    assert r["limits"]["daily"] == "12.00"
-    assert r["limits"]["weekly"] == "24.00"
+    assert r["limits"]["daily"] == "15.00"
+    assert r["limits"]["weekly"] == "30.00"
     assert r["limits"]["target_risk_per_trade"] == "2.50"
     assert r["limits"]["max_risk_per_trade"] == "5.00"
     assert r["equity"]["baseline"] == "150.00"

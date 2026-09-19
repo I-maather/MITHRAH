@@ -204,8 +204,8 @@ def test_the_raised_risk_is_what_the_owner_approved() -> None:
     """
     assert VALIDATION_300.target_risk_per_trade == D("5.00")
     assert VALIDATION_300.max_risk_per_trade == D("10.00")
-    assert VALIDATION_300.daily_loss == D("24.00")
-    assert VALIDATION_300.weekly_loss == D("48.00")
+    assert VALIDATION_300.daily_loss == D("30.00")
+    assert VALIDATION_300.weekly_loss == D("60.00")
     assert VALIDATION_300.hard_total_loss == D("72.00")
     assert VALIDATION_300.max_open_positions == 2
     assert VALIDATION_300.max_portfolio_risk == D("20.00")
@@ -222,11 +222,35 @@ def test_the_daily_cap_still_absorbs_every_stop_at_once() -> None:
     assert worst <= VALIDATION_300.daily_loss
 
 
-def test_three_positions_at_this_risk_would_be_refused_at_build() -> None:
+def test_a_fourth_position_at_this_risk_is_refused_at_build() -> None:
+    """**الحدُّ انتقل بقرار المالكة، والثابتُ الرابط ما زال له أسنان.**
+
+    كان هذا الاختبار يقول: ثلاثةُ مراكزَ تُرفض **عند البناء**، لأنّ الثابتَ
+    يشترط أن يغطّي السدُّ اليوميُّ أسوأَ خسارةٍ متزامنة، وثلاثةٌ × 10.00 =
+    30.00 كانت تتجاوز اليوميَّ 24.00.
+
+    وقرارُ المالكة ١٩ سبتمبر ٢٠٢٦ — «مسموح للنظام يخسر ٣٠$ في اليوم» —
+    رفع اليوميَّ إلى 30.00 بالضبط، فصارت الثلاثةُ مُغطّاةً تماماً ولم يبقَ
+    البناءُ هو من يرفضها. والحدُّ الحسابيُّ انتقل إلى أربعة: 40.00 > 30.00.
+
+    **والثالثُ لم يُفتح له الباب.** `max_open_positions` اثنان في المواصفة،
+    وحرارةُ المحفظة 20.00 = مركزان بالسقف الصلب — فثالثٌ بالسقف يتجاوزها
+    ويُرفض في وقت القرار. وهذا الاختبار يحرسُ الفرقَ كي لا يُقرأ سقوطُ
+    حارسٍ انفتاحاً للباب: الرفضُ باقٍ، والذي يرفضُ تغيّر.
+    """
     fields = {f: getattr(VALIDATION_300, f) for f in VALIDATION_300.__dataclass_fields__}
-    fields["max_open_positions"] = 3
+
+    # ثلاثةٌ صارت متماسكةً حسابياً — أثرُ القرار، يُقال ولا يُخفى.
+    RiskLimits(**{**fields, "max_open_positions": 3})
+
+    # وأربعةٌ ما زالت تُرفَض عند البناء لا عند أوّل خسارة.
     with pytest.raises(IncoherentRiskLimits):
-        RiskLimits(**fields)
+        RiskLimits(**{**fields, "max_open_positions": 4})
+
+    # والحارسُ الذي يرفضُ الثالثَ فعلاً هو الحرارة.
+    assert VALIDATION_300.max_open_positions == 2
+    assert VALIDATION_300.max_portfolio_risk == VALIDATION_300.max_risk_per_trade * 2
+    assert VALIDATION_300.max_risk_per_trade * 3 > VALIDATION_300.max_portfolio_risk
 
 
 def test_the_real_modes_were_not_touched() -> None:

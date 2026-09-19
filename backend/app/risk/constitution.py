@@ -55,7 +55,7 @@ from typing import Optional
 from ..contracts import Broker
 from ..money import D
 
-CONSTITUTION_VERSION = "0.6.0"
+CONSTITUTION_VERSION = "0.7.0"
 CONSTITUTION_EFFECTIVE_DATE = "2026-09-03"
 
 INITIAL_CAPITAL_USD = D("150.00")
@@ -166,6 +166,21 @@ class ModeSpec:
     #: المقصودة حرفياً. `None` = يحكمُ السقفَ `max_risk_pct` كما كان.
     max_risk_usd: Optional[Decimal] = None
 
+    #: **سدَّا اليوم والأسبوع بالدولار.**
+    #:
+    #: كانا نسبتَين من رأس المال، فكان اليوميُّ 24.00 على مرجع 300 — أي
+    #: خسارتَين وأربعةَ أعشار. رقمٌ لا يوافق حرارةَ المحفظة (خسارتان) ولا
+    #: قاطعَ الطوارئ (ثلاث خسائر متتالية)، فكان كلُّ حارسٍ يقولُ رقماً.
+    #:
+    #: وقرارُ المالكة ١٩ سبتمبر ٢٠٢٦: **ثلاثون دولاراً في اليوم** — ثلاثُ
+    #: خسائرَ كاملة، فيتّفقُ السدُّ المالي مع عدّاد الخسائر على النقطة
+    #: نفسها. والأسبوعيُّ يومان كاملان (60.00)، لأنّ أسبوعياً أقلَّ من
+    #: ضِعف اليومي يجعلُ يوماً سيّئاً واحداً يُقفل الأسبوع.
+    #:
+    #: `None` = تحكمُ النسبةُ كما كان — والأوضاعُ الحقيقية لم تُمَسّ.
+    daily_loss_usd: Optional[Decimal] = None
+    weekly_loss_usd: Optional[Decimal] = None
+
 
 _IBKR_COMMISSIONING_QUANTITY = BrokerQuantityPolicy(
     use_broker_minimum_quantity=False,
@@ -255,8 +270,8 @@ MODE_SPECS: dict[RiskMode, ModeSpec] = {
         #
         # الأرقام على مرجع ٣٠٠ دولار:
         # **الأرقامُ النافذة على مرجع ٣٠٠ (مقيسةٌ لا موصوفة — 0.6.0):**
-        #   المستهدفة 5.00 · السقفُ الصلب 10.00 · اليوم 24.00 ·
-        #   الأسبوع 48.00 · الإجمالي 72.00 · الحرارة 20.00 · المراكز 2
+        #   المستهدفة 5.00 · السقفُ الصلب 10.00 · اليوم 30.00 ·
+        #   الأسبوع 60.00 · الإجمالي 72.00 · الحرارة 20.00 · المراكز 2
         #
         # وكان هذا التعليقُ يقول «السقف 6.00 · اليوم 15.00 · الإجمالي
         # 45.00» بينما الكودُ ينفّذ 12.00 و24.00 و72.00 — نصفُ الحقيقة.
@@ -288,9 +303,11 @@ MODE_SPECS: dict[RiskMode, ModeSpec] = {
         # القيمُ الدولارية مُعطاةٌ عند المرجع 150 وتُضاعَف على 300،
         # فالمكتوبُ نصفُ النافذ. ويحرسُ المحسوبَ اختبارٌ على ٣٠٠ صريحاً.
         target_risk_usd=D("2.50"),   # ⇒ 5.00  المخاطرة المفضّلة
-        max_risk_usd=D("5.00"),      # ⇒ 10.00 السقفُ الصلب — قرار المالكة ١٩ سبتمبر ٢٠٢٦              # ⇒ 10.00 على مرجع 300
+        max_risk_usd=D("5.00"),      # ⇒ 10.00 السقفُ الصلب — قرار المالكة ١٩ سبتمبر ٢٠٢٦
         max_open_positions=2,
-        max_portfolio_risk_usd=D("10.00"),      # ⇒ 20.00 = مركزان بالمستهدفة
+        max_portfolio_risk_usd=D("10.00"),      # ⇒ 20.00 = مركزان بالسقف الصلب
+        daily_loss_usd=D("15.00"),   # ⇒ 30.00 = ثلاثُ خسائر — قرار المالكة ١٩ سبتمبر ٢٠٢٦
+        weekly_loss_usd=D("30.00"),  # ⇒ 60.00 = يومان كاملان
         max_entry_orders_per_day=6,
         consecutive_losses_pause=2,
         pause_scope=PauseScope.COOLDOWN_WINDOW,
@@ -604,8 +621,16 @@ class RiskLimits:
             constitution_version=CONSTITUTION_VERSION,
             baseline_equity=base,
             hard_total_loss=base * spec.hard_total_loss_pct,
-            daily_loss=base * spec.daily_loss_pct,
-            weekly_loss=base * spec.weekly_loss_pct,
+            daily_loss=(
+                _scaled(base, spec.daily_loss_usd)
+                if spec.daily_loss_usd is not None
+                else base * spec.daily_loss_pct
+            ),
+            weekly_loss=(
+                _scaled(base, spec.weekly_loss_usd)
+                if spec.weekly_loss_usd is not None
+                else base * spec.weekly_loss_pct
+            ),
             target_risk_per_trade=(
                 _scaled(base, spec.target_risk_usd)
                 if spec.target_risk_usd is not None

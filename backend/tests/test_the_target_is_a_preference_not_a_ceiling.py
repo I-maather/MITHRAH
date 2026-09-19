@@ -125,8 +125,8 @@ def test_the_two_numbers_are_what_the_owner_approved():
     lim = limits()
     assert lim.target_risk_per_trade == D("5.00")
     assert lim.max_risk_per_trade == D("10.00")
-    assert lim.daily_loss == D("24.00")
-    assert lim.weekly_loss == D("48.00")
+    assert lim.daily_loss == D("30.00")
+    assert lim.weekly_loss == D("60.00")
     assert lim.hard_total_loss == D("72.00")
     assert lim.max_open_positions == 2
 
@@ -258,7 +258,7 @@ def test_the_trace_names_every_size_it_tried():
 
 @pytest.mark.parametrize(
     "day_loss,week_loss,expected_ceiling",
-    [("0", "0", "10.00"), ("16.00", "16.00", "8.00"), ("0", "43.50", "4.50")],
+    [("0", "0", "10.00"), ("25.00", "25.00", "5.00"), ("0", "57.00", "3.00")],
 )
 def test_the_ceiling_shrinks_with_what_is_left_of_the_day_and_week(
     day_loss, week_loss, expected_ceiling
@@ -269,7 +269,7 @@ def test_the_ceiling_shrinks_with_what_is_left_of_the_day_and_week(
 
 
 def test_a_spent_day_refuses_even_a_cheap_trade():
-    st = state(day_loss="24.00", week_loss="24.00")
+    st = state(day_loss="30.00", week_loss="30.00")
     d = decide(signal(entry="1.16000", stop="1.15800", target="1.16600"), st=st)
     assert d.decision is Decision.NO_TRADE
     assert d.reason_code is not None

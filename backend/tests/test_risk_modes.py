@@ -61,12 +61,12 @@ def state(**kw):
 
 # --- الأرقام النهائية --------------------------------------------------------
 
-def test_constitution_is_version_0_6_0():
+def test_constitution_is_version_0_7_0():
     """
     رقمٌ مثبَّتٌ عمداً: تغييرُ سياسةٍ بلا رفع إصدارٍ هو انحرافٌ صامت.
     0.2.0 ← 0.3.0 يوم 2026-09-03 بفتح `CFD_ALLOW_SHORT` بتفويض المالكة.
     """
-    assert CONSTITUTION_VERSION == "0.6.0"
+    assert CONSTITUTION_VERSION == "0.7.0"
 
 
 def test_capital_is_exactly_150():
@@ -93,8 +93,8 @@ def test_validation_mode_dollar_limits():
     # التجريبي وحده. القيم على المرجع الافتراضي ١٥٠؛ وعلى ٣٠٠ تصير:
     # ٧٢ · ٢٤ · ٤٨ · ١٢٫٠٠ · ١٠٫٠٠ — ومركزان لا ثلاثة (رفعُ ١٥ سبتمبر).
     assert L.hard_total_loss == D("36.00")
-    assert L.daily_loss == D("12.00")
-    assert L.weekly_loss == D("24.00")
+    assert L.daily_loss == D("15.00")
+    assert L.weekly_loss == D("30.00")
     assert L.max_risk_per_trade == D("5.00")
     assert f"{L.target_risk_per_trade:.2f}" == "2.50"
     assert L.max_open_positions == 2
