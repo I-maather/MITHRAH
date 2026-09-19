@@ -51,7 +51,7 @@ PATH_MARKET_NAVIGATION = f"{API_PREFIX}/marketnavigation"
 PATH_PRICES = f"{API_PREFIX}/prices"
 PATH_POSITIONS = f"{API_PREFIX}/positions"
 #: دفترُ المعاملات — الصفقات المغلقة ونتائجها المحقّقة.
-#: يُنادى بـ`?lastPeriod=<ثوانٍ>`؛ وصيغة `from/to` تُعيد `errorCode` بلا بيانات.
+#: يُنادى بـ`?lastPeriod=<ثوانٍ>`؛ وصيغة `from/to` تعمل بشرط `YYYY-MM-DDTHH:MM:SS` بلا لاحقة منطقة.
 PATH_TRANSACTIONS = f"{API_PREFIX}/history/transactions"
 PATH_WORKING_ORDERS = f"{API_PREFIX}/workingorders"
 PATH_CONFIRMS = f"{API_PREFIX}/confirms"
