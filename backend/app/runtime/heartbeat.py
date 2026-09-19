@@ -268,7 +268,7 @@ def register_runtime_jobs(state, *, interval_seconds: int = DEFAULT_INTERVAL_SEC
             # الدفتر لا يُسقط الدورة: القراءة نجحت والمراقبة قائمة، والكتابة
             # عطلٌ يُسجَّل ويُعالَج — لا سببٌ لإيقاف الحراسة.
             state.ledger_error_ar = f"تعذّرت كتابة الدفتر: {type(exc).__name__}."
-            logging.getLogger(__name__).warning("ledger sync failed: %s", type(exc).__name__)
+            logging.getLogger(__name__).warning("ledger sync failed: %r", exc)
 
         # **الإدارة تعمل والإيقاف قائم.** الإيقاف يمنع فتح المراكز؛ ومركزٌ
         # مفتوحٌ لا يُدار ليس موقوفاً — هو متروك. والخطّة تُبنى ولا تُنفَّذ
@@ -291,7 +291,7 @@ def register_runtime_jobs(state, *, interval_seconds: int = DEFAULT_INTERVAL_SEC
         except Exception as exc:  # noqa: BLE001
             state.management_error_ar = f"تعذّر بناء خطّة الإدارة: {type(exc).__name__}."
             logging.getLogger(__name__).warning(
-                "management plan failed: %s", type(exc).__name__
+                "management plan failed: %r", exc
             )
 
     def run_decision() -> None:
