@@ -75,6 +75,22 @@ MIN_PLAUSIBLE_EVENTS = 10
 #: يمرّ الجميع.
 MIN_REFRESH_INTERVAL = timedelta(minutes=20)
 
+#: أقلّ فاصل بين **محاولتين** — بعد نجاحٍ أو إخفاق.
+#:
+#: لم يكن موجوداً، وغيابُه عيبٌ يُغذّي نفسه: الخنقُ أعلاه يحرسُ النجاح
+#: وحده (`self._fetched_at is not None`)، و`events()` تنادي `refresh()`
+#: عند كل استعلامٍ ما لم يكن التقويمُ مُعدّاً. فحين لا يكون مُعدّاً يصير
+#: **كلُّ** نداءٍ — نبضةٌ، استعلامُ تطبيق، مسبار — نداءً شبكياً جديداً على
+#: مضيفٍ يردّ `429` على الإلحاح. أي أنّ النظام يصنع الحجبَ الذي يُعطّله،
+#: ثمّ يُبقيه حتى تدور المهمّة بعد ساعة.
+#:
+#: وقع ذلك مقيساً: ١٩ سبتمبر ٢٠٢٦، ١١:٣٤ UTC — `429` عند الإقلاع، ثمّ
+#: `NEWS_CALENDAR_UNCONFIRMED` في كل دورةٍ لكل أداة. والسوقُ كان مغلقاً
+#: (سبت) فلم تُكلّفنا صفقة؛ ولو وقعت عند فتحة الأحد لأخذت الساعةَ الأولى.
+#:
+#: والخمسُ دقائق **سقفُ زمن التعافي** لا تفضيلٌ جماليّ.
+MIN_RETRY_AFTER_FAILURE = timedelta(minutes=5)
+
 #: ترويسات الطلب.
 #:
 #: التغذية خلف شبكة توصيل ترفض العملاء بلا هويّة: الخادم أعاد **404** بينما
@@ -138,6 +154,9 @@ class FairEconomyCalendarProvider(EconomicCalendarProvider):
     _events: tuple[EconomicEvent, ...] = field(default_factory=tuple, init=False)
     _fetched_at: Optional[datetime] = field(default=None, init=False)
     _failure_ar: str = field(default="", init=False)
+    #: زمنُ آخر **محاولة**، ناجحةً كانت أو فاشلة. يفرقُ عن `_fetched_at`
+    #: الذي لا يُكتب إلا عند نجاح — وهذا الفرقُ هو الإصلاح نفسه.
+    _attempted_at: Optional[datetime] = field(default=None, init=False)
 
     def __post_init__(self) -> None:
         if self.transport is None:
@@ -178,6 +197,15 @@ class FairEconomyCalendarProvider(EconomicCalendarProvider):
         if not force and self._fetched_at is not None:
             if (now_utc() - self._fetched_at) < MIN_REFRESH_INTERVAL:
                 return
+
+        # **والإخفاقُ يُمهِل أيضاً.** الحارسُ أعلاه لا يرى إلا النجاح، فكان
+        # كلُّ نداءٍ بعد إخفاقٍ نداءً شبكياً جديداً — وهو ما صنع `429` ثمّ
+        # أطال عمرها. ويوضع هنا لا في المجدول لأنّ المجدولَ ليس النداء
+        # الوحيد: `events()` تجلب عند الحاجة، والمسبار يجلب.
+        if not force and self._attempted_at is not None:
+            if (now_utc() - self._attempted_at) < MIN_RETRY_AFTER_FAILURE:
+                return
+        self._attempted_at = now_utc()
 
         collected: list[EconomicEvent] = []
         retrieved = now_utc()

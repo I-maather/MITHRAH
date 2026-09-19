@@ -370,15 +370,36 @@ def test_the_interval_is_bypassed_only_when_asked():
     assert len(p.transport.calls) == 2
 
 
-def test_a_failed_fetch_may_be_retried_immediately():
+def test_a_failed_fetch_waits_before_the_next_attempt():
+    """**عقدٌ مُستبدَل، وسببُ الاستبداد مقيس.**
+
+    كان هنا `test_a_failed_fetch_may_be_retried_immediately`: إخفاقٌ يجوز
+    إعادةُ محاولته فوراً. وكان معقولاً حين كُتب — الإخفاق لا يُخزَّن، فلِمَ
+    نُمهل؟
+
+    والقياسُ قلبه. ١٩ سبتمبر ٢٠٢٦، ١١:٣٤ UTC: `429` عند الإقلاع، ومعناها
+    «سألتَ أكثر مما ينبغي» لا «مُنعت». و`events()` تنادي `refresh()` عند كل
+    استعلامٍ ما لم يكن التقويم مُعدّاً — فالإعادةُ الفورية تجعل كلَّ نداءٍ
+    (نبضةٌ، استعلامُ تطبيق، مسبار) نداءً شبكياً جديداً على مضيفٍ يعاقب
+    الإلحاح. أي أنّ الإعادةَ الفورية هي التي **تصنع** الحجبَ وتُطيله، لا
+    التي تتعافى منه.
+
+    والتعافي صار مسؤوليةَ المجدول: محاولةٌ كل خمس دقائق
+    (`CALENDAR_REFRESH_SECONDS`)، وإمهالٌ يمنع ما بينها. فزمنُ التعافي نزل
+    من ستّين دقيقة إلى خمس، ونداءاتُنا على المضيف نزلت لا زادت.
     """
-    القيد على النجاح لا على الإخفاق. لو قيّد الإخفاق أيضاً لبقي التقويم
-    معطّلاً عشرين دقيقة بعد انقطاعٍ دام ثانية.
-    """
-    p = provider(raises=ConnectionError("down"))
+    transport = FakeTransport(Response(429, ""))
+    p = FairEconomyCalendarProvider(transport=transport)
+
     p.refresh()
+    assert len(transport.calls) == 1
+    assert not p.configured
+
     p.refresh()
-    assert len(p.transport.calls) == 2
+    assert len(transport.calls) == 1, "الإلحاحُ على مضيفٍ ردَّ 429 هو ما صنع الحجب"
+
+    p.refresh(force=True)
+    assert len(transport.calls) == 2, "و`force` للمسبار يبقى نافذاً"
 
 
 def test_too_many_requests_is_reported_as_such():
