@@ -395,6 +395,40 @@ def health_live():
     return {"ok": True}
 
 
+#: مهلةُ قِدَمِ الحلقة في هذا المسار. الدورة كلَّ ٦٠ ثانية، فخمسُ دقائق سماحٌ واسع.
+OPS_LOOP_STALE_SECONDS = 300
+
+
+def _machine_state(
+    *, age_seconds, verdict: str, trading_locked
+) -> tuple[str, str]:
+    """
+    **«مقفل» ليست «ميت».**
+
+    كان `/api/health/ops` يقول `healthy: false` وحدها حين تتوقّف الحلقة،
+    وتلك جملةٌ واحدة لحالتين لا تشتركان في شيء: حلقةٌ ماتت فلا قرارَ
+    يُتّخذ، أو نظامٌ يعمل وبوابتُه مقفلةٌ بقرارٍ مكتوب. فقرأها الحارسُ
+    «ميت» فأعاد التشغيل بلا جدوى، وقُرئت في التطبيق «لا اتصال» وهو متّصل.
+
+    والترتيب مقصود: موتُ الحلقة أسوأُ من القفل فيُقال أوّلاً، ثمّ قفلُ
+    البوابة، ثمّ الانتظارُ المشروع لإذن المالكة. ودالّةٌ صافيةٌ كي تُختبَر
+    بلا خادمٍ ولا قاعدة.
+    """
+    if age_seconds is None or age_seconds > OPS_LOOP_STALE_SECONDS:
+        return ("DEAD_LOOP", "حلقةُ القرار متوقّفة — لا قرارَ يُتّخذ.")
+    if verdict not in ("READY_TRADING_STILL_LOCKED", "UNKNOWN"):
+        return (
+            "LOCKED_BY_GATE",
+            "النظام يعمل وبوابةُ الإقلاع مقفلة — لا دخولَ جديد.",
+        )
+    if trading_locked:
+        return (
+            "AWAITING_OWNER",
+            "النظام يعمل وفحوصُه نجحت، والتداول مقفلٌ بانتظار إذن المالكة.",
+        )
+    return ("RUNNING", "النظام يعمل والتداول مفتوح.")
+
+
 @app.get("/api/health/ops")
 def health_ops():
     """
@@ -431,8 +465,36 @@ def health_ops():
         last_cycle = None
 
     age = int((now - last_cycle).total_seconds()) if last_cycle else None
+
+    # حكمُ البوابة يُقال، ونصوصُ مشاكلها لا تُقال: النصُّ يحمل الرمزَ
+    # والكمية وذاك معلومةُ حساب — وهو الشرطُ نفسه الذي أباح إعفاء هذا
+    # المسار من الرمز. والعجزُ عن القراءة يُصرَّح به `UNKNOWN` لا يُخفى.
+    verdict = "UNKNOWN"
+    locked = None
+    problems = None
+    try:
+        report = getattr(system(), "startup", None)
+        if report is not None:
+            raw = getattr(report, "verdict", None)
+            verdict = str(getattr(raw, "value", None) or raw or "UNKNOWN")
+            locked = bool(getattr(report, "trading_locked", False))
+            problems = len(getattr(report, "reconciliation_problems", ()) or ())
+    except Exception:  # noqa: BLE001
+        pass
+
+    machine_state, machine_state_ar = _machine_state(
+        age_seconds=age, verdict=verdict, trading_locked=locked
+    )
+
     return {
         "ok": True,
+        "state": machine_state,
+        "state_ar": machine_state_ar,
+        "startup": {
+            "verdict": verdict,
+            "trading_locked": locked,
+            "problems_count": problems,
+        },
         "commit": _BOOT_COMMIT,
         "started_utc": _BOOT_TIME.isoformat(),
         "uptime_seconds": int((now - _BOOT_TIME).total_seconds()),
