@@ -107,12 +107,32 @@ def test_the_ops_route_carries_no_account_information():
     from app.main import health_ops
 
     payload = health_ops()
+    # أُضيفت `state` و`state_ar` و`startup` في ٢٠٢٦-٠٩-١٩ **بتحديثٍ واعٍ
+    # لهذا السطر**، للسبب نفسه الذي وُجد لأجله: لا يتسلّل حقلٌ بصمت.
+    #
+    # وسببُ الإضافة أنّ `healthy: false` وحدها كانت تُقال عن حالتين لا
+    # تشتركان في شيء — حلقةٌ ماتت، أو بوابةٌ أُقفلت بقرارٍ مكتوب — فقرأها
+    # الحارسُ «ميت» فأعاد التشغيل بلا جدوى أربعةَ أيام.
+    #
+    # والحقولُ الثلاثة تصف **حالةَ الآلة وحكمَ بوابتها**، لا حساباً: لا
+    # رصيد ولا مركز ولا وسيط ولا رمز — تُثبته قائمةُ الممنوعات أدناه.
     assert set(payload) == {
-        "ok", "commit", "started_utc", "uptime_seconds", "decision_loop",
+        "ok", "state", "state_ar", "startup",
+        "commit", "started_utc", "uptime_seconds", "decision_loop",
     }
     assert set(payload["decision_loop"]) == {
         "last_cycle_utc", "age_seconds", "healthy",
     }
+    # **العددُ يُقال والنصُّ لا يُقال.** نصُّ مشكلةِ المطابقة يحمل الرمزَ
+    # والكمية («مركز مسجّل لدينا وغير موجود لدى الوسيط: GOLD كمية ‎-0.12»)
+    # وذاك معلومةُ حساب. فالمسموح في `startup` ثلاثةٌ لا رابعَ لها، وأيُّ
+    # محاولةٍ لإرسال النصوص يوماً تسقط هنا.
+    assert set(payload["startup"]) == {
+        "verdict", "trading_locked", "problems_count",
+    }
+    assert isinstance(payload["startup"]["verdict"], str)
+    assert isinstance(payload["startup"]["problems_count"], (int, type(None)))
+    assert isinstance(payload["startup"]["trading_locked"], (bool, type(None)))
     flat = repr(payload).lower()
     for forbidden in (
         "balance", "equity", "position", "pnl", "broker", "account",
