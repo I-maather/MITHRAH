@@ -811,7 +811,7 @@ class CapitalComAdapter(BrokerAdapter):
         return rows
 
     def list_recent_transactions(
-        self, *, last_period_seconds: int = 86400
+        self, *, last_period_seconds: int = 30 * 86400
     ) -> list[ClosedTrade]:
         """
         الصفقات المغلقة ونتائجها المحقّقة.
@@ -829,7 +829,26 @@ class CapitalComAdapter(BrokerAdapter):
         كمّيةً في أي موضعٍ آخر.
         """
         self._require_connection()
-        body = self._get(f"{PATH_TRANSACTIONS}?lastPeriod={int(last_period_seconds)}")
+        # **النافذة تتبع الحاجة لا العكس.** سقف `lastPeriod` عند هذا الوسيط
+        # ٨٦٤٠٠ ثانية؛ ما زاد يُرفض بـ400 `error.invalid.lastPeriod`. فمركزٌ
+        # أُغلق قبل أكثر من يوم لا دليلَ له في هذه الصيغة أبداً: يظلّ الدفتر
+        # يعدّ غيابه بلا نهاية، وتبقى بوابةُ الإقلاع مقفلةً إلى الأبد.
+        #
+        # و`from/to` **تعمل** — خلافاً لما يقوله التوثيق أعلاه. سببُ فشلها
+        # سابقاً الصيغةُ لا المسار: `…T00:00:00Z` و`2026-09-14` يُردّان بـ400،
+        # و`2026-09-14T00:00:00` يُجيب 200 ببيانات. قيس على الديمو في
+        # ٢٠٢٦-٠٩-١٩، وبه أُغلق مركزا GBPUSD وGOLD بأرقام الوسيط.
+        from datetime import timedelta
+
+        from ...clock import now_utc
+
+        seconds = int(last_period_seconds)
+        if seconds <= 86400:
+            query = f"lastPeriod={seconds}"
+        else:
+            start = (now_utc() - timedelta(seconds=seconds)).strftime("%Y-%m-%dT%H:%M:%S")
+            query = f"from={start}"
+        body = self._get(f"{PATH_TRANSACTIONS}?{query}")
         rows: list[ClosedTrade] = []
         for item in (body.get("transactions") or []):
             rows.append(ClosedTrade(
