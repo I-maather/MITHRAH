@@ -62,22 +62,49 @@ def read_health() -> dict | None:
         return None
 
 
+#: الحالاتُ التي تعني أنّ حلقةَ القرار **حيّة** وإن كان التداول مقفلاً.
+ALIVE_STATES = frozenset({"RUNNING", "AWAITING_OWNER", "LOCKED_BY_GATE"})
+
+
+def loop_is_alive(health: dict | None) -> tuple[bool, str]:
+    """
+    **إعادةُ التشغيل دواءُ حلقةٍ ميتة، لا دواءُ بوابةٍ مقفلة.**
+
+    كان الحكم يُبنى على عمر النبضة وحده: صادقٌ، لكنّه أخرس — لا يقول
+    أمقفولٌ النظامُ أم ميت. وفي ١٥–١٩ سبتمبر قُرئ القفلُ موتاً، فأُعيد
+    التشغيل على حلقةٍ ماتت لسببٍ في القاعدة لا يُصلحه تشغيلٌ جديد.
+
+    فصار الخادم يقول حالته صراحةً في `/api/health/ops`، وهذا يقرؤها
+    ويحترمها: `LOCKED_BY_GATE` و`AWAITING_OWNER` كلتاهما **حلقةٌ حيّة**
+    فلا تُمَسّ. و`DEAD_LOOP` وحدها تستدعي إعادة تشغيل، ويُذكر معها حكمُ
+    البوابة كي يُقرأ السببُ لا العَرَض.
+
+    وحين لا يرسل الخادمُ `state` — نسخةٌ أقدمُ من `ab50fb39` — يُرجَع إلى
+    عمر النبضة كما كان. الحارسُ لا ينهار لأنّ الخادم قديم.
+    """
+    if health is None:
+        return (False, "الواجهةُ لا تستجيب")
+
+    loop = health.get("decision_loop") or {}
+    age = loop.get("age_seconds")
+    age_ar = "لا نبضةَ مسجّلة" if age is None else f"عمرُ آخر دورة {int(age)} ثانية"
+
+    state = health.get("state")
+    if isinstance(state, str) and state:
+        if state in ALIVE_STATES:
+            return (True, f"{state} · {age_ar}")
+        verdict = (health.get("startup") or {}).get("verdict") or "—"
+        return (False, f"{state} · {age_ar} · حكمُ البوابة {verdict}")
+
+    return (age is not None and age <= STALE_SECONDS, age_ar)
+
+
 def main() -> int:
     now = time.time()
     state = load_state()
     recent = [t for t in state.get("restarts", []) if now - t < 3600]
 
-    health = read_health()
-
-    if health is None:
-        age = None
-        reason = "الواجهةُ لا تستجيب"
-    else:
-        loop = health.get("decision_loop") or {}
-        age = loop.get("age_seconds")
-        reason = "لا نبضةَ مسجّلة" if age is None else f"عمرُ آخر دورة {int(age)} ثانية"
-
-    healthy = age is not None and age <= STALE_SECONDS
+    healthy, reason = loop_is_alive(read_health())
 
     if healthy:
         if not state.get("was_healthy", True):
@@ -108,19 +135,19 @@ def main() -> int:
     subprocess.run(["systemctl", "restart", "mathrah"], timeout=120, check=False)
     time.sleep(25)
 
-    after = read_health()
-    loop_after = (after or {}).get("decision_loop") or {}
-    age_after = loop_after.get("age_seconds")
-    ok = age_after is not None and age_after <= STALE_SECONDS
+    ok, reason_after = loop_is_alive(read_health())
 
     recent.append(now)
     state.update({"was_healthy": ok, "restarts": recent, "last_alert": state.get("last_alert", 0)})
     save_state(state)
 
     if ok:
-        notify(f"✅ مِثْراة — عادت الحلقةُ بعد إعادة التشغيل (عمرُ الدورة {int(age_after)}ث).")
+        notify(f"✅ مِثْراة — عادت الحلقةُ بعد إعادة التشغيل ({reason_after}).")
         return 0
-    notify("⚠️ مِثْراة — أُعيد التشغيل ولم تعد النبضةُ بعد. سأحاول في الدورة القادمة.")
+    notify(
+        "⚠️ مِثْراة — أُعيد التشغيل ولم تعد النبضةُ بعد: "
+        f"{reason_after}. وإن كانت البوابةُ مقفلةً فإعادةُ التشغيل لا تفتحها."
+    )
     return 1
 
 
