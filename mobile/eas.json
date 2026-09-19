@@ -1,0 +1,16 @@
+{
+  "cli": {
+    "version": ">= 24.7.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "internal": {
+      "distribution": "internal",
+      "channel": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://app.mithrah.fyi",
+        "EXPO_PUBLIC_TRADING_ENVIRONMENT": "DEMO"
+      }
+    }
+  }
+}

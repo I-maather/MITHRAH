@@ -127,6 +127,25 @@ const config: ExpoConfig = {
   name: 'Maather Trader',
   slug: 'maather-trader',
   version: appVersion,
+  /**
+   * **التحديثُ عبر الهواء — وهو ما أنهى الارتباطَ بالماك.**
+   *
+   * لم يكن `expo-updates` في المشروع قطّ، فكان كلُّ إصلاحٍ — ولو كلمةً
+   * في رسالة — يحتاج بناءً كاملاً على ماك المالكة بXcode وقرصٍ خارجي.
+   * وذلك لم يكن قدراً بل نقصَ إعداد.
+   *
+   * و`runtimeVersion` حارسٌ لا زينة: يمنعُ وصولَ تحديثٍ لا يوافق
+   * الشِفرةَ الأصليةَ في الحزمة. وبدونه قد يطيرُ تحديثٌ يعتمدُ وحدةً
+   * أصليةً غائبةً فينهار التطبيقُ عند الفتح — وهو بالضبط ما وقع في
+   * ١٦ سبتمبر ٢٠٢٦ حين بُنيت الحزمةُ بلا `pod install`.
+   *
+   * و`fallbackToCacheTimeout: 0` كي لا ينتظرَ الفتحُ الشبكةَ.
+   */
+  updates: {
+    url: 'https://u.expo.dev/9e7251fa-2602-4946-8902-46bad895b3f9',
+    fallbackToCacheTimeout: 0,
+  },
+  runtimeVersion: { policy: 'appVersion' },
   orientation: 'portrait',
   scheme: 'maather',
   userInterfaceStyle: 'automatic',
@@ -211,6 +230,8 @@ const config: ExpoConfig = {
     typedRoutes: true,
   },
   extra: {
+    /** يربطُ الحزمةَ بمشروع Expo — يُكتَب يداً لأنّ الإعدادَ TypeScript. */
+    eas: { projectId: '9e7251fa-2602-4946-8902-46bad895b3f9' },
     apiBaseUrl,
     bundleIdentifier,
     appVersion,
